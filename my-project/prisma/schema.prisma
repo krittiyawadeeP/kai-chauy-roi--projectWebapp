@@ -1,0 +1,179 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model ai_sales_analysis {
+  Analysis_ID       BigInt    @id @default(autoincrement())
+  Merchant_ID       Int
+  Sales_Amount      Decimal   @db.Decimal(12, 2)
+  Average_Sales     Decimal   @db.Decimal(12, 2)
+  Sales_Ratio       Decimal?  @db.Decimal(8, 4)
+  Sales_Status      String?   @db.VarChar(30)
+  Boost_Recommended Boolean?  @default(false)
+  Analyzed_At       DateTime  @db.DateTime(0)
+  merchants         merchants @relation(fields: [Merchant_ID], references: [Mch_ID], onDelete: Cascade, map: "fk_ai_analysis_merchant")
+
+  @@index([Merchant_ID], map: "fk_ai_analysis_merchant")
+}
+
+model district_stamps {
+  Stamp_ID          Int                 @id @default(autoincrement())
+  Stamp_Name        String              @db.VarChar(200)
+  District_ID       Int
+  districts         districts           @relation(fields: [District_ID], references: [Dist_ID], map: "fk_stamp_district")
+  stamp_redemptions stamp_redemptions[]
+  user_stamps       user_stamps[]
+
+  @@index([District_ID], map: "fk_stamp_district")
+}
+
+model districts {
+  Dist_ID            Int                  @id @default(autoincrement())
+  Dist_Name          String               @db.VarChar(100)
+  Prov_ID            Int
+  district_stamps    district_stamps[]
+  provinces          provinces            @relation(fields: [Prov_ID], references: [Prov_ID], map: "fk_district_province")
+  merchants          merchants[]
+  sales_transactions sales_transactions[]
+
+  @@index([Prov_ID], map: "fk_district_province")
+}
+
+model merchants {
+  Mch_ID             Int                  @id @default(autoincrement())
+  User_ID            Int
+  Shop_Name          String               @db.VarChar(200)
+  Category           String?              @db.VarChar(100)
+  Lat                Decimal?             @db.Decimal(10, 7)
+  Lng                Decimal?             @db.Decimal(10, 7)
+  Dist_ID            Int
+  ai_sales_analysis  ai_sales_analysis[]
+  districts          districts            @relation(fields: [Dist_ID], references: [Dist_ID], map: "fk_merchant_district")
+  users              users                @relation(fields: [User_ID], references: [User_ID], map: "fk_merchant_user")
+  missions           missions[]
+  sales_transactions sales_transactions[]
+
+  @@index([Dist_ID], map: "fk_merchant_district")
+  @@index([User_ID], map: "fk_merchant_user")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model missions {
+  Mission_ID         Int           @id @default(autoincrement())
+  Mission_Name       String        @db.VarChar(200)
+  Description        String?       @db.Text
+  Target_Merchant_ID Int
+  Max_Recipients     Int
+  Start_DateTime     DateTime      @db.DateTime(0)
+  End_DateTime       DateTime      @db.DateTime(0)
+  Status             String        @db.VarChar(30)
+  merchants          merchants     @relation(fields: [Target_Merchant_ID], references: [Mch_ID], map: "fk_mission_merchant")
+  user_stamps        user_stamps[]
+
+  @@index([Target_Merchant_ID], map: "fk_mission_merchant")
+}
+
+model provinces {
+  Prov_ID   Int         @id @default(autoincrement())
+  Prov_Name String      @db.VarChar(100)
+  districts districts[]
+  users     users[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model rewards {
+  Reward_ID            Int                 @id @default(autoincrement())
+  Reward_Name          String              @db.VarChar(200)
+  Reward_Type          String?             @db.VarChar(50)
+  Description          String?             @db.Text
+  Required_Stamp_Count Int
+  Status               String              @db.VarChar(30)
+  stamp_redemptions    stamp_redemptions[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model sales_transactions {
+  Tx_ID                   BigInt                    @id @default(autoincrement())
+  User_ID                 Int
+  Merchant_ID             Int
+  Total_Amount            Decimal                   @db.Decimal(12, 2)
+  Tx_Timestamp            DateTime                  @db.DateTime(0)
+  District_ID             Int
+  Status                  String                    @db.VarChar(30)
+  districts               districts                 @relation(fields: [District_ID], references: [Dist_ID], map: "fk_transaction_district")
+  merchants               merchants                 @relation(fields: [Merchant_ID], references: [Mch_ID], map: "fk_transaction_merchant")
+  users                   users                     @relation(fields: [User_ID], references: [User_ID], map: "fk_transaction_user")
+  stamp_earn_transactions stamp_earn_transactions[]
+
+  @@index([District_ID], map: "fk_transaction_district")
+  @@index([Merchant_ID], map: "fk_transaction_merchant")
+  @@index([User_ID], map: "fk_transaction_user")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model stamp_earn_transactions {
+  User_Stamp_ID      BigInt
+  Tx_ID              BigInt
+  Amount_Used        Decimal            @db.Decimal(12, 2)
+  sales_transactions sales_transactions @relation(fields: [Tx_ID], references: [Tx_ID], map: "fk_stamp_earn_transaction")
+  user_stamps        user_stamps        @relation(fields: [User_Stamp_ID], references: [User_Stamp_ID], onDelete: Cascade, map: "fk_stamp_earn_user_stamp")
+
+  @@id([User_Stamp_ID, Tx_ID])
+  @@index([Tx_ID], map: "fk_stamp_earn_transaction")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model stamp_redemptions {
+  Redemption_ID   BigInt          @id @default(autoincrement())
+  User_ID         Int
+  Reward_ID       Int
+  Stamp_ID        Int
+  Quantity        Int
+  Status          String          @db.VarChar(30)
+  Redeemed_At     DateTime        @db.DateTime(0)
+  rewards         rewards         @relation(fields: [Reward_ID], references: [Reward_ID], map: "fk_redemption_reward")
+  district_stamps district_stamps @relation(fields: [Stamp_ID], references: [Stamp_ID], map: "fk_redemption_stamp")
+  users           users           @relation(fields: [User_ID], references: [User_ID], map: "fk_redemption_user")
+
+  @@index([Reward_ID], map: "fk_redemption_reward")
+  @@index([Stamp_ID], map: "fk_redemption_stamp")
+  @@index([User_ID], map: "fk_redemption_user")
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model user_stamps {
+  User_Stamp_ID           BigInt                    @id @default(autoincrement())
+  User_ID                 Int
+  Stamp_ID                Int
+  Mission_ID              Int?
+  Earn_Source             String                    @db.VarChar(20)
+  Qualifying_Amount       Decimal?                  @db.Decimal(12, 2)
+  Earned_At               DateTime                  @db.DateTime(0)
+  stamp_earn_transactions stamp_earn_transactions[]
+  missions                missions?                 @relation(fields: [Mission_ID], references: [Mission_ID], map: "fk_user_stamp_mission")
+  district_stamps         district_stamps           @relation(fields: [Stamp_ID], references: [Stamp_ID], map: "fk_user_stamp_stamp")
+  users                   users                     @relation(fields: [User_ID], references: [User_ID], onDelete: Cascade, map: "fk_user_stamp_user")
+
+  @@index([Mission_ID], map: "fk_user_stamp_mission")
+  @@index([Stamp_ID], map: "fk_user_stamp_stamp")
+  @@index([User_ID], map: "fk_user_stamp_user")
+}
+
+model users {
+  User_ID            Int                  @id @default(autoincrement())
+  Citizen_ID         String               @unique(map: "Citizen_ID") @db.VarChar(20)
+  Province_ID        Int?
+  merchants          merchants[]
+  sales_transactions sales_transactions[]
+  stamp_redemptions  stamp_redemptions[]
+  user_stamps        user_stamps[]
+  provinces          provinces?           @relation(fields: [Province_ID], references: [Prov_ID], map: "fk_user_province")
+
+  @@index([Province_ID], map: "fk_user_province")
+}
