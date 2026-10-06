@@ -1,11 +1,13 @@
 import "dotenv/config";
 import cors from "cors";
 import express from "express";
+import swaggerUi from "swagger-ui-express";
 
 import { adminRoutes } from "./routes/admin.routes";
 import { aiRoutes } from "./routes/ai.routes";
 import { citizenRoutes } from "./routes/citizen.routes";
 import { merchantRoutes } from "./routes/merchant.routes";
+import { swaggerSpec } from "./swagger";
 
 const app = express();
 
@@ -16,6 +18,7 @@ app.get("/", (_req, res) => {
   res.send("Backend is running");
 });
 
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.use("/api", citizenRoutes);
 app.use("/api/merchants", merchantRoutes);
 app.use("/api/admin", adminRoutes);
