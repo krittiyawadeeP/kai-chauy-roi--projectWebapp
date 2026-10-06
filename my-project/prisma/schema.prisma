@@ -103,6 +103,8 @@ model sales_transactions {
   User_ID                 Int
   Merchant_ID             Int
   Total_Amount            Decimal                   @db.Decimal(12, 2)
+  User_Paid_Amount        Decimal                   @default(0.00) @db.Decimal(12, 2)
+  Gov_Subsidized_Amount   Decimal                   @default(0.00) @db.Decimal(12, 2)
   Tx_Timestamp            DateTime                  @db.DateTime(0)
   District_ID             Int
   Status                  String                    @db.VarChar(30)
@@ -168,12 +170,43 @@ model user_stamps {
 model users {
   User_ID            Int                  @id @default(autoincrement())
   Citizen_ID         String               @unique(map: "Citizen_ID") @db.VarChar(20)
+  Phone              String               @unique(map: "Phone") @db.VarChar(15)
+  Password           String               @db.VarChar(255)
+  Role               String               @default("USER") @db.VarChar(20)
   Province_ID        Int?
   merchants          merchants[]
   sales_transactions sales_transactions[]
   stamp_redemptions  stamp_redemptions[]
   user_stamps        user_stamps[]
+  wallets            wallets?
+  user_grants        user_grants[]
   provinces          provinces?           @relation(fields: [Province_ID], references: [Prov_ID], map: "fk_user_province")
 
   @@index([Province_ID], map: "fk_user_province")
+}
+
+model wallets {
+  Wallet_ID  Int      @id @default(autoincrement())
+  User_ID    Int      @unique(map: "User_ID")
+  Balance    Decimal  @default(0.00) @db.Decimal(12, 2)
+  Status     String   @default("ACTIVE") @db.VarChar(30)
+  Updated_At DateTime @updatedAt @db.DateTime(0)
+  
+  users      users    @relation(fields: [User_ID], references: [User_ID], onDelete: Cascade, map: "fk_wallet_user")
+}
+
+model user_grants {
+  Grant_ID           BigInt    @id @default(autoincrement())
+  User_ID            Int
+  Grant_Name         String?   @db.VarChar(200)
+  Total_Grant_Amount Decimal   @default(1000.00) @db.Decimal(12, 2)
+  Remaining_Amount   Decimal   @db.Decimal(12, 2)
+  Gov_Pay_Ratio      Decimal   @default(0.40) @db.Decimal(5, 4)
+  User_Pay_Ratio     Decimal   @default(0.60) @db.Decimal(5, 4)
+  Granted_At         DateTime  @default(now()) @db.DateTime(0)
+  Status             String    @default("ACTIVE") @db.VarChar(30)
+
+  users              users     @relation(fields: [User_ID], references: [User_ID], onDelete: Cascade, map: "fk_user_grant_user")
+
+  @@index([User_ID], map: "fk_user_grant_user")
 }
