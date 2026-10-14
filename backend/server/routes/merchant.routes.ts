@@ -105,8 +105,8 @@ merchantRoutes.post("/me/sales", requireMerchant, async (req: AuthRequest, res) 
   });
 
   const totalAmount = Number(Total_Amount);
-  const govRatio = activeGrant ? Number(activeGrant.Gov_Pay_Ratio) : 0.4;
-  const userRatio = activeGrant ? Number(activeGrant.User_Pay_Ratio) : 0.6;
+  const govRatio = activeGrant ? Number(activeGrant.Gov_Pay_Ratio) : 0.6;
+  const userRatio = activeGrant ? Number(activeGrant.User_Pay_Ratio) : 0.4;
   const requestedGovAmount = totalAmount * govRatio;
   const remainingGrant = activeGrant ? Number(activeGrant.Remaining_Amount) : 0;
   const govSubsidizedAmount = Math.min(requestedGovAmount, remainingGrant);
