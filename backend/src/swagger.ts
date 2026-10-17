@@ -63,8 +63,21 @@ export const swaggerSpec = swaggerJSDoc({
           properties: {
             Shop_Name: { type: "string", example: "ร้านตัวอย่าง" },
             Category: { type: "string", example: "Food" },
-            Lat: { type: "number", example: 13.7563 },
-            Lng: { type: "number", example: 100.5018 },
+              Lat: { type: "number", minimum: -90, maximum: 90, example: 13.7563 },
+              Lng: { type: "number", minimum: -180, maximum: 180, example: 100.5018 },
+            Dist_ID: { type: "integer", example: 1 },
+          },
+        },
+        MerchantRegisterRequest: {
+          type: "object",
+          required: ["Citizen_ID", "Phone", "Password", "Province_ID", "Shop_Name", "Dist_ID"],
+          properties: {
+            Citizen_ID: { type: "string", example: "3333333333333" },
+            Phone: { type: "string", example: "0833333333" },
+            Password: { type: "string", minLength: 6 },
+            Province_ID: { type: "integer", example: 1 },
+            Shop_Name: { type: "string", example: "ร้านตัวอย่าง" },
+            Category: { type: "string", example: "Food" },
             Dist_ID: { type: "integer", example: 1 },
           },
         },
@@ -73,7 +86,7 @@ export const swaggerSpec = swaggerJSDoc({
           required: ["User_ID", "Total_Amount", "District_ID"],
           properties: {
             User_ID: { type: "integer", example: 2 },
-            Total_Amount: { type: "number", example: 100 },
+            Total_Amount: { type: "number", exclusiveMinimum: 0, example: 100 },
             District_ID: { type: "integer", example: 1 },
             Status: { type: "string", example: "COMPLETED" },
           },
@@ -145,6 +158,14 @@ export const swaggerSpec = swaggerJSDoc({
       { name: "AI" },
     ],
     paths: {
+        "/api/merchants/register": {
+          post: {
+            tags: ["Merchant"],
+            summary: "สมัครบัญชีและร้านค้าพร้อมกัน",
+            requestBody: jsonBody("MerchantRegisterRequest"),
+            responses: createdResponse(),
+          },
+        },
       "/api/user": {
         post: {
           tags: ["Citizen"],

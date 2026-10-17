@@ -13,6 +13,7 @@ export interface RegisterPayload {
   Password: string;
   Province_ID?: number;
   Dist_ID?: number;
+  Role?: 'USER' | 'MERCHANT';
 }
 
 export interface AuthResponse {

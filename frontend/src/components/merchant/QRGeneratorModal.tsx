@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Icon } from '../common/Icon';
 import { QRCodeDisplay } from '../common/QRCodeDisplay';
+import { ApiError } from '../../services/api';
+import { ApiSale, merchantService } from '../../services/merchantService';
 
 interface QRGeneratorModalProps {
   isOpen: boolean;
@@ -9,14 +11,18 @@ interface QRGeneratorModalProps {
 }
 
 export const QRGeneratorModal: React.FC<QRGeneratorModalProps> = ({ isOpen, onClose }) => {
-  const { currentMerchant, missions } = useApp();
+  const { currentMerchant, missions, refreshMerchantData } = useApp();
   const [amount, setAmount] = useState<number>(200);
   const [copied, setCopied] = useState<boolean>(false);
+  const [userId, setUserId] = useState('');
+  const [saleError, setSaleError] = useState('');
+  const [saleResult, setSaleResult] = useState<ApiSale | null>(null);
+  const [savingSale, setSavingSale] = useState(false);
 
   if (!isOpen || !currentMerchant) return null;
 
-  const userPays = Math.round(amount * 0.60 * 100) / 100;
-  const govPays = Math.round(amount * 0.40 * 100) / 100;
+  const userPays = saleResult ? Number(saleResult.User_Paid_Amount) : Math.round(amount * 0.40 * 100) / 100;
+  const govPays = saleResult ? Number(saleResult.Gov_Subsidized_Amount) : Math.round(amount * 0.60 * 100) / 100;
 
   const activeMission = missions.find(
     m => m.status === 'active' && m.targetMerchantId === currentMerchant.mchId
@@ -40,6 +46,24 @@ export const QRGeneratorModal: React.FC<QRGeneratorModalProps> = ({ isOpen, onCl
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleRecordSale = async () => {
+    setSavingSale(true);
+    setSaleError('');
+    try {
+      const result = await merchantService.recordSale({
+        User_ID: Number(userId),
+        Total_Amount: amount,
+        District_ID: currentMerchant.distId,
+      }) as ApiSale;
+      setSaleResult(result);
+      await refreshMerchantData();
+    } catch (error) {
+      setSaleError(error instanceof ApiError && error.status === 401 ? 'กรุณาเข้าสู่ระบบด้วยบัญชีร้านค้าก่อนบันทึกยอดขาย' : error instanceof Error ? error.message : 'บันทึกยอดขายไม่สำเร็จ');
+    } finally {
+      setSavingSale(false);
+    }
+  };
+
   return (
     <div
       className="fixed inset-0 z-50 grid place-items-center bg-[#07162d]/70 p-4 backdrop-blur-sm animate-fade-in"
@@ -56,7 +80,7 @@ export const QRGeneratorModal: React.FC<QRGeneratorModalProps> = ({ isOpen, onCl
             </span>
             <div>
               <h3 className="font-bold text-sm text-slate-800">สร้าง QR Code รับเงิน</h3>
-              <p className="text-[10px] text-slate-400">สิทธิ์ไทยช่วยไทยพลีส 60/40</p>
+              <p className="text-[10px] text-slate-400">รัฐช่วย 60% · ลูกค้าจ่าย 40%</p>
             </div>
           </div>
           <button
@@ -95,11 +119,10 @@ export const QRGeneratorModal: React.FC<QRGeneratorModalProps> = ({ isOpen, onCl
                   key={val}
                   type="button"
                   onClick={() => setAmount(val)}
-                  className={`flex-1 py-1 text-xs rounded-lg font-bold transition-colors ${
-                    amount === val
+                  className={`flex-1 py-1 text-xs rounded-lg font-bold transition-colors ${amount === val
                       ? 'bg-[#1769ed] text-white'
                       : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
-                  }`}
+                    }`}
                 >
                   ฿{val}
                 </button>
@@ -118,13 +141,22 @@ export const QRGeneratorModal: React.FC<QRGeneratorModalProps> = ({ isOpen, onCl
           {/* Calculation */}
           <div className="rounded-xl bg-[#eaf2ff] p-2.5 text-xs space-y-1 border border-blue-100">
             <div className="flex justify-between text-slate-600">
-              <span>ลูกค้าชำระ (60%):</span>
+              <span>ลูกค้าชำระ (40%):</span>
               <strong className="text-[#123b84]">฿ {userPays.toLocaleString()}</strong>
             </div>
             <div className="flex justify-between text-slate-600">
-              <span>เงินโอนสมทบจากรัฐ (40%):</span>
+              <span>เงินอุดหนุนจากรัฐ (60%):</span>
               <strong className="text-emerald-600">฿ {govPays.toLocaleString()}</strong>
             </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 p-3 space-y-2">
+            <label className="block text-xs font-bold text-slate-700" htmlFor="sale-user-id">User_ID ลูกค้าเพื่อบันทึกยอดขาย</label>
+            <input id="sale-user-id" type="number" min="1" value={userId} onChange={e => setUserId(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2" placeholder="ตัวอย่าง 2" />
+            <p className="text-[10px] text-slate-500">User_ID คือเลขประจำตัวผู้ใช้ในฐานข้อมูล ทดสอบด้วยบัญชีลูกค้าที่มีอยู่จริง</p>
+            {saleError && <p role="alert" className="text-xs text-rose-700">{saleError}</p>}
+            {saleResult && <p role="status" className="text-xs text-emerald-700">บันทึกบิล #{saleResult.Tx_ID} แล้ว · ลูกค้าจ่าย ฿{Number(saleResult.User_Paid_Amount).toFixed(2)} · รัฐช่วย ฿{Number(saleResult.Gov_Subsidized_Amount).toFixed(2)}</p>}
+            <button type="button" onClick={handleRecordSale} disabled={savingSale || !Number(userId) || amount <= 0} className="w-full rounded-xl bg-[#115e59] py-2.5 text-xs font-bold text-white disabled:opacity-50">{savingSale ? 'กำลังบันทึก…' : 'ยืนยันและบันทึกยอดขาย'}</button>
           </div>
 
           {copied && (

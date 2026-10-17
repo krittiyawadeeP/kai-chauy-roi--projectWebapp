@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Icon, IconName } from '../common/Icon';
 import { QRGeneratorModal } from './QRGeneratorModal';
@@ -7,6 +7,8 @@ import { MerchantProfileSettingsModal } from './MerchantProfileSettingsModal';
 import { StoreMapPickerModal } from './StoreMapPickerModal';
 import { AuthModal } from '../auth/AuthModal';
 import { RevenueBreakdownCard } from './RevenueBreakdownCard';
+import { authStorage } from '../../services/api';
+import { ApiError } from '../../services/api';
 
 interface MerchantMobileViewProps {
   initialTab?: 'sales' | 'ai' | 'info';
@@ -23,7 +25,8 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
     setCurrentMerchant,
     transactions,
     aiAnalysis,
-    missions
+    missions,
+    refreshMerchantData
   } = useApp();
 
   const [qrModalOpen, setQrModalOpen] = useState(false);
@@ -32,11 +35,21 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
   const [mapPickerOpen, setMapPickerOpen] = useState(false);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'sales' | 'ai' | 'info'>(initialTab);
+  const [loadingMerchantData, setLoadingMerchantData] = useState(false);
+  const [merchantDataError, setMerchantDataError] = useState('');
+
+  useEffect(() => {
+    if (!authStorage.getToken()) return;
+    setLoadingMerchantData(true);
+    setMerchantDataError('');
+    refreshMerchantData()
+      .catch(error => setMerchantDataError(error instanceof ApiError && error.status === 401 ? 'Session หมดอายุ กรุณาเข้าสู่ระบบใหม่' : error instanceof Error ? error.message : 'โหลดข้อมูลร้านค้าไม่สำเร็จ'))
+      .finally(() => setLoadingMerchantData(false));
+  }, [refreshMerchantData]);
 
   const merchantTransactions = transactions.filter(t => t.merchantId === currentMerchant?.mchId);
-  const totalSalesToday =
-    merchantTransactions.reduce((acc, t) => acc + t.totalAmount, 0) +
-    (currentMerchant?.currentDailySales || 0);
+  const totalSalesToday = merchantTransactions.reduce((acc, t) => acc + t.totalAmount, 0) +
+    (!authStorage.getToken() ? (currentMerchant?.currentDailySales || 0) : 0);
   const govSubsidyReceivable = merchantTransactions.reduce(
     (acc, t) => acc + t.govSubsidizedAmount,
     0
@@ -86,7 +99,7 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
               <p className="text-[11px] font-medium tracking-[.18em] text-teal-100 uppercase">
                 THAI CHUAY THAI MERCHANT
               </p>
-              <p className="text-lg font-bold leading-tight">ร้านค้าถุงเงินไทย (เขียวหัวเป็ด)</p>
+              <p className="text-lg font-bold leading-tight">ร้านค้าถุงเงินไทย</p>
             </div>
           </div>
           <div className="flex items-center gap-1.5">
@@ -142,6 +155,9 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
 
       {/* Overlapping Sales Balance Card */}
       <section className="-mt-7 px-4">
+        {loadingMerchantData && <p className="mb-2 text-center text-xs text-teal-800">กำลังโหลดข้อมูลจาก API…</p>}
+        {merchantDataError && <p role="alert" className="mb-2 rounded-xl bg-rose-50 p-2 text-center text-xs text-rose-700">{merchantDataError}</p>}
+        {authStorage.getToken() && <p className="mb-2 text-center text-[10px] text-slate-500">ข้อมูลร้านค้านี้มาจาก API</p>}
         <div className="relative rounded-[22px] bg-white p-5 shadow-[0_12px_35px_rgba(17,94,89,.14)] border border-teal-100/80">
           <div className="flex items-start justify-between">
             <div>
@@ -157,13 +173,13 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
 
           <div className="mt-3 grid grid-cols-2 gap-3 pt-3 border-t border-slate-100 text-xs">
             <div className="bg-[#f0fdfa] p-3 rounded-xl border border-teal-100">
-              <span className="text-[10px] text-teal-800 block">ลูกค้าจ่ายผ่าน QR (60%)</span>
+              <span className="text-[10px] text-teal-800 block">ลูกค้าจ่ายผ่าน QR (40%)</span>
               <span className="text-sm font-bold text-[#0f766e]">
-                ฿ {(totalSalesToday * 0.6).toLocaleString()}
+                ฿ {merchantTransactions.reduce((acc, tx) => acc + tx.userPaidAmount, 0).toLocaleString()}
               </span>
             </div>
             <div className="bg-[#f0fdf4] p-3 rounded-xl border border-emerald-100">
-              <span className="text-[10px] text-emerald-800 block">รัฐโอนสมทบ (40%)</span>
+              <span className="text-[10px] text-emerald-800 block">รัฐช่วยจ่าย (60%)</span>
               <span className="text-sm font-bold text-emerald-700">
                 ฿ {govSubsidyReceivable.toLocaleString()}
               </span>
@@ -175,7 +191,7 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
             <span className="text-slate-500 font-medium">
               บิลขายวันนี้:&nbsp;
               <strong className="text-slate-800 font-mono">
-                {merchantTransactions.filter(t => t.txTimestamp.startsWith('2026-10-14') || t.txTimestamp.startsWith('2026-10-13')).length} บิล
+                {merchantTransactions.length} บิล
               </strong>
             </span>
             <button
@@ -302,7 +318,7 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
                     <p className="font-bold text-xs text-slate-800">{tx.userName}</p>
                     <p className="text-[10px] text-slate-400">{tx.txTimestamp}</p>
                     <span className="text-[10px] text-teal-700 font-medium">
-                      รัฐโอนสมทบ 40%: ฿{tx.govSubsidizedAmount}
+                      รัฐช่วยจ่าย 60%: ฿{tx.govSubsidizedAmount}
                     </span>
                   </div>
                   <div className="text-right">
@@ -330,9 +346,9 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
           </div>
 
           {/* Bottom section: Card สรุปยอด ฿ KPI (อยู่ล่างสุด) */}
-          <div className="pt-2 border-t border-dashed border-teal-200/80">
+          {/* <div className="pt-2 border-t border-dashed border-teal-200/80">
             <RevenueBreakdownCard />
-          </div>
+          </div> */}
         </section>
       )}
 

@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import { useApp } from '../../context/AppContext';
 import { Icon } from '../common/Icon';
+import { ApiError, authStorage } from '../../services/api';
 
 interface StoreMapPickerModalProps {
   isOpen: boolean;
@@ -23,6 +24,8 @@ export const StoreMapPickerModal: React.FC<StoreMapPickerModalProps> = ({
   const [addressInput, setAddressInput] = useState<string>(targetShop?.address || '');
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [gpsLoading, setGpsLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
@@ -162,13 +165,21 @@ export const StoreMapPickerModal: React.FC<StoreMapPickerModalProps> = ({
     }
   };
 
-  const handleSavePin = () => {
-    updateMerchantLocation(targetShop.mchId, lat, lng, addressInput);
-    setSavedSuccess(true);
-    setTimeout(() => {
-      setSavedSuccess(false);
-      onClose();
-    }, 1200);
+  const handleSavePin = async () => {
+    setSaving(true);
+    setSaveError('');
+    try {
+      await updateMerchantLocation(targetShop.mchId, lat, lng, addressInput);
+      setSavedSuccess(true);
+      setTimeout(() => {
+        setSavedSuccess(false);
+        onClose();
+      }, 1200);
+    } catch (error) {
+      setSaveError(error instanceof ApiError && error.status === 401 ? 'กรุณาเข้าสู่ระบบก่อนบันทึกพิกัด' : error instanceof Error ? error.message : 'บันทึกพิกัดไม่สำเร็จ');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -308,6 +319,8 @@ export const StoreMapPickerModal: React.FC<StoreMapPickerModalProps> = ({
               ✓ บันทึกพิกัดและที่ตั้งร้านค้าเรียบร้อยแล้ว!
             </p>
           )}
+          {saveError && <p role="alert" className="text-center text-xs text-rose-700 bg-rose-50 py-2 rounded-xl">{saveError}</p>}
+          {authStorage.getToken() && <p className="text-[10px] text-slate-500">บันทึกพิกัดได้ ส่วนที่อยู่ข้อความยังไม่รองรับใน API</p>}
 
           <div className="flex gap-2 pt-1">
             <button
@@ -318,10 +331,11 @@ export const StoreMapPickerModal: React.FC<StoreMapPickerModalProps> = ({
             </button>
             <button
               onClick={handleSavePin}
+              disabled={saving}
               className="flex-[2] py-2.5 bg-[#115e59] hover:bg-[#0f766e] text-white rounded-xl text-xs font-bold shadow-md shadow-teal-900/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
             >
               <Icon name="check" className="size-4" />
-              <span>บันทึกตำแหน่งร้านนี้</span>
+              <span>{saving ? 'กำลังบันทึก…' : 'บันทึกตำแหน่งร้านนี้'}</span>
             </button>
           </div>
         </div>

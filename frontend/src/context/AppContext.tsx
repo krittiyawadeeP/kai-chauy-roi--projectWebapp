@@ -29,6 +29,8 @@ import {
   INITIAL_USER_GRANT,
   INITIAL_REDEMPTIONS
 } from '../mock/initialData';
+import { authStorage } from '../services/api';
+import { ApiMerchant, ApiSale, merchantService } from '../services/merchantService';
 
 interface AppContextType {
   role: Role;
@@ -57,8 +59,9 @@ interface AppContextType {
   loginCitizen: (citizenId: string, phoneOrOtp?: string) => { success: boolean; message: string; user?: User };
   loginMerchant: (phoneOrTax: string, passwordOrPin?: string, mchId?: number) => { success: boolean; message: string; merchant?: Merchant };
   logout: () => void;
-  updateMerchantProfile: (mchId: number, data: Partial<Merchant>) => void;
-  updateMerchantLocation: (mchId: number, lat: number, lng: number, address?: string) => void;
+  updateMerchantProfile: (mchId: number, data: Partial<Merchant>) => Promise<void>;
+  updateMerchantLocation: (mchId: number, lat: number, lng: number, address?: string) => Promise<void>;
+  refreshMerchantData: () => Promise<void>;
 
   // Actions
   registerCitizen: (data: { citizenId: string; name: string; phone: string; provId: number; distId?: number; password?: string }) => User;
@@ -83,6 +86,47 @@ const AppContext = createContext<AppContextType | null>(null);
 
 const STORAGE_KEY = 'thai_chuay_thai_please_state_v1';
 
+function mapApiMerchant(data: ApiMerchant): Merchant {
+  const provinceName = data.districts?.provinces?.Prov_Name ?? '';
+  return {
+    mchId: data.Mch_ID,
+    userId: data.User_ID,
+    shopName: data.Shop_Name,
+    category: (data.Category || 'อาหารและเครื่องดื่ม') as Merchant['category'],
+    address: data.districts?.Dist_Name ?? '',
+    lat: Number(data.Lat ?? 13.8475),
+    lng: Number(data.Lng ?? 100.4932),
+    distId: data.Dist_ID,
+    provId: data.districts?.Prov_ID ?? 0,
+    ownerName: data.users?.Phone ?? 'เจ้าของร้าน',
+    phone: data.users?.Phone ?? '',
+    status: 'approved',
+    registeredAt: '',
+    imageUrl: '',
+    promptpayId: data.users?.Phone ?? '',
+    dailyAvgSales: 0,
+    currentDailySales: 0,
+    isAiTarget: false,
+    description: provinceName ? `อำเภอ${data.districts?.Dist_Name} จังหวัด${provinceName}` : undefined,
+  };
+}
+
+function mapApiSale(data: ApiSale): SalesTransaction {
+  return {
+    txId: Number(data.Tx_ID),
+    userId: data.User_ID,
+    userName: data.users?.Phone ?? `ผู้ใช้ ${data.User_ID}`,
+    merchantId: data.Merchant_ID,
+    merchantName: '',
+    totalAmount: Number(data.Total_Amount),
+    userPaidAmount: Number(data.User_Paid_Amount),
+    govSubsidizedAmount: Number(data.Gov_Subsidized_Amount),
+    txTimestamp: data.Tx_Timestamp,
+    distId: data.District_ID,
+    status: data.Status.toLowerCase() === 'cancelled' ? 'cancelled' : 'completed',
+  };
+}
+
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [role, setRole] = useState<Role>('citizen');
   const [viewMode, setViewMode] = useState<'mobile' | 'desktop'>('mobile');
@@ -100,7 +144,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [currentUser, setCurrentUser] = useState<User>(() => users[0] || INITIAL_USERS[0]);
   const [currentMerchant, setCurrentMerchant] = useState<Merchant>(() => merchants[0] || INITIAL_MERCHANTS[0]);
-
   const [transactions, setTransactions] = useState<SalesTransaction[]>(() => {
     const saved = localStorage.getItem(`${STORAGE_KEY}_transactions`);
     if (saved) {
@@ -115,6 +158,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     return INITIAL_TRANSACTIONS;
   });
+
+  const refreshMerchantData = React.useCallback(async () => {
+    if (!authStorage.getToken()) return;
+    const [profile, sales] = await Promise.all([
+      merchantService.getMyProfile(),
+      merchantService.getSalesSummary<ApiSale[]>()
+    ]);
+    const mappedMerchant = mapApiMerchant(profile);
+    setCurrentMerchant(mappedMerchant);
+    setMerchants(previous => [mappedMerchant, ...previous.filter(item => item.mchId !== mappedMerchant.mchId)]);
+    setTransactions(sales.map(mapApiSale));
+  }, []);
 
   const [missions, setMissions] = useState<Mission[]>(() => {
     const saved = localStorage.getItem(`${STORAGE_KEY}_missions`);
@@ -236,6 +291,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       target = merchants[0];
     }
 
+    if (target && authStorage.getToken()) {
+      setRole('merchant');
+      setIsAuthenticated(true);
+      return { success: true, message: 'เข้าสู่ระบบร้านค้าสำเร็จ', merchant: target };
+    }
+
     if (target) {
       setCurrentMerchant(target);
       const linkedUser = users.find(u => u.userId === target!.userId) || {
@@ -255,7 +316,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: true, message: `เข้าสู่ระบบร้านค้า ${target.shopName}`, merchant: target };
     }
 
-    return { success: false, message: 'ไม่พบบัญชีร้านค้าในระบบ' };
+    return { success: false, message: 'กรุณาเข้าสู่ระบบผ่าน API ก่อนใช้งานบัญชีร้านค้า' };
   };
 
   // Logout
@@ -264,7 +325,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Update Merchant Profile
-  const updateMerchantProfile = (mchId: number, data: Partial<Merchant>) => {
+  const updateMerchantProfile = async (mchId: number, data: Partial<Merchant>) => {
+    if (mchId === currentMerchant?.mchId && authStorage.getToken()) {
+      await merchantService.updateProfile({
+        ...(data.shopName !== undefined ? { Shop_Name: data.shopName } : {}),
+        ...(data.category !== undefined ? { Category: data.category } : {}),
+        ...(data.distId !== undefined ? { Dist_ID: data.distId } : {}),
+      });
+      await refreshMerchantData();
+      return;
+    }
     setMerchants(prev =>
       prev.map(m => {
         if (m.mchId === mchId) {
@@ -280,7 +350,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Update Merchant Pin Location (Lat, Lng)
-  const updateMerchantLocation = (mchId: number, lat: number, lng: number, address?: string) => {
+  const updateMerchantLocation = async (mchId: number, lat: number, lng: number, address?: string) => {
+    if (mchId === currentMerchant?.mchId && authStorage.getToken()) {
+      await merchantService.updateProfile({ Lat: lat, Lng: lng });
+      await refreshMerchantData();
+      return;
+    }
     setMerchants(prev =>
       prev.map(m => {
         if (m.mchId === mchId) {
@@ -754,6 +829,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         logout,
         updateMerchantProfile,
         updateMerchantLocation,
+        refreshMerchantData,
         registerCitizen,
         registerMerchant,
         approveMerchant,

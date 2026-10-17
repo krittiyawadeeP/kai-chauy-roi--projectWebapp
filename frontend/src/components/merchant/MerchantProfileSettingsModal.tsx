@@ -3,6 +3,8 @@ import { useApp } from '../../context/AppContext';
 import { Icon } from '../common/Icon';
 import { Merchant } from '../../types';
 import { StoreMapPickerModal } from './StoreMapPickerModal';
+import { ApiError, authStorage } from '../../services/api';
+import { ApiDistrict, ApiProvince, geoService } from '../../services/geoService';
 
 interface MerchantProfileSettingsModalProps {
   isOpen: boolean;
@@ -20,12 +22,18 @@ export const MerchantProfileSettingsModal: React.FC<MerchantProfileSettingsModal
   const [ownerName, setOwnerName] = useState('');
   const [phone, setPhone] = useState('');
   const [promptpayId, setPromptpayId] = useState('');
-  const [address, setAddress] = useState('');
+  const [provinceId, setProvinceId] = useState(0);
+  const [districtId, setDistrictId] = useState(0);
+  const [provinces, setProvinces] = useState<ApiProvince[]>([]);
+  const [districts, setDistricts] = useState<ApiDistrict[]>([]);
+  const [loadingLocations, setLoadingLocations] = useState(false);
   const [openingHours, setOpeningHours] = useState('08:00 - 17:00 น.');
   const [description, setDescription] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [savedNotice, setSavedNotice] = useState(false);
   const [mapPickerOpen, setMapPickerOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   useEffect(() => {
     if (isOpen && currentMerchant) {
@@ -34,7 +42,8 @@ export const MerchantProfileSettingsModal: React.FC<MerchantProfileSettingsModal
       setOwnerName(currentMerchant.ownerName || '');
       setPhone(currentMerchant.phone || '');
       setPromptpayId(currentMerchant.promptpayId || currentMerchant.phone || '');
-      setAddress(currentMerchant.address || '');
+      setProvinceId(currentMerchant.provId || 0);
+      setDistrictId(currentMerchant.distId || 0);
       setOpeningHours(currentMerchant.openingHours || '08:00 - 17:00 น.');
       setDescription(currentMerchant.description || '');
       setImageUrl(currentMerchant.imageUrl || '');
@@ -42,26 +51,58 @@ export const MerchantProfileSettingsModal: React.FC<MerchantProfileSettingsModal
     }
   }, [isOpen, currentMerchant]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    setLoadingLocations(true);
+    geoService.getProvinces()
+      .then(items => {
+        setProvinces(items);
+        const initialProvinceId = items.some(item => item.Prov_ID === currentMerchant?.provId)
+          ? currentMerchant!.provId
+          : items[0]?.Prov_ID ?? 0;
+        setProvinceId(initialProvinceId);
+      })
+      .catch(error => setSaveError(error instanceof Error ? error.message : 'โหลดจังหวัดไม่สำเร็จ'))
+      .finally(() => setLoadingLocations(false));
+  }, [isOpen, currentMerchant?.provId]);
+
+  useEffect(() => {
+    if (!isOpen || !provinceId) return;
+    setLoadingLocations(true);
+    geoService.getDistricts(provinceId)
+      .then(items => {
+        setDistricts(items);
+        if (!items.some(item => item.Dist_ID === currentMerchant?.distId && item.Dist_ID === districtId)) {
+          const selected = items.some(item => item.Dist_ID === districtId) ? districtId : items[0]?.Dist_ID ?? 0;
+          setDistrictId(selected);
+        }
+      })
+      .catch(error => setSaveError(error instanceof Error ? error.message : 'โหลดอำเภอไม่สำเร็จ'))
+      .finally(() => setLoadingLocations(false));
+  }, [isOpen, provinceId]);
+
   if (!isOpen || !currentMerchant) return null;
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    updateMerchantProfile(currentMerchant.mchId, {
+    setSaving(true);
+    setSaveError('');
+    try {
+    await updateMerchantProfile(currentMerchant.mchId, {
       shopName,
       category,
-      ownerName,
-      phone,
-      promptpayId,
-      address,
-      openingHours,
-      description,
-      imageUrl
+      distId: districtId,
     });
     setSavedNotice(true);
     setTimeout(() => {
       setSavedNotice(false);
       onClose();
     }, 1200);
+    } catch (error) {
+      setSaveError(error instanceof ApiError && error.status === 401 ? 'กรุณาเข้าสู่ระบบก่อนบันทึกข้อมูล' : error instanceof Error ? error.message : 'บันทึกไม่สำเร็จ');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -99,6 +140,8 @@ export const MerchantProfileSettingsModal: React.FC<MerchantProfileSettingsModal
               บันทึกข้อมูลและอัปเดตโปรไฟล์ร้านค้าสำเร็จแล้ว!
             </div>
           )}
+          {saveError && <div role="alert" className="p-2.5 bg-rose-50 text-rose-800 rounded-xl border border-rose-200">{saveError}</div>}
+          {authStorage.getToken() && <p className="text-[10px] text-slate-500">จังหวัดและอำเภอโหลดจากฐานข้อมูล และบันทึกตำแหน่งร้านด้วย Dist_ID</p>}
 
           {/* Shop Image Preview */}
           <div className="relative rounded-2xl overflow-hidden border border-slate-200 h-32 bg-slate-100 group">
@@ -161,7 +204,7 @@ export const MerchantProfileSettingsModal: React.FC<MerchantProfileSettingsModal
           </div>
 
           <div className="grid grid-cols-2 gap-2">
-            <div>
+            {/* <div>
               <label className="block text-[11px] font-bold text-slate-600 mb-1">ชื่อเจ้าของร้าน</label>
               <input
                 type="text"
@@ -169,7 +212,7 @@ export const MerchantProfileSettingsModal: React.FC<MerchantProfileSettingsModal
                 onChange={e => setOwnerName(e.target.value)}
                 className="w-full px-3 py-2 border border-slate-200 rounded-xl"
               />
-            </div>
+            </div> */}
             <div>
               <label className="block text-[11px] font-bold text-slate-600 mb-1">หมายเลขพร้อมเพย์ (รับเงิน)</label>
               <input
@@ -203,14 +246,33 @@ export const MerchantProfileSettingsModal: React.FC<MerchantProfileSettingsModal
             </p>
           </div>
 
-          <div>
-            <label className="block text-[11px] font-bold text-slate-600 mb-1">ที่ตั้งร้านค้า</label>
-            <textarea
-              rows={2}
-              value={address}
-              onChange={e => setAddress(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-200 rounded-xl"
-            />
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">จังหวัด</label>
+              <select
+                value={provinceId}
+                disabled={loadingLocations || provinces.length === 0}
+                onChange={event => {
+                  const nextProvinceId = Number(event.target.value);
+                  setProvinceId(nextProvinceId);
+                  setDistrictId(0);
+                }}
+                className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-2 disabled:bg-slate-100"
+              >
+                {provinces.map(item => <option key={item.Prov_ID} value={item.Prov_ID}>{item.Prov_Name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">อำเภอ</label>
+              <select
+                value={districtId}
+                disabled={loadingLocations || districts.length === 0}
+                onChange={event => setDistrictId(Number(event.target.value))}
+                className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-2 disabled:bg-slate-100"
+              >
+                {districts.map(item => <option key={item.Dist_ID} value={item.Dist_ID}>{item.Dist_Name}</option>)}
+              </select>
+            </div>
           </div>
 
           <div>
@@ -234,10 +296,11 @@ export const MerchantProfileSettingsModal: React.FC<MerchantProfileSettingsModal
             </button>
             <button
               type="submit"
+              disabled={saving}
               className="flex-[2] py-2.5 bg-[#115e59] hover:bg-[#0f766e] text-white rounded-xl font-bold shadow-md shadow-teal-900/20 transition-all flex items-center justify-center gap-1.5"
             >
               <Icon name="check" className="size-4" />
-              <span>บันทึกการเปลี่ยนแปลง</span>
+              <span>{saving ? 'กำลังบันทึก…' : 'บันทึกการเปลี่ยนแปลง'}</span>
             </button>
           </div>
         </form>

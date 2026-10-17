@@ -3,6 +3,8 @@ import { useApp } from '../../context/AppContext';
 import { INITIAL_PROVINCES, INITIAL_DISTRICTS } from '../../mock/initialData';
 import { Merchant } from '../../types';
 import { Icon } from '../common/Icon';
+import { authStorage, ApiError } from '../../services/api';
+import { merchantService } from '../../services/merchantService';
 
 interface MerchantRegistrationModalProps {
   isOpen: boolean;
@@ -13,7 +15,7 @@ export const MerchantRegistrationModal: React.FC<MerchantRegistrationModalProps>
   isOpen,
   onClose
 }) => {
-  const { currentMerchant, registerMerchant } = useApp();
+  const { currentMerchant, registerMerchant, refreshMerchantData } = useApp();
 
   const [activeTab, setActiveTab] = useState<'status' | 'register'>('status');
   const [shopName, setShopName] = useState('');
@@ -24,15 +26,32 @@ export const MerchantRegistrationModal: React.FC<MerchantRegistrationModalProps>
   const [provId, setProvId] = useState<number>(1);
   const [distId, setDistId] = useState<number>(101);
   const [submitted, setSubmitted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   if (!isOpen) return null;
 
   const filteredDistricts = INITIAL_DISTRICTS.filter(d => d.provId === provId);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!shopName || !ownerName || !phone || !address) {
       alert('กรุณากรอกข้อมูลให้ครบถ้วน');
+      return;
+    }
+    if (authStorage.getToken()) {
+      setSubmitting(true);
+      setSubmitError('');
+      try {
+        await merchantService.register({ Shop_Name: shopName, Category: category, Dist_ID: distId });
+        await refreshMerchantData();
+        setSubmitted(true);
+        setTimeout(() => { setActiveTab('status'); setSubmitted(false); }, 1500);
+      } catch (error) {
+        setSubmitError(error instanceof ApiError && error.status === 401 ? 'กรุณาเข้าสู่ระบบก่อนสมัครร้าน' : error instanceof Error ? error.message : 'สมัครร้านไม่สำเร็จ');
+      } finally {
+        setSubmitting(false);
+      }
       return;
     }
     registerMerchant({
@@ -129,6 +148,8 @@ export const MerchantRegistrationModal: React.FC<MerchantRegistrationModalProps>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-3">
+              {submitError && <div role="alert" className="p-2.5 bg-rose-50 text-rose-800 rounded-xl">{submitError}</div>}
+              {authStorage.getToken() && <p className="text-[10px] text-slate-500">API รับชื่อร้าน หมวดหมู่ พิกัด และอำเภอ โดยผูกกับบัญชีที่เข้าสู่ระบบ</p>}
               {submitted && (
                 <div className="p-2.5 bg-emerald-50 text-emerald-800 rounded-xl font-medium">
                   บันทึกข้อมูลแล้ว อยู่ระหว่างรอตรวจสอบโดยภาครัฐ
@@ -197,9 +218,10 @@ export const MerchantRegistrationModal: React.FC<MerchantRegistrationModalProps>
 
               <button
                 type="submit"
+                disabled={submitting}
                 className="w-full py-2.5 bg-[#1769ed] hover:bg-blue-700 text-white rounded-xl font-bold shadow-md shadow-blue-500/20 transition-all mt-2"
               >
-                ยื่นคำขอลงทะเบียนร้านค้า
+                {submitting ? 'กำลังส่งคำขอ…' : 'ยื่นคำขอลงทะเบียนร้านค้า'}
               </button>
             </form>
           )}

@@ -16,7 +16,7 @@ export const RevenueBreakdownCard: React.FC<RevenueBreakdownCardProps> = ({
 }) => {
   const { currentMerchant, transactions } = useApp();
   const [selectedPeriod, setSelectedPeriod] = useState<PeriodType>(initialPeriod);
-  const [selectedMonth, setSelectedMonth] = useState<string>('2026-10'); // Default to October 2026
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => new Date().toISOString().slice(0, 7));
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTxForReceipt, setSelectedTxForReceipt] = useState<SalesTransaction | null>(null);
 
@@ -25,8 +25,7 @@ export const RevenueBreakdownCard: React.FC<RevenueBreakdownCardProps> = ({
     return transactions.filter(t => t.merchantId === currentMerchant?.mchId);
   }, [transactions, currentMerchant?.mchId]);
 
-  // Reference "Today" in mock data timeframe (October 14, 2026)
-  const referenceDate = new Date('2026-10-14T23:59:59');
+  const referenceDate = new Date();
 
   // Available unique months from transaction history
   const availableMonths = useMemo(() => {
@@ -36,10 +35,7 @@ export const RevenueBreakdownCard: React.FC<RevenueBreakdownCardProps> = ({
       if (mKey) monthsSet.add(mKey);
     });
 
-    // Ensure at least Oct, Sep, Aug 2026 exist
-    monthsSet.add('2026-10');
-    monthsSet.add('2026-09');
-    monthsSet.add('2026-08');
+    if (monthsSet.size === 0) monthsSet.add(new Date().toISOString().slice(0, 7));
 
     const thaiMonths = [
       '',
@@ -78,7 +74,7 @@ export const RevenueBreakdownCard: React.FC<RevenueBreakdownCardProps> = ({
       const diffDays = diffMs / (1000 * 60 * 60 * 24);
 
       if (selectedPeriod === 'today') {
-        return t.txTimestamp.startsWith('2026-10-14') || t.txTimestamp.startsWith('2026-10-13');
+        return txDate.toDateString() === referenceDate.toDateString();
       }
       if (selectedPeriod === '7days') {
         return diffDays >= 0 && diffDays <= 7;
@@ -101,8 +97,8 @@ export const RevenueBreakdownCard: React.FC<RevenueBreakdownCardProps> = ({
 
     return {
       totalRevenue: totalRev,
-      qrPaid60: qrPaid,
-      govSubsidy40: govSub,
+      customerPaid40: qrPaid,
+      governmentSubsidy60: govSub,
       totalBills,
       avgPerBill
     };
@@ -111,8 +107,8 @@ export const RevenueBreakdownCard: React.FC<RevenueBreakdownCardProps> = ({
   // Text label for active period
   const currentMonthLabel = availableMonths.find(m => m.key === selectedMonth)?.label || 'ประจำเดือน';
   const periodLabelMap: Record<PeriodType, string> = {
-    today: 'วันนี้ (14 ต.ค. 2569)',
-    '7days': '7 วันย้อนหลัง (8 - 14 ต.ค. 2569)',
+    today: 'วันนี้',
+    '7days': '7 วันย้อนหลัง',
     month: selectedMonth === 'all' ? 'ทุกเดือน' : `ประจำเดือน ${currentMonthLabel}`,
     all: 'ยอดรวมสะสมทุกช่วงเวลา'
   };
@@ -318,7 +314,7 @@ export const RevenueBreakdownCard: React.FC<RevenueBreakdownCardProps> = ({
               </div>
 
               <p className="text-lg font-extrabold text-blue-900 font-mono mt-1.5">
-                ฿ {kpiData.qrPaid60.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                  ฿ {kpiData.customerPaid40.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
               </p>
               <div className="mt-1.5 pt-1.5 border-t border-blue-200/60 flex items-center justify-between text-[10px] text-blue-700">
                 <span>Thai QR ชุมชน</span>
@@ -345,7 +341,7 @@ export const RevenueBreakdownCard: React.FC<RevenueBreakdownCardProps> = ({
               </div>
 
               <p className="text-lg font-extrabold text-emerald-900 font-mono mt-1.5">
-                ฿ {kpiData.govSubsidy40.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                  ฿ {kpiData.governmentSubsidy60.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
               </p>
               <div className="mt-1.5 pt-1.5 border-t border-emerald-200/60 flex items-center justify-between text-[10px] text-emerald-800">
                 <span>เข้าพร้อมเพย์</span>

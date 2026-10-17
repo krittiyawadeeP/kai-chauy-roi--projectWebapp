@@ -3,6 +3,8 @@ import { useApp } from '../../context/AppContext';
 import { Icon } from '../common/Icon';
 import { INITIAL_PROVINCES, INITIAL_DISTRICTS } from '../../mock/initialData';
 import { Merchant } from '../../types';
+import { authService, LoginPayload } from '../../services/authService';
+import { ApiError } from '../../services/api';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -25,7 +27,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     currentUser,
     currentMerchant,
     isAuthenticated,
-    logout
+    logout,
+    refreshMerchantData
   } = useApp();
 
   const [authRole, setAuthRole] = useState<'citizen' | 'merchant'>(defaultRole);
@@ -45,6 +48,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   // Merchant Login fields
   const [merchantPhone, setMerchantPhone] = useState('089-223-4455');
+  const [merchantPassword, setMerchantPassword] = useState('');
   const [selectedMchId, setSelectedMchId] = useState<number>(merchants[0]?.mchId || 1);
 
   // Merchant Register fields
@@ -74,12 +78,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   const handleDemoMerchantLogin = (mchId: number) => {
     const targetMch = merchants.find(m => m.mchId === mchId) || merchants[0];
-    loginMerchant(targetMch.phone, '123456', targetMch.mchId);
-    setNotice(`เข้าสู่ระบบร้านค้าสำเร็จ: ${targetMch.shopName}`);
-    setTimeout(() => {
-      setNotice('');
-      onClose();
-    }, 1000);
+    setMerchantPhone(targetMch.phone);
+    setSelectedMchId(targetMch.mchId);
+    setErrorNotice('ตัวอย่างร้านเป็นข้อมูล mock โปรดกรอกเบอร์และรหัสผ่านบัญชี MERCHANT ที่ seed ไว้ใน backend');
   };
 
   const handleCitizenSubmit = (e: React.FormEvent) => {
@@ -117,19 +118,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
-  const handleMerchantSubmit = (e: React.FormEvent) => {
+  const handleMerchantSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorNotice('');
     if (authMode === 'login') {
-      const res = loginMerchant(merchantPhone, '123456', selectedMchId);
-      if (res.success) {
+      try {
+        const response = await authService.login({ Phone: merchantPhone, Password: merchantPassword });
+        if (response.user.Role !== 'MERCHANT') throw new Error('บัญชีนี้ยังไม่ได้กำหนด role เป็น MERCHANT');
+        const res = loginMerchant(merchantPhone, merchantPassword, selectedMchId);
+        if (!res.success) throw new Error(res.message);
+        await refreshMerchantData();
         setNotice(res.message);
-        setTimeout(() => {
-          setNotice('');
-          onClose();
-        }, 1000);
-      } else {
-        setErrorNotice(res.message);
+        setTimeout(() => { setNotice(''); onClose(); }, 1000);
+      } catch (error) {
+        setErrorNotice(error instanceof ApiError && error.status === 401 ? 'เบอร์โทรศัพท์หรือรหัสผ่านไม่ถูกต้อง' : error instanceof Error ? error.message : 'เข้าสู่ระบบไม่สำเร็จ');
       }
     } else {
       if (!mchShopName || !mchOwnerName || !mchPhone || !mchAddress) {
@@ -166,9 +168,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
           <div className="flex items-center gap-2">
             <span
-              className={`grid size-9 place-items-center rounded-xl ${
-                authRole === 'merchant' ? 'bg-teal-50 text-[#115e59]' : 'bg-blue-50 text-[#1769ed]'
-              }`}
+              className={`grid size-9 place-items-center rounded-xl ${authRole === 'merchant' ? 'bg-teal-50 text-[#115e59]' : 'bg-blue-50 text-[#1769ed]'
+                }`}
             >
               <Icon name="user" className="size-5" />
             </span>
@@ -196,11 +197,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 setAuthRole('citizen');
                 setErrorNotice('');
               }}
-              className={`py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 ${
-                authRole === 'citizen'
+              className={`py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 ${authRole === 'citizen'
                   ? 'bg-[#1769ed] text-white shadow-sm'
                   : 'hover:text-slate-900'
-              }`}
+                }`}
             >
               <span>👤</span>
               <span>สำหรับประชาชน</span>
@@ -211,11 +211,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 setAuthRole('merchant');
                 setErrorNotice('');
               }}
-              className={`py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 ${
-                authRole === 'merchant'
+              className={`py-2 rounded-xl transition-all flex items-center justify-center gap-1.5 ${authRole === 'merchant'
                   ? 'bg-[#115e59] text-white shadow-sm'
                   : 'hover:text-slate-900'
-              }`}
+                }`}
             >
               <span>🏪</span>
               <span>สำหรับร้านค้า</span>
@@ -232,13 +231,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 setAuthMode('login');
                 setErrorNotice('');
               }}
-              className={`flex-1 py-2 text-center transition-colors ${
-                authMode === 'login'
+              className={`flex-1 py-2 text-center transition-colors ${authMode === 'login'
                   ? authRole === 'merchant'
                     ? 'text-[#115e59] border-b-2 border-[#115e59] font-bold'
                     : 'text-[#1769ed] border-b-2 border-[#1769ed] font-bold'
                   : 'text-slate-400 hover:text-slate-600'
-              }`}
+                }`}
             >
               เข้าสู่ระบบ (Login)
             </button>
@@ -248,13 +246,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 setAuthMode('register');
                 setErrorNotice('');
               }}
-              className={`flex-1 py-2 text-center transition-colors ${
-                authMode === 'register'
+              className={`flex-1 py-2 text-center transition-colors ${authMode === 'register'
                   ? authRole === 'merchant'
                     ? 'text-[#115e59] border-b-2 border-[#115e59] font-bold'
                     : 'text-[#1769ed] border-b-2 border-[#1769ed] font-bold'
                   : 'text-slate-400 hover:text-slate-600'
-              }`}
+                }`}
             >
               สมัครสมาชิกใหม่ (Register)
             </button>
@@ -419,6 +416,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     />
                   </div>
 
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">รหัสผ่านบัญชีร้านค้า</label>
+                    <input type="password" required value={merchantPassword} onChange={e => setMerchantPassword(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#115e59]" />
+                  </div>
+
                   <button
                     type="submit"
                     className="w-full py-2.5 bg-[#1769ed] hover:bg-blue-700 text-white rounded-xl font-bold shadow-md shadow-blue-500/20 transition-all mt-1"
@@ -467,6 +469,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#115e59]"
                     />
                   </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">รหัสผ่าน</label>
+                    <input type="password" required value={merchantPassword} onChange={e => setMerchantPassword(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#115e59]" />
+                  </div>
+
+                  <p className="text-[10px] text-slate-500">บัญชีต้องมี Role = MERCHANT และมีโปรไฟล์ร้านใน backend</p>
 
                   <button
                     type="submit"
