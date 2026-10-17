@@ -66,8 +66,8 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     }
   };
 
-  const userPays = Math.round(amount * 0.60 * 100) / 100;
-  const govPays = Math.round(amount * 0.40 * 100) / 100;
+  const govPays = Math.round(amount * 0.60 * 100) / 100;
+  const userPays = Math.round((amount - govPays) * 100) / 100;
 
   const matchingMission = selectedMerchant
     ? missions.find(
@@ -264,11 +264,11 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
                 <span>ยอดรวม ฿{amount.toLocaleString()}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-slate-600">คุณชำระ (60%):</span>
+                <span className="text-slate-600">คุณชำระ (40%):</span>
                 <strong className="text-base text-[#123b84]">฿ {userPays.toLocaleString()}</strong>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-slate-600">รัฐช่วยจ่าย (40%):</span>
+                <span className="text-slate-600">รัฐช่วยจ่าย (60%):</span>
                 <strong className="text-base text-emerald-600">฿ {govPays.toLocaleString()}</strong>
               </div>
             </div>
@@ -327,11 +327,11 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
                 <span className="font-bold text-slate-800">฿{amount.toLocaleString()}</span>
               </div>
               <div className="flex justify-between text-slate-600">
-                <span>คุณจ่าย (60%)</span>
+                <span>คุณจ่าย (40%)</span>
                 <span className="font-bold text-[#1769ed]">฿{userPays.toLocaleString()}</span>
               </div>
               <div className="flex justify-between text-slate-600">
-                <span>รัฐช่วยจ่าย (40%)</span>
+                <span>รัฐช่วยจ่าย (60%)</span>
                 <span className="font-bold text-emerald-600">฿{govPays.toLocaleString()}</span>
               </div>
             </div>

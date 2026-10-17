@@ -103,8 +103,8 @@ erDiagram
 | คอลัมน์ | ชนิดข้อมูล | เงื่อนไข | คำอธิบาย |
 | :--- | :--- | :---: | :--- |
 | `Policy_ID` | `INT` | PK, Auto Inc | รหัสประวัตินโยบาย |
-| `Gov_Pay_Ratio` | `DECIMAL(5,4)` | Default `0.4000` | สัดส่วนที่ภาครัฐช่วยจ่าย (เช่น 0.40 = 40%) |
-| `User_Pay_Ratio` | `DECIMAL(5,4)` | Default `0.6000` | สัดส่วนที่ประชาชนต้องจ่าย (เช่น 0.60 = 60%) |
+| `Gov_Pay_Ratio` | `DECIMAL(5,4)` | Default `0.6000` | สัดส่วนที่ภาครัฐช่วยจ่าย (เช่น 0.60 = 60%) |
+| `User_Pay_Ratio` | `DECIMAL(5,4)` | Default `0.4000` | สัดส่วนที่ประชาชนต้องจ่าย (เช่น 0.40 = 40%) |
 | `Grant_Amount` | `DECIMAL(12,2)` | Default `1000.00` | วงเงินมาตรฐานของโครงการ |
 | `Effective_From` | `DATETIME` | Default `now()` | วันเวลาที่นโยบายมีผลบังคับใช้ |
 | `Created_By` | `INT` | FK -> `users(User_ID)` | ผู้ดูแลระบบ (Admin) ที่บันทึกนโยบาย |

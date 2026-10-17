@@ -305,13 +305,15 @@ adminRoutes.get("/policy", async (_req, res) => {
     orderBy: { Effective_From: "desc" },
     include: { users: { select: { Citizen_ID: true } } },
   });
-  // If no policy exists yet, return the system default
-  sendJson(res, policy ?? {
-    Policy_ID: null,
-    Gov_Pay_Ratio: "0.4000",
-    User_Pay_Ratio: "0.6000",
-    Grant_Amount: "1000.00",
-    Note: "ค่าเริ่มต้นของระบบ (ยังไม่มีการตั้งค่า)",
+  // Co-payment is fixed by program policy, even if an older DB row has the former ratio.
+  sendJson(res, {
+    ...(policy ?? {
+      Policy_ID: null,
+      Grant_Amount: "1000.00",
+      Note: "ค่าเริ่มต้นของระบบ (ยังไม่มีการตั้งค่า)",
+    }),
+    Gov_Pay_Ratio: "0.6000",
+    User_Pay_Ratio: "0.4000",
   });
 });
 
@@ -333,14 +335,14 @@ adminRoutes.post("/policy", async (req, res) => {
   if (!adminReq.user) return sendJson(res, { message: "Unauthorized" }, 401);
 
   const govRatio = parseFloat(Gov_Pay_Ratio);
-  if (isNaN(govRatio) || govRatio <= 0 || govRatio >= 1) {
-    return badRequest(res, "Gov_Pay_Ratio ต้องเป็นตัวเลขระหว่าง 0 ถึง 1 (เช่น 0.40)");
+  if (govRatio !== 0.6) {
+    return badRequest(res, "The co-payment ratio is fixed at 60% government and 40% citizen");
   }
 
   const policy = await prisma.grant_policy.create({
     data: {
-      Gov_Pay_Ratio: govRatio,
-      User_Pay_Ratio: parseFloat((1 - govRatio).toFixed(4)),
+      Gov_Pay_Ratio: 0.6,
+      User_Pay_Ratio: 0.4,
       Grant_Amount: Grant_Amount ?? 1000.00,
       Created_By: adminReq.user.userId,
       Note: Note ?? null,

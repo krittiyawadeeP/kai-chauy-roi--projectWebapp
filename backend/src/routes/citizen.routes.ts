@@ -12,6 +12,28 @@ import { prisma } from "../lib/prisma";
 
 export const citizenRoutes = Router();
 
+citizenRoutes.get("/provinces", async (_req, res) => {
+  const provinces = await prisma.provinces.findMany({
+    orderBy: { Prov_Name: "asc" },
+  });
+
+  sendJson(res, provinces);
+});
+
+citizenRoutes.get("/districts", async (req, res) => {
+  const provinceId = toNumber(req.query.prov_id);
+  if (!provinceId || provinceId <= 0) {
+    return badRequest(res, "prov_id must be a positive integer");
+  }
+
+  const districts = await prisma.districts.findMany({
+    where: { Prov_ID: provinceId },
+    orderBy: { Dist_Name: "asc" },
+  });
+
+  sendJson(res, districts);
+});
+
 citizenRoutes.post("/user", async (req, res) => {
   const { Citizen_ID, Phone, Password, Province_ID, Role } = req.body;
 

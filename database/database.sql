@@ -254,8 +254,8 @@ ALTER TABLE `user_grants` ADD CONSTRAINT `fk_user_grant_user` FOREIGN KEY (`User
 -- CreateTable
 CREATE TABLE `grant_policy` (
     `Policy_ID`      INTEGER      NOT NULL AUTO_INCREMENT,
-    `Gov_Pay_Ratio`  DECIMAL(5,4) NOT NULL DEFAULT 0.40,
-    `User_Pay_Ratio` DECIMAL(5,4) NOT NULL DEFAULT 0.60,
+    `Gov_Pay_Ratio`  DECIMAL(5,4) NOT NULL DEFAULT 0.60,
+    `User_Pay_Ratio` DECIMAL(5,4) NOT NULL DEFAULT 0.40,
     `Grant_Amount`   DECIMAL(12,2) NOT NULL DEFAULT 1000.00,
     `Effective_From` DATETIME(0)  NOT NULL DEFAULT CURRENT_TIMESTAMP(0),
     `Created_By`     INTEGER      NOT NULL,

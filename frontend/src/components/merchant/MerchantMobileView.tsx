@@ -532,7 +532,7 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
               </span>
             </div>
             <p className="text-[11px] text-teal-800 leading-relaxed">
-              ร้านค้าของท่านลงทะเบียนในระบบเรียบร้อย สามารถสร้าง Thai QR Code รับสิทธิ์ 60/40 และรับเงินสมทบ 40% จากภาครัฐเข้าบัญชีพร้อมเพย์ได้ทันที
+              ร้านค้าของท่านลงทะเบียนในระบบเรียบร้อย สามารถสร้าง Thai QR Code รับสิทธิ์ 60/40 และรับเงินสมทบ 60% จากภาครัฐเข้าบัญชีพร้อมเพย์ได้ทันที
             </p>
             <div className="pt-2 flex gap-2">
               <button

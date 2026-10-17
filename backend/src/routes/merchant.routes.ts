@@ -39,8 +39,6 @@ merchantRoutes.post("/register", async (req, res) => {
               Grant_Name: "Default government subsidy",
               Total_Grant_Amount: 1000,
               Remaining_Amount: 1000,
-              Gov_Pay_Ratio: 0.6,
-              User_Pay_Ratio: 0.4,
               Status: "ACTIVE",
             },
           },
@@ -188,16 +186,8 @@ merchantRoutes.post("/me/sales", requireMerchant, async (req: AuthRequest, res) 
     },
   });
 
-  const totalAmount = Number(Total_Amount);
-
-  // Fetch current subsidy ratio from global grant_policy
-  const latestPolicy = await prisma.grant_policy.findFirst({
-    orderBy: { Effective_From: "desc" },
-  });
-  const govRatio = latestPolicy ? Number(latestPolicy.Gov_Pay_Ratio) : 0.4;
-  const userRatio = latestPolicy ? Number(latestPolicy.User_Pay_Ratio) : 0.6;
-
-  const requestedGovAmount = totalAmount * govRatio;
+  // Program policy: government pays 60%, citizen pays 40%.
+  const requestedGovAmount = Number((totalAmount * 0.6).toFixed(2));
   const remainingGrant = activeGrant ? Number(activeGrant.Remaining_Amount) : 0;
   const govSubsidizedAmount = Math.min(requestedGovAmount, remainingGrant);
   const userPaidAmount = Number((totalAmount - govSubsidizedAmount).toFixed(2));

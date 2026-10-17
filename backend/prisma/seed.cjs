@@ -116,8 +116,8 @@ async function main() {
       User_ID: user2.User_ID, // User2 buys from Mch1
       Merchant_ID: mch1.Mch_ID,
       Total_Amount: 100.00,
-      User_Paid_Amount: 60.00,
-      Gov_Subsidized_Amount: 40.00,
+      User_Paid_Amount: 40.00,
+      Gov_Subsidized_Amount: 60.00,
       Tx_Timestamp: new Date(),
       District_ID: dist1.Dist_ID,
       Status: 'COMPLETED'
@@ -128,8 +128,8 @@ async function main() {
       User_ID: user1.User_ID, // User1 buys from Mch2
       Merchant_ID: mch2.Mch_ID,
       Total_Amount: 50.00,
-      User_Paid_Amount: 30.00,
-      Gov_Subsidized_Amount: 20.00,
+      User_Paid_Amount: 20.00,
+      Gov_Subsidized_Amount: 30.00,
       Tx_Timestamp: new Date(),
       District_ID: dist2.Dist_ID,
       Status: 'COMPLETED'

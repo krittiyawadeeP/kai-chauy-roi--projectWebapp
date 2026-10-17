@@ -297,7 +297,7 @@ export const RevenueBreakdownCard: React.FC<RevenueBreakdownCardProps> = ({
 
           {/* 60% vs 40% Split Breakdown Row */}
           <div className="grid grid-cols-2 gap-2.5">
-            {/* KPI 2: ส่วนที่ลูกค้าชำระผ่าน QR (60%) */}
+            {/* KPI 2: ส่วนที่ลูกค้าชำระผ่าน QR (40%) */}
             <div className="rounded-2xl bg-gradient-to-b from-blue-50/90 to-sky-50/50 p-3.5 border border-blue-200/80 shadow-xs relative">
               <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center gap-1.5">
@@ -305,11 +305,11 @@ export const RevenueBreakdownCard: React.FC<RevenueBreakdownCardProps> = ({
                     <Icon name="qr" className="size-3.5" />
                   </span>
                   <span className="text-[11px] font-bold text-blue-950">
-                    ลูกค้าชำระ QR (60%)
+                    ลูกค้าชำระ QR (40%)
                   </span>
                 </div>
                 <span className="text-[9px] font-extrabold bg-blue-600 text-white px-1.5 py-0.5 rounded-md">
-                  60%
+                  40%
                 </span>
               </div>
 
@@ -324,7 +324,7 @@ export const RevenueBreakdownCard: React.FC<RevenueBreakdownCardProps> = ({
               </div>
             </div>
 
-            {/* KPI 3: เงินสมทบจากภาครัฐโอนเข้าพร้อมเพย์ (40%) */}
+            {/* KPI 3: เงินสมทบจากภาครัฐโอนเข้าพร้อมเพย์ (60%) */}
             <div className="rounded-2xl bg-gradient-to-b from-emerald-50/90 to-teal-50/50 p-3.5 border border-emerald-200/80 shadow-xs relative">
               <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center gap-1.5">
@@ -332,11 +332,11 @@ export const RevenueBreakdownCard: React.FC<RevenueBreakdownCardProps> = ({
                     <Icon name="shield" className="size-3.5" />
                   </span>
                   <span className="text-[11px] font-bold text-emerald-950">
-                    รัฐโอนสมทบ (40%)
+                    รัฐโอนสมทบ (60%)
                   </span>
                 </div>
                 <span className="text-[9px] font-extrabold bg-emerald-600 text-white px-1.5 py-0.5 rounded-md">
-                  40%
+                  60%
                 </span>
               </div>
 
@@ -454,7 +454,7 @@ export const RevenueBreakdownCard: React.FC<RevenueBreakdownCardProps> = ({
                     </span>
                     <span className="text-slate-300">•</span>
                     <span className="text-emerald-700 font-medium">
-                      รัฐสมทบ 40%: ฿{tx.govSubsidizedAmount}
+                      รัฐสมทบ 60%: ฿{tx.govSubsidizedAmount}
                     </span>
                   </div>
                 </div>
@@ -529,11 +529,11 @@ export const RevenueBreakdownCard: React.FC<RevenueBreakdownCardProps> = ({
                 </strong>
               </div>
               <div className="flex justify-between text-blue-700 pt-1 border-t border-slate-200">
-                <span>ลูกค้าชำระผ่าน QR (60%):</span>
+                <span>ลูกค้าชำระผ่าน QR (40%):</span>
                 <strong className="font-mono">฿ {selectedTxForReceipt.userPaidAmount.toFixed(2)}</strong>
               </div>
               <div className="flex justify-between text-emerald-700">
-                <span>รัฐบาลโอนสมทบพร้อมเพย์ (40%):</span>
+                <span>รัฐบาลโอนสมทบพร้อมเพย์ (60%):</span>
                 <strong className="font-mono">
                   ฿ {selectedTxForReceipt.govSubsidizedAmount.toFixed(2)}
                 </strong>

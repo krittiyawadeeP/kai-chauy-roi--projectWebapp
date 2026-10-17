@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Icon } from '../common/Icon';
 import { INITIAL_PROVINCES, INITIAL_DISTRICTS } from '../../mock/initialData';
 import { Merchant } from '../../types';
 import { authService, LoginPayload } from '../../services/authService';
 import { ApiError } from '../../services/api';
+import { ApiDistrict, ApiProvince, geoService } from '../../services/geoService';
+import { merchantService } from '../../services/merchantService';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -22,6 +24,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     loginMerchant,
     registerCitizen,
     registerMerchant,
+    setRole,
+    setIsAuthenticated,
     users,
     merchants,
     currentUser,
@@ -53,17 +57,53 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   // Merchant Register fields
   const [mchShopName, setMchShopName] = useState('');
+  const [mchCitizenId, setMchCitizenId] = useState('');
   const [mchCategory, setMchCategory] = useState<Merchant['category']>('อาหารและเครื่องดื่ม');
   const [mchOwnerName, setMchOwnerName] = useState('');
   const [mchPhone, setMchPhone] = useState('');
+  const [mchRegisterPassword, setMchRegisterPassword] = useState('');
+  const [mchConfirmPassword, setMchConfirmPassword] = useState('');
   const [mchAddress, setMchAddress] = useState('');
+  const [mchProvId, setMchProvId] = useState(0);
+  const [mchDistId, setMchDistId] = useState(0);
+  const [merchantProvinces, setMerchantProvinces] = useState<ApiProvince[]>([]);
+  const [merchantDistricts, setMerchantDistricts] = useState<ApiDistrict[]>([]);
+  const [loadingMerchantLocations, setLoadingMerchantLocations] = useState(false);
 
   const [notice, setNotice] = useState<string>('');
   const [errorNotice, setErrorNotice] = useState<string>('');
 
-  if (!isOpen) return null;
-
   const filteredDistricts = INITIAL_DISTRICTS.filter(d => d.provId === regProvId);
+
+  useEffect(() => {
+    if (!isOpen || authRole !== 'merchant' || authMode !== 'register') return;
+    setLoadingMerchantLocations(true);
+    geoService.getProvinces()
+      .then(items => {
+        setMerchantProvinces(items);
+        setMchProvId(current => items.some(item => item.Prov_ID === current) ? current : items[0]?.Prov_ID ?? 0);
+      })
+      .catch(error => setErrorNotice(error instanceof Error ? error.message : 'โหลดจังหวัดไม่สำเร็จ'))
+      .finally(() => setLoadingMerchantLocations(false));
+  }, [isOpen, authRole, authMode]);
+
+  useEffect(() => {
+    if (!isOpen || authRole !== 'merchant' || authMode !== 'register' || !mchProvId) {
+      setMerchantDistricts([]);
+      setMchDistId(0);
+      return;
+    }
+    setLoadingMerchantLocations(true);
+    geoService.getDistricts(mchProvId)
+      .then(items => {
+        setMerchantDistricts(items);
+        setMchDistId(current => items.some(item => item.Dist_ID === current) ? current : items[0]?.Dist_ID ?? 0);
+      })
+      .catch(error => setErrorNotice(error instanceof Error ? error.message : 'โหลดอำเภอไม่สำเร็จ'))
+      .finally(() => setLoadingMerchantLocations(false));
+  }, [isOpen, authRole, authMode, mchProvId]);
+
+  if (!isOpen) return null;
 
   // Quick preset login helper
   const handleDemoCitizenLogin = (userId: number) => {
@@ -134,19 +174,39 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         setErrorNotice(error instanceof ApiError && error.status === 401 ? 'เบอร์โทรศัพท์หรือรหัสผ่านไม่ถูกต้อง' : error instanceof Error ? error.message : 'เข้าสู่ระบบไม่สำเร็จ');
       }
     } else {
-      if (!mchShopName || !mchOwnerName || !mchPhone || !mchAddress) {
+      if (!mchShopName || !mchOwnerName || !mchPhone || !mchProvId || !mchDistId) {
         setErrorNotice('กรุณากรอกข้อมูลร้านค้าให้ครบถ้วน');
         return;
       }
-      registerMerchant({
-        shopName: mchShopName,
-        category: mchCategory,
-        ownerName: mchOwnerName,
-        phone: mchPhone,
-        address: mchAddress,
-        provId: 1,
-        distId: 101
-      });
+      if (!/^\d{13}$/.test(mchCitizenId.replace(/\D/g, ''))) {
+        setErrorNotice('กรุณากรอกเลขประจำตัวประชาชน 13 หลัก');
+        return;
+      }
+      if (mchRegisterPassword.length < 6) {
+        setErrorNotice('รหัสผ่านต้องมีอย่างน้อย 6 ตัวอักษร');
+        return;
+      }
+      if (mchRegisterPassword !== mchConfirmPassword) {
+        setErrorNotice('รหัสผ่านทั้งสองช่องไม่ตรงกัน');
+        return;
+      }
+      try {
+        await merchantService.registerAccount({
+          Citizen_ID: mchCitizenId.replace(/\D/g, ''),
+          Phone: mchPhone,
+          Password: mchRegisterPassword,
+          Province_ID: mchProvId,
+          Shop_Name: mchShopName,
+          Category: mchCategory,
+          Dist_ID: mchDistId,
+        });
+        setRole('merchant');
+        setIsAuthenticated(true);
+        await refreshMerchantData();
+      } catch (error) {
+        setErrorNotice(error instanceof Error ? error.message : 'ลงทะเบียนร้านค้าไม่สำเร็จ');
+        return;
+      }
       setNotice(`ลงทะเบียนร้านค้า ${mchShopName} สำเร็จ`);
       setTimeout(() => {
         setNotice('');
@@ -417,7 +477,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1">รหัสผ่านบัญชีร้านค้า</label>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">รหัสผ่าน</label>
                     <input type="password" required value={merchantPassword} onChange={e => setMerchantPassword(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#115e59]" />
                   </div>
 
@@ -487,24 +547,48 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               ) : (
                 <form onSubmit={handleMerchantSubmit} className="space-y-3">
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1">ชื่อร้านค้า *</label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="เช่น ข้าวแกงป้าพร, ร้านกาแฟชุมชน"
-                      value={mchShopName}
-                      onChange={e => setMchShopName(e.target.value)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-xl"
-                    />
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">เลขประจำตัวประชาชน 13 หลัก *</label>
+                    <input type="text" inputMode="numeric" required maxLength={13} value={mchCitizenId} onChange={e => setMchCitizenId(e.target.value.replace(/\D/g, '').slice(0, 13))} className="w-full px-3 py-2 border border-slate-200 rounded-xl" />
                   </div>
-
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">ชื่อเจ้าของร้าน *</label>
+                    <input type="text" required value={mchOwnerName} onChange={e => setMchOwnerName(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-xl" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">เบอร์โทรศัพท์ *</label>
+                    <input type="tel" required value={mchPhone} onChange={e => setMchPhone(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-xl" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">จังหวัด *</label>
+                      <select required value={mchProvId || ''} disabled={loadingMerchantLocations || merchantProvinces.length === 0} onChange={e => { setMchProvId(Number(e.target.value)); setMchDistId(0); }} className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white">
+                        <option value="" disabled>{loadingMerchantLocations ? 'กำลังโหลดจังหวัด...' : 'เลือกจังหวัด'}</option>
+                        {merchantProvinces.map(item => <option key={item.Prov_ID} value={item.Prov_ID}>{item.Prov_Name}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">อำเภอ *</label>
+                      <select required value={mchDistId || ''} disabled={loadingMerchantLocations || !mchProvId || merchantDistricts.length === 0} onChange={e => setMchDistId(Number(e.target.value))} className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white">
+                        <option value="" disabled>{loadingMerchantLocations ? 'กำลังโหลดอำเภอ...' : 'เลือกอำเภอ'}</option>
+                        {merchantDistricts.map(item => <option key={item.Dist_ID} value={item.Dist_ID}>{item.Dist_Name}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">ตั้งรหัสผ่าน (อย่างน้อย 6 ตัวอักษร) *</label>
+                    <input type="password" required minLength={6} autoComplete="new-password" value={mchRegisterPassword} onChange={e => setMchRegisterPassword(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-xl" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">ยืนยันรหัสผ่าน *</label>
+                    <input type="password" required minLength={6} autoComplete="new-password" value={mchConfirmPassword} onChange={e => setMchConfirmPassword(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-xl" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-600 mb-1">ชื่อร้านค้า *</label>
+                    <input type="text" required value={mchShopName} onChange={e => setMchShopName(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-xl" />
+                  </div>
                   <div>
                     <label className="block text-[11px] font-bold text-slate-600 mb-1">หมวดหมู่ร้านค้า *</label>
-                    <select
-                      value={mchCategory}
-                      onChange={e => setMchCategory(e.target.value as any)}
-                      className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white"
-                    >
+                    <select value={mchCategory} onChange={e => setMchCategory(e.target.value as Merchant['category'])} className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white">
                       <option value="อาหารและเครื่องดื่ม">อาหารและเครื่องดื่ม</option>
                       <option value="ของใช้ทั่วไป">ของใช้ทั่วไป</option>
                       <option value="หัตถกรรม/ของฝาก">หัตถกรรม/ของฝาก (OTOP)</option>
@@ -512,46 +596,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       <option value="ผลไม้/เกษตรแปรรูป">ผลไม้/เกษตรแปรรูป</option>
                     </select>
                   </div>
-
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-600 mb-1">ชื่อเจ้าของ *</label>
-                      <input
-                        type="text"
-                        required
-                        value={mchOwnerName}
-                        onChange={e => setMchOwnerName(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-xl"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-600 mb-1">เบอร์โทรศัพท์ *</label>
-                      <input
-                        type="tel"
-                        required
-                        value={mchPhone}
-                        onChange={e => setMchPhone(e.target.value)}
-                        className="w-full px-3 py-2 border border-slate-200 rounded-xl"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
+                  {/* <div>
                     <label className="block text-[11px] font-bold text-slate-600 mb-1">ที่ตั้งร้านค้า *</label>
-                    <textarea
-                      rows={2}
-                      required
-                      value={mchAddress}
-                      onChange={e => setMchAddress(e.target.value)}
-                      placeholder="ระบุตำบล อำเภอ จังหวัด"
-                      className="w-full px-3 py-2 border border-slate-200 rounded-xl"
-                    />
-                  </div>
-
-                  <button
-                    type="submit"
-                    className="w-full py-2.5 bg-[#115e59] hover:bg-[#0f766e] text-white rounded-xl font-bold shadow-md shadow-teal-900/20 transition-all mt-1"
-                  >
+                    <textarea rows={2} required value={mchAddress} onChange={e => setMchAddress(e.target.value)} placeholder="ระบุที่ตั้งร้านค้า" className="w-full px-3 py-2 border border-slate-200 rounded-xl" />
+                  </div> */}
+                  <button type="submit" disabled={loadingMerchantLocations || !mchProvId || !mchDistId} className="w-full py-2.5 bg-[#115e59] hover:bg-[#0f766e] text-white rounded-xl font-bold shadow-md shadow-teal-900/20 transition-all mt-1">
                     ยืนยันลงทะเบียนร้านค้าใหม่
                   </button>
                 </form>

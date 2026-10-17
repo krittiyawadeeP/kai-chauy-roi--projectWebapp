@@ -212,8 +212,8 @@ model user_grants {
 
 model grant_policy {
   Policy_ID      Int      @id @default(autoincrement())
-  Gov_Pay_Ratio  Decimal  @default(0.40) @db.Decimal(5, 4)
-  User_Pay_Ratio Decimal  @default(0.60) @db.Decimal(5, 4)
+  Gov_Pay_Ratio  Decimal  @default(0.60) @db.Decimal(5, 4)
+  User_Pay_Ratio Decimal  @default(0.40) @db.Decimal(5, 4)
   Grant_Amount   Decimal  @default(1000.00) @db.Decimal(12, 2)
   Effective_From DateTime @default(now()) @db.DateTime(0)
   Created_By     Int

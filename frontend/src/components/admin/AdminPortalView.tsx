@@ -60,11 +60,11 @@ const DashboardTab: React.FC = () => {
 
         <div className="grid grid-cols-2 gap-2 text-xs">
           <div className="p-2.5 bg-blue-50 rounded-xl border border-blue-200">
-            <span className="text-[10px] text-blue-700 block font-bold">ประชาชนจ่าย (60%)</span>
+            <span className="text-[10px] text-blue-700 block font-bold">ประชาชนจ่าย (40%)</span>
             <span className="text-sm font-extrabold text-blue-900 font-mono">{thb(tx.userPaid)}</span>
           </div>
           <div className="p-2.5 bg-emerald-50 rounded-xl border border-emerald-200">
-            <span className="text-[10px] text-emerald-700 block font-bold">รัฐอุดหนุน (40%)</span>
+            <span className="text-[10px] text-emerald-700 block font-bold">รัฐอุดหนุน (60%)</span>
             <span className="text-sm font-extrabold text-emerald-900 font-mono">{thb(tx.govSubsidized)}</span>
           </div>
         </div>
@@ -132,7 +132,7 @@ const BudgetTab: React.FC = () => {
   const [policy, setPolicy] = useState<PolicyRecord | null>(null);
   const [policyHistory, setPolicyHistory] = useState<PolicyRecord[]>([]);
   const [showHistory, setShowHistory] = useState(false);
-  const [newGovRatio, setNewGovRatio] = useState<number>(40);
+  const [newGovRatio, setNewGovRatio] = useState<number>(60);
   const [newGrantAmount, setNewGrantAmount] = useState<number>(1000);
   const [policyNote, setPolicyNote] = useState('');
   const [policySubmitting, setPolicySubmitting] = useState(false);
@@ -142,7 +142,7 @@ const BudgetTab: React.FC = () => {
   const [citizenId, setCitizenId] = useState('');
   const [grantName, setGrantName] = useState('โครงการไทยช่วยไทย');
   const [amount, setAmount] = useState<number>(1000);
-  const [govRatio, setGovRatio] = useState<number>(40);
+  const [govRatio, setGovRatio] = useState<number>(60);
 
   const loadGrants = useCallback(async () => {
     setLoading(true);
@@ -279,10 +279,9 @@ const BudgetTab: React.FC = () => {
               <label className="block text-[10px] font-bold text-slate-500 mb-1">รัฐจ่าย (%)</label>
               <input
                 id="policy-gov-ratio"
-                type="number" min={1} max={99}
+                type="number" min={60} max={60} readOnly
                 value={newGovRatio}
-                onChange={e => setNewGovRatio(Number(e.target.value))}
-                className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400"
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-slate-50"
               />
             </div>
             <div>
@@ -373,7 +372,7 @@ const BudgetTab: React.FC = () => {
           <div className="flex items-center justify-between p-2.5 bg-amber-50 rounded-xl border border-amber-200 text-[10px] text-amber-800 font-medium">
             <span>อัตราการร่วมจ่าย (อิงตามนโยบายกลาง):</span>
             <span className="font-bold text-emerald-800">
-              รัฐ {policy ? Math.round(parseFloat(policy.Gov_Pay_Ratio) * 100) : 40}% / ประชาชน {policy ? 100 - Math.round(parseFloat(policy.Gov_Pay_Ratio) * 100) : 60}%
+              รัฐ {policy ? Math.round(parseFloat(policy.Gov_Pay_Ratio) * 100) : 60}% / ประชาชน {policy ? 100 - Math.round(parseFloat(policy.Gov_Pay_Ratio) * 100) : 40}%
             </span>
           </div>
 

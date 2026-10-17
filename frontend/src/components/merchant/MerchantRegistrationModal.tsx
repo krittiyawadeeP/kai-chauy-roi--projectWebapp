@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { INITIAL_PROVINCES, INITIAL_DISTRICTS } from '../../mock/initialData';
 import { Merchant } from '../../types';
 import { Icon } from '../common/Icon';
 import { authStorage, ApiError } from '../../services/api';
 import { merchantService } from '../../services/merchantService';
+import { ApiDistrict, ApiProvince, geoService } from '../../services/geoService';
 
 interface MerchantRegistrationModalProps {
   isOpen: boolean;
@@ -23,19 +23,49 @@ export const MerchantRegistrationModal: React.FC<MerchantRegistrationModalProps>
   const [ownerName, setOwnerName] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
-  const [provId, setProvId] = useState<number>(1);
-  const [distId, setDistId] = useState<number>(101);
+  const [provId, setProvId] = useState<number>(0);
+  const [distId, setDistId] = useState<number>(0);
+  const [provinces, setProvinces] = useState<ApiProvince[]>([]);
+  const [districts, setDistricts] = useState<ApiDistrict[]>([]);
+  const [loadingLocations, setLoadingLocations] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    if (!isOpen) return;
+    setLoadingLocations(true);
+    geoService.getProvinces()
+      .then(items => {
+        setProvinces(items);
+        const initialProvinceId = items.some(item => item.Prov_ID === provId) ? provId : items[0]?.Prov_ID ?? 0;
+        setProvId(initialProvinceId);
+      })
+      .catch(error => setSubmitError(error instanceof Error ? error.message : 'โหลดจังหวัดไม่สำเร็จ'))
+      .finally(() => setLoadingLocations(false));
+  }, [isOpen]);
 
-  const filteredDistricts = INITIAL_DISTRICTS.filter(d => d.provId === provId);
+  useEffect(() => {
+    if (!isOpen || !provId) {
+      setDistricts([]);
+      setDistId(0);
+      return;
+    }
+    setLoadingLocations(true);
+    geoService.getDistricts(provId)
+      .then(items => {
+        setDistricts(items);
+        setDistId(current => items.some(item => item.Dist_ID === current) ? current : items[0]?.Dist_ID ?? 0);
+      })
+      .catch(error => setSubmitError(error instanceof Error ? error.message : 'โหลดอำเภอไม่สำเร็จ'))
+      .finally(() => setLoadingLocations(false));
+  }, [isOpen, provId]);
+
+  if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!shopName || !ownerName || !phone || !address) {
+    if (!shopName || !ownerName || !phone || !address || !provId || !distId) {
       alert('กรุณากรอกข้อมูลให้ครบถ้วน');
       return;
     }
@@ -216,9 +246,38 @@ export const MerchantRegistrationModal: React.FC<MerchantRegistrationModalProps>
                 />
               </div>
 
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">จังหวัด *</label>
+                  <select
+                    required
+                    value={provId || ''}
+                    disabled={loadingLocations || provinces.length === 0}
+                    onChange={e => { setProvId(Number(e.target.value)); setDistId(0); }}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white"
+                  >
+                    <option value="" disabled>{loadingLocations ? 'กำลังโหลดจังหวัด...' : 'เลือกจังหวัด'}</option>
+                    {provinces.map(item => <option key={item.Prov_ID} value={item.Prov_ID}>{item.Prov_Name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">อำเภอ *</label>
+                  <select
+                    required
+                    value={distId || ''}
+                    disabled={loadingLocations || !provId || districts.length === 0}
+                    onChange={e => setDistId(Number(e.target.value))}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white"
+                  >
+                    <option value="" disabled>{loadingLocations ? 'กำลังโหลดอำเภอ...' : 'เลือกอำเภอ'}</option>
+                    {districts.map(item => <option key={item.Dist_ID} value={item.Dist_ID}>{item.Dist_Name}</option>)}
+                  </select>
+                </div>
+              </div>
+
               <button
                 type="submit"
-                disabled={submitting}
+                disabled={submitting || loadingLocations || provinces.length === 0 || districts.length === 0 || !distId}
                 className="w-full py-2.5 bg-[#1769ed] hover:bg-blue-700 text-white rounded-xl font-bold shadow-md shadow-blue-500/20 transition-all mt-2"
               >
                 {submitting ? 'กำลังส่งคำขอ…' : 'ยื่นคำขอลงทะเบียนร้านค้า'}

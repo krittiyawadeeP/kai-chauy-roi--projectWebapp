@@ -506,20 +506,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, message: 'ไม่พบข้อมูลร้านค้าในระบบ' };
     }
 
-    const userShare = Math.round(totalAmount * 0.60 * 100) / 100;
-    const govShare = Math.round(totalAmount * 0.40 * 100) / 100;
+    const requestedGovShare = Math.round(totalAmount * 0.60 * 100) / 100;
+    const govShare = Math.min(requestedGovShare, userGrant.remainingAmount);
+    const userShare = Math.round((totalAmount - govShare) * 100) / 100;
 
     if (wallet.balance < userShare) {
       return {
         success: false,
         message: `ยอดเงินในกระเป๋าไม่เพียงพอ (ต้องการ ${userShare.toLocaleString()} บาท มีอยู่ ${wallet.balance.toLocaleString()} บาท) กรุณาเติมเงิน`
-      };
-    }
-
-    if (userGrant.remainingAmount < govShare) {
-      return {
-        success: false,
-        message: `วงเงินสิทธิรัฐอุดหนุนคงเหลือไม่เพียงพอ (คงเหลือ ${userGrant.remainingAmount.toLocaleString()} บาท)`
       };
     }
 
