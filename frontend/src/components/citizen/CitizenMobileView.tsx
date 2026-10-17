@@ -121,7 +121,7 @@ export const CitizenMobileView: React.FC = () => {
         <div className="relative rounded-[22px] bg-white p-5 shadow-[0_12px_35px_rgba(22,68,150,.13)]">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-xs font-medium text-slate-500">วงเงินสิทธิรัฐช่วยจ่ายคงเหลือ (40%)</p>
+              <p className="text-xs font-medium text-slate-500">วงเงินสิทธิรัฐช่วยจ่ายคงเหลือ (60%)</p>
               <p className="mt-1 text-[28px] font-bold tracking-tight text-[#123b84]">
                 ฿ {userGrant.remainingAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
               </p>
@@ -152,7 +152,7 @@ export const CitizenMobileView: React.FC = () => {
                 <Icon name="wallet" className="size-4" />
               </span>
               <div>
-                <span className="text-[10px] text-slate-400 block">กระเป๋าเงิน (คุณจ่าย 60%)</span>
+                <span className="text-[10px] text-slate-400 block">กระเป๋าเงิน (คุณจ่าย 40%)</span>
                 <span className="text-sm font-bold text-slate-800">
                   ฿ {wallet.balance.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
                 </span>

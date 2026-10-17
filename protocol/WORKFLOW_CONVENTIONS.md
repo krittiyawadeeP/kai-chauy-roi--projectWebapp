@@ -74,7 +74,7 @@ gitGraph
 * **ชื่อฟังก์ชันและตัวแปร**: ใช้ **`camelCase`**
   * *ตัวอย่าง*: `calculateSubsidy()`, `handleCompleteMission()`, `remainingAmount`
 * **ค่าคงที่ (Constants)**: ใช้ **`UPPER_SNAKE_CASE`**
-  * *ตัวอย่าง*: `const DEFAULT_GRANT_AMOUNT = 1000;`, `const GOV_RATIO = 0.40;`
+  * *ตัวอย่าง*: `const DEFAULT_GRANT_AMOUNT = 1000;`, `const GOV_RATIO = 0.60;`
 
 ### 3.2 ฝั่ง Backend และฐานข้อมูล
 * **ไฟล์ Route**: ใช้รูปแบบ **`<module>.routes.ts`**

@@ -184,8 +184,8 @@ CREATE TABLE `user_grants` (
     `Grant_Name` VARCHAR(200) NULL,
     `Total_Grant_Amount` DECIMAL(12, 2) NOT NULL DEFAULT 1000.00,
     `Remaining_Amount` DECIMAL(12, 2) NOT NULL,
-    `Gov_Pay_Ratio` DECIMAL(5, 4) NOT NULL DEFAULT 0.40,
-    `User_Pay_Ratio` DECIMAL(5, 4) NOT NULL DEFAULT 0.60,
+    `Gov_Pay_Ratio` DECIMAL(5, 4) NOT NULL DEFAULT 0.60,
+    `User_Pay_Ratio` DECIMAL(5, 4) NOT NULL DEFAULT 0.40,
     `Granted_At` DATETIME(0) NOT NULL DEFAULT CURRENT_TIMESTAMP(0),
     `Status` VARCHAR(30) NOT NULL DEFAULT 'ACTIVE',
 

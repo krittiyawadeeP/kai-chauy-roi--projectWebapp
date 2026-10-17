@@ -368,13 +368,13 @@ export const AdminPortalView: React.FC = () => {
             {/* 60% vs 40% Split */}
             <div className="grid grid-cols-2 gap-2 text-xs">
               <div className="p-2.5 bg-blue-50 rounded-xl border border-blue-200">
-                <span className="text-[10px] text-blue-700 block font-bold">ประชาชนจ่าย QR (60%)</span>
+                <span className="text-[10px] text-blue-700 block font-bold">ประชาชนจ่าย QR (40%)</span>
                 <span className="text-sm font-extrabold text-blue-900 font-mono">
                   ฿ {metrics.userSpentTotal.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
                 </span>
               </div>
               <div className="p-2.5 bg-emerald-50 rounded-xl border border-emerald-200">
-                <span className="text-[10px] text-emerald-700 block font-bold">รัฐโอนสมทบพร้อมเพย์ (40%)</span>
+                <span className="text-[10px] text-emerald-700 block font-bold">รัฐโอนสมทบพร้อมเพย์ (60%)</span>
                 <span className="text-sm font-extrabold text-emerald-900 font-mono">
                   ฿ {metrics.govSubsidizedTotal.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
                 </span>
@@ -385,7 +385,7 @@ export const AdminPortalView: React.FC = () => {
             <div className="p-2 bg-emerald-50/80 rounded-xl border border-emerald-200 flex items-center justify-between text-[10px] text-emerald-900">
               <span className="flex items-center gap-1">
                 <span>✓</span>
-                <span>โอนเงินสมทบ 40% เข้าบัญชีพร้อมเพย์ร้านค้าครบ 100%</span>
+                <span>โอนเงินสมทบ 60% เข้าบัญชีพร้อมเพย์ร้านค้าครบ 100%</span>
               </span>
               <span className="font-bold text-emerald-700 font-mono">ธปท. Verified</span>
             </div>

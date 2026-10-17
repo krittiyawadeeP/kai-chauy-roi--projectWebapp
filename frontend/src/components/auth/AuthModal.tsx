@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Icon } from '../common/Icon';
 import { INITIAL_PROVINCES, INITIAL_DISTRICTS } from '../../mock/initialData';
 import { Merchant } from '../../types';
 import { authService, LoginPayload } from '../../services/authService';
 import { ApiError } from '../../services/api';
+import { ApiDistrict, ApiProvince, geoService } from '../../services/geoService';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -56,14 +57,55 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [mchCategory, setMchCategory] = useState<Merchant['category']>('อาหารและเครื่องดื่ม');
   const [mchOwnerName, setMchOwnerName] = useState('');
   const [mchPhone, setMchPhone] = useState('');
-  const [mchAddress, setMchAddress] = useState('');
+  const [mchProvId, setMchProvId] = useState(0);
+  const [mchDistId, setMchDistId] = useState(0);
+  const [mchProvinces, setMchProvinces] = useState<ApiProvince[]>([]);
+  const [mchDistricts, setMchDistricts] = useState<ApiDistrict[]>([]);
+  const [mchGeoLoading, setMchGeoLoading] = useState(false);
 
   const [notice, setNotice] = useState<string>('');
   const [errorNotice, setErrorNotice] = useState<string>('');
 
-  if (!isOpen) return null;
-
   const filteredDistricts = INITIAL_DISTRICTS.filter(d => d.provId === regProvId);
+
+  useEffect(() => {
+    if (!isOpen || authRole !== 'merchant' || authMode !== 'register') return;
+    let cancelled = false;
+    setMchGeoLoading(true);
+    geoService.getProvinces()
+      .then(items => {
+        if (cancelled) return;
+        setMchProvinces(items);
+        const initialProvinceId = items.some(item => item.Prov_ID === currentMerchant?.provId)
+          ? currentMerchant!.provId
+          : items[0]?.Prov_ID ?? 0;
+        setMchProvId(initialProvinceId);
+      })
+      .catch(error => setErrorNotice(error instanceof Error ? `โหลดจังหวัดจากฐานข้อมูลไม่สำเร็จ: ${error.message}` : 'โหลดจังหวัดไม่สำเร็จ'))
+      .finally(() => { if (!cancelled) setMchGeoLoading(false); });
+    return () => { cancelled = true; };
+  }, [isOpen, authRole, authMode, currentMerchant?.provId]);
+
+  useEffect(() => {
+    if (!isOpen || authRole !== 'merchant' || authMode !== 'register' || !mchProvId) return;
+    let cancelled = false;
+    setMchGeoLoading(true);
+    geoService.getDistricts(mchProvId)
+      .then(items => {
+        if (cancelled) return;
+        setMchDistricts(items);
+        const currentDistrictId = currentMerchant?.provId === mchProvId ? currentMerchant.distId : 0;
+        const selectedDistrictId = items.some(item => item.Dist_ID === currentDistrictId)
+          ? currentDistrictId
+          : items[0]?.Dist_ID ?? 0;
+        setMchDistId(selectedDistrictId);
+      })
+      .catch(error => setErrorNotice(error instanceof Error ? `โหลดอำเภอจากฐานข้อมูลไม่สำเร็จ: ${error.message}` : 'โหลดอำเภอไม่สำเร็จ'))
+      .finally(() => { if (!cancelled) setMchGeoLoading(false); });
+    return () => { cancelled = true; };
+  }, [isOpen, authRole, authMode, mchProvId]);
+
+  if (!isOpen) return null;
 
   // Quick preset login helper
   const handleDemoCitizenLogin = (userId: number) => {
@@ -134,7 +176,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         setErrorNotice(error instanceof ApiError && error.status === 401 ? 'เบอร์โทรศัพท์หรือรหัสผ่านไม่ถูกต้อง' : error instanceof Error ? error.message : 'เข้าสู่ระบบไม่สำเร็จ');
       }
     } else {
-      if (!mchShopName || !mchOwnerName || !mchPhone || !mchAddress) {
+      if (!mchShopName || !mchOwnerName || !mchPhone || !mchProvId || !mchDistId) {
         setErrorNotice('กรุณากรอกข้อมูลร้านค้าให้ครบถ้วน');
         return;
       }
@@ -143,9 +185,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         category: mchCategory,
         ownerName: mchOwnerName,
         phone: mchPhone,
-        address: mchAddress,
-        provId: 1,
-        distId: 101
+        address: mchDistricts.find(item => item.Dist_ID === mchDistId)?.Dist_Name ?? '',
+        provId: mchProvId,
+        distId: mchDistId
       });
       setNotice(`ลงทะเบียนร้านค้า ${mchShopName} สำเร็จ`);
       setTimeout(() => {
@@ -479,6 +521,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
                   <button
                     type="submit"
+                    disabled={mchGeoLoading || !mchProvId || !mchDistId}
                     className="w-full py-2.5 bg-[#115e59] hover:bg-[#0f766e] text-white rounded-xl font-bold shadow-md shadow-teal-900/20 transition-all mt-1"
                   >
                     เข้าสู่ระบบร้านค้า
@@ -536,17 +579,44 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1">ที่ตั้งร้านค้า *</label>
-                    <textarea
-                      rows={2}
-                      required
-                      value={mchAddress}
-                      onChange={e => setMchAddress(e.target.value)}
-                      placeholder="ระบุตำบล อำเภอ จังหวัด"
-                      className="w-full px-3 py-2 border border-slate-200 rounded-xl"
-                    />
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">จังหวัด *</label>
+                      <select
+                        required
+                        value={mchProvId || ''}
+                        disabled={mchGeoLoading || mchProvinces.length === 0}
+                        onChange={event => {
+                          setMchProvId(Number(event.target.value));
+                          setMchDistId(0);
+                        }}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-2 disabled:bg-slate-100"
+                      >
+                        <option value="" disabled>{mchGeoLoading ? 'กำลังโหลดจังหวัด…' : 'เลือกจังหวัด'}</option>
+                        {mchProvinces.map(province => (
+                          <option key={province.Prov_ID} value={province.Prov_ID}>{province.Prov_Name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">อำเภอ *</label>
+                      <select
+                        required
+                        value={mchDistId || ''}
+                        disabled={mchGeoLoading || mchDistricts.length === 0}
+                        onChange={event => setMchDistId(Number(event.target.value))}
+                        className="w-full rounded-xl border border-slate-200 bg-white px-2.5 py-2 disabled:bg-slate-100"
+                      >
+                        <option value="" disabled>{mchGeoLoading ? 'กำลังโหลดอำเภอ…' : 'เลือกอำเภอ'}</option>
+                        {mchDistricts.map(district => (
+                          <option key={district.Dist_ID} value={district.Dist_ID}>{district.Dist_Name}</option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
+                  {authRole === 'merchant' && errorNotice.startsWith('โหลด') && (
+                    <p role="alert" className="text-[10px] text-rose-700">{errorNotice}</p>
+                  )}
 
                   <button
                     type="submit"

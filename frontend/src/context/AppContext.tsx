@@ -161,14 +161,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const refreshMerchantData = React.useCallback(async () => {
     if (!authStorage.getToken()) return;
-    const [profile, sales] = await Promise.all([
-      merchantService.getMyProfile(),
-      merchantService.getSalesSummary<ApiSale[]>()
-    ]);
+    const profile = await merchantService.getMyProfile();
     const mappedMerchant = mapApiMerchant(profile);
     setCurrentMerchant(mappedMerchant);
     setMerchants(previous => [mappedMerchant, ...previous.filter(item => item.mchId !== mappedMerchant.mchId)]);
-    setTransactions(sales.map(mapApiSale));
+
+    try {
+      const sales = await merchantService.getSalesSummary<ApiSale[]>();
+      setTransactions(sales.map(mapApiSale));
+    } catch (error) {
+      // Sales history is secondary data; a sales endpoint failure should not block merchant login.
+      console.error('Failed to load merchant sales', error);
+    }
   }, []);
 
   const [missions, setMissions] = useState<Mission[]>(() => {
@@ -506,20 +510,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, message: 'ไม่พบข้อมูลร้านค้าในระบบ' };
     }
 
-    const userShare = Math.round(totalAmount * 0.60 * 100) / 100;
-    const govShare = Math.round(totalAmount * 0.40 * 100) / 100;
+    const requestedGovShare = Math.round(totalAmount * 0.60 * 100) / 100;
+    const govShare = Math.min(requestedGovShare, userGrant.remainingAmount);
+    const userShare = Math.round((totalAmount - govShare) * 100) / 100;
 
     if (wallet.balance < userShare) {
       return {
         success: false,
         message: `ยอดเงินในกระเป๋าไม่เพียงพอ (ต้องการ ${userShare.toLocaleString()} บาท มีอยู่ ${wallet.balance.toLocaleString()} บาท) กรุณาเติมเงิน`
-      };
-    }
-
-    if (userGrant.remainingAmount < govShare) {
-      return {
-        success: false,
-        message: `วงเงินสิทธิรัฐอุดหนุนคงเหลือไม่เพียงพอ (คงเหลือ ${userGrant.remainingAmount.toLocaleString()} บาท)`
       };
     }
 

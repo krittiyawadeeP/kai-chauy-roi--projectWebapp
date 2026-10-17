@@ -55,8 +55,8 @@ export interface SalesTransaction {
   merchantId: number;
   merchantName: string;
   totalAmount: number;
-  userPaidAmount: number; // 60%
-  govSubsidizedAmount: number; // 40%
+  userPaidAmount: number; // 40%
+  govSubsidizedAmount: number; // 60%
   txTimestamp: string;
   distId: number;
   status: 'completed' | 'cancelled';
@@ -163,8 +163,8 @@ export interface UserGrant {
   grantName: string;
   totalGrantAmount: number; // e.g. 10,000 THB
   remainingAmount: number;
-  govPayRatio: number; // 0.40
-  userPayRatio: number; // 0.60
+  govPayRatio: number; // 0.60
+  userPayRatio: number; // 0.40
   grantedAt: string;
   status: 'active' | 'exhausted' | 'pending';
 }

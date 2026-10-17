@@ -188,8 +188,8 @@ merchantRoutes.post("/me/sales", requireMerchant, async (req: AuthRequest, res) 
     },
   });
 
-  const govRatio = activeGrant ? Number(activeGrant.Gov_Pay_Ratio) : 0.6;
-  const requestedGovAmount = Number((totalAmount * govRatio).toFixed(2));
+  // The co-payment policy is fixed: government covers 60%, citizen covers 40%.
+  const requestedGovAmount = Number((totalAmount * 0.6).toFixed(2));
   const remainingGrant = activeGrant ? Number(activeGrant.Remaining_Amount) : 0;
   const govSubsidizedAmount = Math.min(requestedGovAmount, remainingGrant);
   const userPaidAmount = Number((totalAmount - govSubsidizedAmount).toFixed(2));

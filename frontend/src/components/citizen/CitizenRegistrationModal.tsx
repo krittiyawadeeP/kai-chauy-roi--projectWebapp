@@ -166,7 +166,7 @@ export const CitizenRegistrationModal: React.FC<CitizenRegistrationModalProps> =
                   </div>
 
                   <div className="pt-2 border-t border-slate-100 flex justify-between items-center text-xs">
-                    <span className="text-slate-500">วงเงินสิทธิรัฐช่วยจ่าย 40%:</span>
+                    <span className="text-slate-500">วงเงินสิทธิรัฐช่วยจ่าย 60%:</span>
                     <strong className="text-emerald-600">฿ {userGrant.remainingAmount.toLocaleString()}</strong>
                   </div>
                 </div>

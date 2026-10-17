@@ -296,8 +296,8 @@ export const MerchantProfileSettingsModal: React.FC<MerchantProfileSettingsModal
             </button>
             <button
               type="submit"
-              disabled={saving}
-              className="flex-[2] py-2.5 bg-[#115e59] hover:bg-[#0f766e] text-white rounded-xl font-bold shadow-md shadow-teal-900/20 transition-all flex items-center justify-center gap-1.5"
+              disabled={saving || loadingLocations || !provinceId || !districtId}
+              className="flex-[2] py-2.5 bg-[#115e59] hover:bg-[#0f766e] disabled:opacity-50 text-white rounded-xl font-bold shadow-md shadow-teal-900/20 transition-all flex items-center justify-center gap-1.5"
             >
               <Icon name="check" className="size-4" />
               <span>{saving ? 'กำลังบันทึก…' : 'บันทึกการเปลี่ยนแปลง'}</span>

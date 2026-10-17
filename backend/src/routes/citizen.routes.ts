@@ -12,6 +12,27 @@ import { prisma } from "../lib/prisma";
 
 export const citizenRoutes = Router();
 
+// Public location lookups used by merchant registration and profile forms.
+citizenRoutes.get("/provinces", async (_req, res) => {
+  const provinces = await prisma.provinces.findMany({
+    orderBy: { Prov_ID: "asc" },
+  });
+  sendJson(res, provinces);
+});
+
+citizenRoutes.get("/districts", async (req, res) => {
+  const provinceId = req.query.prov_id === undefined ? undefined : toNumber(req.query.prov_id);
+  if (req.query.prov_id !== undefined && (!provinceId || !Number.isInteger(provinceId))) {
+    return badRequest(res, "prov_id must be a positive integer");
+  }
+
+  const districts = await prisma.districts.findMany({
+    where: provinceId ? { Prov_ID: provinceId } : undefined,
+    orderBy: { Dist_ID: "asc" },
+  });
+  sendJson(res, districts);
+});
+
 citizenRoutes.post("/user", async (req, res) => {
   const { Citizen_ID, Phone, Password, Province_ID, Role } = req.body;
 
