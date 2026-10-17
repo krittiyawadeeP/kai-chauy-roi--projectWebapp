@@ -180,6 +180,7 @@ model users {
   user_stamps        user_stamps[]
   wallets            wallets?
   user_grants        user_grants[]
+  grant_policies     grant_policy[]       @relation("policy_creator")
   provinces          provinces?           @relation(fields: [Province_ID], references: [Prov_ID], map: "fk_user_province")
 
   @@index([Province_ID], map: "fk_user_province")
@@ -201,12 +202,24 @@ model user_grants {
   Grant_Name         String?   @db.VarChar(200)
   Total_Grant_Amount Decimal   @default(1000.00) @db.Decimal(12, 2)
   Remaining_Amount   Decimal   @db.Decimal(12, 2)
-  Gov_Pay_Ratio      Decimal   @default(0.60) @db.Decimal(5, 4)
-  User_Pay_Ratio     Decimal   @default(0.40) @db.Decimal(5, 4)
   Granted_At         DateTime  @default(now()) @db.DateTime(0)
   Status             String    @default("ACTIVE") @db.VarChar(30)
 
   users              users     @relation(fields: [User_ID], references: [User_ID], onDelete: Cascade, map: "fk_user_grant_user")
 
   @@index([User_ID], map: "fk_user_grant_user")
+}
+
+model grant_policy {
+  Policy_ID      Int      @id @default(autoincrement())
+  Gov_Pay_Ratio  Decimal  @default(0.40) @db.Decimal(5, 4)
+  User_Pay_Ratio Decimal  @default(0.60) @db.Decimal(5, 4)
+  Grant_Amount   Decimal  @default(1000.00) @db.Decimal(12, 2)
+  Effective_From DateTime @default(now()) @db.DateTime(0)
+  Created_By     Int
+  Note           String?  @db.VarChar(255)
+
+  users          users    @relation("policy_creator", fields: [Created_By], references: [User_ID], onDelete: Restrict, map: "fk_policy_creator")
+
+  @@index([Created_By], map: "fk_policy_creator")
 }

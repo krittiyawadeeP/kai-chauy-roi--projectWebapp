@@ -4,7 +4,7 @@ import { RoleSwitcherBar, BottomNav } from './components/layout';
 import { CitizenMobilePage } from './pages/citizen/CitizenMobilePage';
 import { MerchantMobilePage } from './pages/merchant/MerchantMobilePage';
 import { MerchantRevenuePage } from './pages/merchant/MerchantRevenuePage';
-import { AdminPortalPage } from './pages/admin/AdminPortalPage';
+import { AdminDesktopShell } from './components/admin/AdminDesktopShell';
 
 // Modals
 import { QRScannerModal } from './components/citizen/QRScannerModal';
@@ -63,6 +63,11 @@ const AppContent: React.FC = () => {
     }
   };
 
+  // Admin: full-screen desktop layout, no mobile shell
+  if (role === 'admin') {
+    return <AdminDesktopShell />;
+  }
+
   return (
     <main className="min-h-screen bg-[#f1f5fb] text-[#14213d] flex flex-col items-center justify-start py-0 md:py-4">
       {/* 430px Mobile Frame Shell */}
@@ -98,7 +103,6 @@ const AppContent: React.FC = () => {
               <MerchantMobilePage onOpenRevenuePage={() => setActiveNav('ยอดขาย')} />
             )
           )}
-          {role === 'admin' && <AdminPortalPage />}
         </div>
 
         {/* Fixed Bottom Navigation Bar */}

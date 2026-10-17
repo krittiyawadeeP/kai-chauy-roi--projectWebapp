@@ -227,3 +227,125 @@ adminRoutes.patch("/rewards/:rewardId", async (req, res) => {
 
   sendJson(res, reward);
 });
+
+// --- Dashboard: System-wide income/expense overview ---
+adminRoutes.get("/dashboard", async (_req, res) => {
+  const [txAgg, grantsAgg, grants] = await Promise.all([
+    prisma.sales_transactions.aggregate({
+      _sum: { Total_Amount: true, Gov_Subsidized_Amount: true, User_Paid_Amount: true },
+      _count: { Tx_ID: true },
+    }),
+    prisma.user_grants.aggregate({
+      _sum: { Total_Grant_Amount: true, Remaining_Amount: true },
+      _count: { Grant_ID: true },
+    }),
+    prisma.user_grants.findMany({ select: { Status: true, Total_Grant_Amount: true, Remaining_Amount: true } }),
+  ]);
+
+  const totalBudgetAllocated = Number(grantsAgg._sum.Total_Grant_Amount ?? 0);
+  const totalBudgetRemaining = Number(grantsAgg._sum.Remaining_Amount ?? 0);
+  const totalBudgetSpent = totalBudgetAllocated - totalBudgetRemaining;
+
+  sendJson(res, {
+    transactions: {
+      count: txAgg._count.Tx_ID,
+      totalRevenue: Number(txAgg._sum.Total_Amount ?? 0),
+      govSubsidized: Number(txAgg._sum.Gov_Subsidized_Amount ?? 0),
+      userPaid: Number(txAgg._sum.User_Paid_Amount ?? 0),
+    },
+    grants: {
+      count: grantsAgg._count.Grant_ID,
+      totalAllocated: totalBudgetAllocated,
+      totalSpent: totalBudgetSpent,
+      totalRemaining: totalBudgetRemaining,
+      activeGrants: grants.filter(g => g.Status === 'ACTIVE').length,
+    },
+  });
+});
+
+// --- Grant allocation: assign budget to a citizen ---
+adminRoutes.post("/grants", async (req, res) => {
+  const { Citizen_ID, Grant_Name, Total_Grant_Amount } = req.body;
+
+  if (!Citizen_ID || !Total_Grant_Amount) {
+    return badRequest(res, "Citizen_ID and Total_Grant_Amount are required");
+  }
+
+  const user = await prisma.users.findUnique({ where: { Citizen_ID } });
+  if (!user) {
+    return notFound(res, "User not found");
+  }
+
+  const grant = await prisma.user_grants.create({
+    data: {
+      User_ID: user.User_ID,
+      Grant_Name: Grant_Name ?? "โครงการไทยช่วยไทย",
+      Total_Grant_Amount,
+      Remaining_Amount: Total_Grant_Amount,
+      Status: "ACTIVE",
+    },
+  });
+
+  sendJson(res, grant, 201);
+});
+
+// --- List all grants (with user info) ---
+adminRoutes.get("/grants", async (_req, res) => {
+  const grants = await prisma.user_grants.findMany({
+    include: { users: { select: { Citizen_ID: true, Phone: true } } },
+    orderBy: { Granted_At: "desc" },
+    take: 100,
+  });
+  sendJson(res, grants);
+});
+
+// --- Grant Policy: get current (latest) rate ---
+adminRoutes.get("/policy", async (_req, res) => {
+  const policy = await prisma.grant_policy.findFirst({
+    orderBy: { Effective_From: "desc" },
+    include: { users: { select: { Citizen_ID: true } } },
+  });
+  // If no policy exists yet, return the system default
+  sendJson(res, policy ?? {
+    Policy_ID: null,
+    Gov_Pay_Ratio: "0.4000",
+    User_Pay_Ratio: "0.6000",
+    Grant_Amount: "1000.00",
+    Note: "ค่าเริ่มต้นของระบบ (ยังไม่มีการตั้งค่า)",
+  });
+});
+
+// --- Grant Policy: full history (audit log) ---
+adminRoutes.get("/policy/history", async (_req, res) => {
+  const history = await prisma.grant_policy.findMany({
+    orderBy: { Effective_From: "desc" },
+    include: { users: { select: { Citizen_ID: true } } },
+    take: 50,
+  });
+  sendJson(res, history);
+});
+
+// --- Grant Policy: set new rate ---
+adminRoutes.post("/policy", async (req, res) => {
+  const { Gov_Pay_Ratio, Grant_Amount, Note } = req.body;
+  const adminReq = req as import("../lib/auth").AuthRequest;
+
+  if (!adminReq.user) return sendJson(res, { message: "Unauthorized" }, 401);
+
+  const govRatio = parseFloat(Gov_Pay_Ratio);
+  if (isNaN(govRatio) || govRatio <= 0 || govRatio >= 1) {
+    return badRequest(res, "Gov_Pay_Ratio ต้องเป็นตัวเลขระหว่าง 0 ถึง 1 (เช่น 0.40)");
+  }
+
+  const policy = await prisma.grant_policy.create({
+    data: {
+      Gov_Pay_Ratio: govRatio,
+      User_Pay_Ratio: parseFloat((1 - govRatio).toFixed(4)),
+      Grant_Amount: Grant_Amount ?? 1000.00,
+      Created_By: adminReq.user.userId,
+      Note: Note ?? null,
+    },
+  });
+
+  sendJson(res, policy, 201);
+});
