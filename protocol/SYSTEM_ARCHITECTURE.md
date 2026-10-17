@@ -54,11 +54,12 @@ backend/
 │   ├── schema.prisma        # นิยาม Data Model, Relation และ Generator
 │   ├── seed.ts              # สคริปต์ Mock ข้อมูลเบื้องต้น (Provinces, Districts, Admin, Users)
 │   └── seed.cjs             # สคริปต์รัน Seed แบบ CommonJS
-├── server/
+├── src/
 │   ├── index.ts             # Entry point หลัก, กำหนด Middleware, Port และ Mount Routes
 │   ├── swagger.ts           # การตั้งค่า OpenAPI 3.0 สเปคและเอกสาร Swagger UI
 │   ├── generated/           # ไฟล์ที่สร้างขึ้นอัตโนมัติจาก Prisma Client
 │   ├── routes/              # เลเยอร์ Router แยกตามกลุ่มผู้ใช้งาน
+│   │   ├── index.ts            # รวม Router กลาง
 │   │   ├── citizen.routes.ts   # เส้นทาง API สำหรับประชาชน (User/Citizen)
 │   │   ├── merchant.routes.ts  # เส้นทาง API สำหรับร้านค้าชุมชน (Merchant)
 │   │   ├── admin.routes.ts     # เส้นทาง API สำหรับแอดมินและภาครัฐ (Admin/Government)

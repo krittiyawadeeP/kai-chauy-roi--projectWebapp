@@ -1,0 +1,71 @@
+@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;500;600;700;800&display=swap");
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Noto Sans Thai", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Noto Sans Thai", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  background-color: #f1f5fb;
+  color: #14213d;
+}
+
+button {
+  cursor: pointer;
+}
+
+.action-blue {
+  background: #eaf2ff;
+  color: #1769ed;
+}
+
+.action-violet {
+  background: #f0edff;
+  color: #6d55df;
+}
+
+.action-green {
+  background: #e7f8f2;
+  color: #15966d;
+}
+
+.action-amber {
+  background: #fff8e6;
+  color: #d97706;
+}
+
+.action-rose {
+  background: #fdf2f4;
+  color: #e11d48;
+}
+
+.qr {
+  background-color: white;
+  background-image:
+    linear-gradient(90deg, #0e2348 12%, transparent 12%, transparent 25%, #0e2348 25%, #0e2348 38%, transparent 38%, transparent 50%, #0e2348 50%, #0e2348 62%, transparent 62%, transparent 75%, #0e2348 75%, #0e2348 88%, transparent 88%),
+    linear-gradient(#0e2348 12%, transparent 12%, transparent 25%, #0e2348 25%, #0e2348 38%, transparent 38%, transparent 50%, #0e2348 50%, #0e2348 62%, transparent 62%, transparent 75%, #0e2348 75%, #0e2348 88%, transparent 88%);
+  background-size: 31px 31px;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.4);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.6);
+}

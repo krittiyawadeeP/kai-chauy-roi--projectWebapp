@@ -1,0 +1,10 @@
+{
+  "name": "Remix Remix ไทยช่วยไทยพลีส (Thai Chuay Thai Please)",
+  "description": "แพลตฟอร์มกระตุ้นเศรษฐกิจชุมชนด้วย AI วิเคราะห์ยอดขาย ระบบสิทธิ 60/40 ภารกิจ Dynamic Mission และ Digital District Stamp ตามมาตรฐานบริการดิจิทัลภาครัฐ aipass.go.th",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

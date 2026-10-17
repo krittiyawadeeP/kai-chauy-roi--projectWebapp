@@ -21,9 +21,9 @@
 ```text
 kai-chauy-roi--projectWebapp/
 ├── backend/                 # ⚙️ ฝั่งเซิร์ฟเวอร์ (Node.js, Express, TypeScript, Prisma, Swagger)
-├── frontnd/                 # 💻 ฝั่งผู้ใช้งาน (React 19, TypeScript, Vite, Modern CSS)
+├── frontend/                # 💻 ฝั่งผู้ใช้งาน (React 19, TypeScript, Vite, Tailwind CSS)
 ├── doc/                     # 📑 เอกสารเชิงวิชาการ (Full Proposal PDF/DOCX)
-└── docs/                    # 📚 ศูนย์รวมเอกสารข้อกำหนดและสถาปัตยกรรมของทีม (Markdown)
+└── protocol/                # 📚 ศูนย์รวมเอกสารข้อกำหนดและสถาปัตยกรรมของทีม (Markdown)
     ├── README.md            # สารบัญหลักและแนวทางการพัฒนา
     ├── SYSTEM_ARCHITECTURE.md # สถาปัตยกรรมระบบภาพรวมและ Backend
     ├── UI_STRUCTURE.md      # โครงสร้างหน้าจอและระบบดีไซน์ Frontend
@@ -40,29 +40,44 @@ kai-chauy-roi--projectWebapp/
 
 | เอกสารข้อกำหนด | หัวข้อสำคัญ | ลิงก์อ่านรายละเอียด |
 | :--- | :--- | :---: |
-| 🏛️ **System Architecture** | สถาปัตยกรรม 3-Tier, ตรรกะเงินอุดหนุน 60/40, AI ตรวจจับยอดขายต่ำ, ระบบแสตมป์ | [docs/SYSTEM_ARCHITECTURE.md](./docs/SYSTEM_ARCHITECTURE.md) |
-| 🎨 **UI & Frontend Structure** | โครงสร้าง React, แผนผัง Sitemap, Design System (สี/ฟอนต์), สเปกคอมโพเนนต์ | [docs/UI_STRUCTURE.md](./docs/UI_STRUCTURE.md) |
-| 🔌 **API Specification** | รายการ API Endpoints (Citizen, Merchant, Admin, AI), รูปแบบ Request/Response | [docs/API_SPECIFICATION.md](./docs/API_SPECIFICATION.md) |
-| 🗄️ **Database Structure** | ผังความสัมพันธ์ ER Diagram (13 Entities), Data Dictionary ครบทุก Field, คำสั่ง Prisma | [docs/DATABASE_STRUCTURE.md](./docs/DATABASE_STRUCTURE.md) |
-| 🤝 **Workflow & Conventions** | แผนภูมิ Git Branching, Conventional Commits, มาตรฐานการตั้งชื่อ, PR Checklist | [docs/WORKFLOW_CONVENTIONS.md](./docs/WORKFLOW_CONVENTIONS.md) |
+| 🏛️ **System Architecture** | สถาปัตยกรรม 3-Tier, ตรรกะเงินอุดหนุน 60/40, AI ตรวจจับยอดขายต่ำ, ระบบแสตมป์ | [protocol/SYSTEM_ARCHITECTURE.md](./protocol/SYSTEM_ARCHITECTURE.md) |
+| 🎨 **UI & Frontend Structure** | โครงสร้าง React, แผนผัง Sitemap, Design System (สี/ฟอนต์), สเปกคอมโพเนนต์ | [protocol/UI_STRUCTURE.md](./protocol/UI_STRUCTURE.md) |
+| 🔌 **API Specification** | รายการ API Endpoints (Citizen, Merchant, Admin, AI), รูปแบบ Request/Response | [protocol/API_SPECIFICATION.md](./protocol/API_SPECIFICATION.md) |
+| 🗄️ **Database Structure** | ผังความสัมพันธ์ ER Diagram (13 Entities), Data Dictionary ครบทุก Field, คำสั่ง Prisma | [protocol/DATABASE_STRUCTURE.md](./protocol/DATABASE_STRUCTURE.md) |
+| 🤝 **Workflow & Conventions** | แผนภูมิ Git Branching, Conventional Commits, มาตรฐานการตั้งชื่อ, PR Checklist | [protocol/WORKFLOW_CONVENTIONS.md](./protocol/WORKFLOW_CONVENTIONS.md) |
 
 ---
 
 ## ⚡ วิธีการติดตั้งและรันโปรเจกต์ (Quick Start)
 
-### 1. ฝั่ง Backend
+### 🚀 รันทั้ง Backend และ Frontend พร้อมกัน (แนะนำ)
+จากโฟลเดอร์ root ของโปรเจกต์:
+```bash
+# ติดตั้ง dependencies ทั้งหมด
+npm run install:all
+npm install
+
+# รัน Backend (Port 3001) และ Frontend (Port 3000) พร้อมกัน
+npm run dev
+```
+* **Frontend Web App**: `http://localhost:3000`
+* **Backend API**: `http://localhost:3001`
+* **Swagger API Docs**: `http://localhost:3001/api-docs`
+
+---
+
+### หรือแยกรันทีละฝั่ง
+
+#### 1. ฝั่ง Backend
 ```bash
 cd backend
 npm install
-npx prisma generate
 npm run dev
 ```
-* Backend API จะทำงานที่: `http://localhost:3001`
-* ตรวจสอบและทดสอบ API ผ่าน Swagger UI ได้ที่: `http://localhost:3001/api-docs`
 
-### 2. ฝั่ง Frontend
+#### 2. ฝั่ง Frontend
 ```bash
-cd frontnd
+cd frontend
 npm install
 npm run dev
 ```

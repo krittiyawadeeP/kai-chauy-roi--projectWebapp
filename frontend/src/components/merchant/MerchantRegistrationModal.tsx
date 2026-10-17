@@ -1,0 +1,210 @@
+import React, { useState } from 'react';
+import { useApp } from '../../context/AppContext';
+import { INITIAL_PROVINCES, INITIAL_DISTRICTS } from '../../mock/initialData';
+import { Merchant } from '../../types';
+import { Icon } from '../common/Icon';
+
+interface MerchantRegistrationModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+export const MerchantRegistrationModal: React.FC<MerchantRegistrationModalProps> = ({
+  isOpen,
+  onClose
+}) => {
+  const { currentMerchant, registerMerchant } = useApp();
+
+  const [activeTab, setActiveTab] = useState<'status' | 'register'>('status');
+  const [shopName, setShopName] = useState('');
+  const [category, setCategory] = useState<Merchant['category']>('อาหารและเครื่องดื่ม');
+  const [ownerName, setOwnerName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [address, setAddress] = useState('');
+  const [provId, setProvId] = useState<number>(1);
+  const [distId, setDistId] = useState<number>(101);
+  const [submitted, setSubmitted] = useState(false);
+
+  if (!isOpen) return null;
+
+  const filteredDistricts = INITIAL_DISTRICTS.filter(d => d.provId === provId);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!shopName || !ownerName || !phone || !address) {
+      alert('กรุณากรอกข้อมูลให้ครบถ้วน');
+      return;
+    }
+    registerMerchant({
+      shopName,
+      category,
+      address,
+      ownerName,
+      phone,
+      provId,
+      distId
+    });
+    setSubmitted(true);
+    setTimeout(() => {
+      setActiveTab('status');
+      setSubmitted(false);
+    }, 1500);
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 grid place-items-center bg-[#07162d]/70 p-4 backdrop-blur-sm animate-fade-in"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-[400px] rounded-[28px] bg-white p-5 shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"
+        onClick={e => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <span className="grid size-9 place-items-center rounded-xl bg-[#eaf2ff] text-[#1769ed]">
+              <Icon name="shop" className="size-5" />
+            </span>
+            <div>
+              <h3 className="font-bold text-sm text-slate-800">ลงทะเบียนและสถานะร้านค้า</h3>
+              <p className="text-[10px] text-slate-400">โครงการไทยช่วยไทยพลีส</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="grid size-8 place-items-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500"
+          >
+            <Icon name="x" className="size-4" />
+          </button>
+        </div>
+
+        <div className="flex bg-[#e8effa] p-1 rounded-2xl text-xs font-bold text-slate-600 my-3">
+          <button
+            onClick={() => setActiveTab('status')}
+            className={`flex-1 py-1.5 rounded-xl transition-all ${
+              activeTab === 'status' ? 'bg-white text-[#123b84] shadow-xs' : 'hover:text-slate-900'
+            }`}
+          >
+            สถานะร้านค้า
+          </button>
+          <button
+            onClick={() => setActiveTab('register')}
+            className={`flex-1 py-1.5 rounded-xl transition-all ${
+              activeTab === 'register' ? 'bg-white text-[#123b84] shadow-xs' : 'hover:text-slate-900'
+            }`}
+          >
+            + สมัครร้านใหม่
+          </button>
+        </div>
+
+        <div className="overflow-y-auto pr-1 flex-1 space-y-3 text-xs">
+          {activeTab === 'status' ? (
+            <div className="space-y-3">
+              {currentMerchant ? (
+                <div className="rounded-[22px] bg-[#f8faff] p-4 border border-blue-100 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <img
+                      src={currentMerchant.imageUrl}
+                      alt={currentMerchant.shopName}
+                      className="size-14 rounded-xl object-cover border border-slate-200"
+                    />
+                    <div>
+                      <h4 className="font-bold text-sm text-slate-800">{currentMerchant.shopName}</h4>
+                      <p className="text-slate-500 text-[11px]">{currentMerchant.category}</p>
+                      <span className="inline-block mt-1 text-[10px] bg-emerald-50 text-emerald-700 font-bold px-2 py-0.2 rounded-full border border-emerald-200">
+                        {currentMerchant.status === 'approved' ? 'อนุมัติเรียบร้อย' : 'รอตรวจสอบ'}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 text-[11px] space-y-1 text-slate-600 border-t border-slate-100">
+                    <p>เจ้าของ: <strong className="text-slate-800">{currentMerchant.ownerName}</strong></p>
+                    <p>พร้อมเพย์: <strong className="text-[#1769ed] font-mono">{currentMerchant.promptpayId}</strong></p>
+                    <p>ที่ตั้ง: {currentMerchant.address}</p>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-center text-slate-400 py-6">ไม่มีข้อมูลร้านค้า</p>
+              )}
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-3">
+              {submitted && (
+                <div className="p-2.5 bg-emerald-50 text-emerald-800 rounded-xl font-medium">
+                  บันทึกข้อมูลแล้ว อยู่ระหว่างรอตรวจสอบโดยภาครัฐ
+                </div>
+              )}
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 mb-1">ชื่อร้านค้า *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="เช่น กาแฟโบราณลุงเปี๊ยก"
+                  value={shopName}
+                  onChange={e => setShopName(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 mb-1">หมวดหมู่ร้านค้า *</label>
+                <select
+                  value={category}
+                  onChange={e => setCategory(e.target.value as any)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white"
+                >
+                  <option value="อาหารและเครื่องดื่ม">อาหารและเครื่องดื่ม</option>
+                  <option value="ของใช้ทั่วไป">ของใช้ทั่วไป</option>
+                  <option value="หัตถกรรม/ของฝาก">หัตถกรรม/ของฝาก (OTOP)</option>
+                  <option value="บริการชุมชน">บริการชุมชน</option>
+                  <option value="ผลไม้/เกษตรแปรรูป">ผลไม้/เกษตรแปรรูป</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">เจ้าของร้าน *</label>
+                  <input
+                    type="text"
+                    required
+                    value={ownerName}
+                    onChange={e => setOwnerName(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 mb-1">เบอร์โทรศัพท์ *</label>
+                  <input
+                    type="tel"
+                    required
+                    value={phone}
+                    onChange={e => setPhone(e.target.value)}
+                    className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-600 mb-1">ที่ตั้งร้าน *</label>
+                <textarea
+                  rows={2}
+                  required
+                  value={address}
+                  onChange={e => setAddress(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-2.5 bg-[#1769ed] hover:bg-blue-700 text-white rounded-xl font-bold shadow-md shadow-blue-500/20 transition-all mt-2"
+              >
+                ยื่นคำขอลงทะเบียนร้านค้า
+              </button>
+            </form>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
