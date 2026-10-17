@@ -88,18 +88,27 @@ erDiagram
 | `Status` | `VARCHAR(30)` | Default `"ACTIVE"` | สถานะกระเป๋าเงิน |
 | `Updated_At` | `DATETIME` | Auto Update | วันเวลาที่อัปเดตยอดล่าสุด |
 
-#### 5) ตาราง `user_grants` (สิทธิ์เงินอุดหนุนภาครัฐ 60/40)
+#### 5) ตาราง `user_grants` (สิทธิ์เงินอุดหนุนภาครัฐของผู้ใช้)
 | คอลัมน์ | ชนิดข้อมูล | เงื่อนไข | คำอธิบาย |
 | :--- | :--- | :---: | :--- |
 | `Grant_ID` | `BIGINT` | PK, Auto Inc | รหัสสิทธิ์เงินอุดหนุน |
 | `User_ID` | `INT` | FK -> `users(User_ID)` | รหัสผู้ได้รับสิทธิ์ |
-| `Grant_Name` | `VARCHAR(200)` | Nullable | ชื่อโครงการอุดหนุน (เช่น "ไทยช่วยไทยพลีส สิทธิ์รอบแรก") |
+| `Grant_Name` | `VARCHAR(200)` | Nullable | ชื่อโครงการอุดหนุน (เช่น "ไทยช่วยไทย") |
 | `Total_Grant_Amount` | `DECIMAL(12,2)` | Default `1000.00` | วงเงินเริ่มต้นที่ได้รับ (1,000 บาท) |
 | `Remaining_Amount` | `DECIMAL(12,2)` | Not Null | วงเงินช่วยเหลือคงเหลือที่ยังใช้ได้ |
-| `Gov_Pay_Ratio` | `DECIMAL(5,4)` | Default `0.60` | สัดส่วนที่ภาครัฐช่วยจ่าย (60%) |
-| `User_Pay_Ratio` | `DECIMAL(5,4)` | Default `0.40` | สัดส่วนที่ประชาชนต้องจ่าย (40%) |
 | `Granted_At` | `DATETIME` | Default `now()` | วันเวลาที่ได้รับสิทธิ์ |
 | `Status` | `VARCHAR(30)` | Default `"ACTIVE"` | สถานะสิทธิ์ (`ACTIVE`, `EXPIRED`, `EXHAUSTED`) |
+
+#### 5.1) ตาราง `grant_policy` (นโยบายอัตราการร่วมจ่ายกลางของภาครัฐ)
+| คอลัมน์ | ชนิดข้อมูล | เงื่อนไข | คำอธิบาย |
+| :--- | :--- | :---: | :--- |
+| `Policy_ID` | `INT` | PK, Auto Inc | รหัสประวัตินโยบาย |
+| `Gov_Pay_Ratio` | `DECIMAL(5,4)` | Default `0.4000` | สัดส่วนที่ภาครัฐช่วยจ่าย (เช่น 0.40 = 40%) |
+| `User_Pay_Ratio` | `DECIMAL(5,4)` | Default `0.6000` | สัดส่วนที่ประชาชนต้องจ่าย (เช่น 0.60 = 60%) |
+| `Grant_Amount` | `DECIMAL(12,2)` | Default `1000.00` | วงเงินมาตรฐานของโครงการ |
+| `Effective_From` | `DATETIME` | Default `now()` | วันเวลาที่นโยบายมีผลบังคับใช้ |
+| `Created_By` | `INT` | FK -> `users(User_ID)` | ผู้ดูแลระบบ (Admin) ที่บันทึกนโยบาย |
+| `Note` | `VARCHAR(255)` | Nullable | บันทึกช่วยจำ / มติ ครม. |
 
 ---
 

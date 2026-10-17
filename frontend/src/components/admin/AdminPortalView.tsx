@@ -1,8 +1,448 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Icon, IconName } from '../common/Icon';
 import { AISalesAnalysis } from '../../types';
+import { adminService, DashboardData, GrantRecord, PolicyRecord } from '../../services/adminService';
 
+// ─────────────────────────────────────────────
+// Helper
+// ─────────────────────────────────────────────
+const thb = (n: number) => `฿\u00A0${n.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`;
+
+// ─────────────────────────────────────────────
+// Dashboard Tab
+// ─────────────────────────────────────────────
+const DashboardTab: React.FC = () => {
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const d = await adminService.getDashboard();
+      setData(d);
+    } catch {
+      setError('โหลดข้อมูล Dashboard ไม่สำเร็จ');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  if (loading) return <div className="px-4 pt-8 text-center text-xs text-slate-400 animate-pulse">กำลังโหลด...</div>;
+  if (error) return (
+    <div className="px-4 pt-4">
+      <div className="rounded-2xl bg-rose-50 border border-rose-200 p-4 text-xs text-rose-700 text-center">
+        {error}
+        <button onClick={load} className="block mx-auto mt-2 font-bold underline">ลองใหม่</button>
+      </div>
+    </div>
+  );
+  if (!data) return null;
+
+  const { transactions: tx, grants: g } = data;
+  const budgetUsedPct = g.totalAllocated > 0 ? Math.min(100, (g.totalSpent / g.totalAllocated) * 100) : 0;
+
+  return (
+    <section className="px-4 pt-4 space-y-4">
+      {/* ── รายรับ (Revenue) ── */}
+      <div className="rounded-[22px] bg-white p-4 border border-amber-100 shadow-sm space-y-3">
+        <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">รายรับรวมในระบบ (Revenue)</p>
+
+        <div className="p-3 bg-gradient-to-r from-amber-500 to-amber-600 rounded-xl text-white">
+          <span className="text-[10px] text-amber-100 block">ยอดรวมธุรกรรมทั้งหมด</span>
+          <p className="text-2xl font-extrabold font-mono mt-0.5">{thb(tx.totalRevenue)}</p>
+          <span className="text-[10px] text-amber-200">{tx.count.toLocaleString()} รายการ</span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="p-2.5 bg-blue-50 rounded-xl border border-blue-200">
+            <span className="text-[10px] text-blue-700 block font-bold">ประชาชนจ่าย (60%)</span>
+            <span className="text-sm font-extrabold text-blue-900 font-mono">{thb(tx.userPaid)}</span>
+          </div>
+          <div className="p-2.5 bg-emerald-50 rounded-xl border border-emerald-200">
+            <span className="text-[10px] text-emerald-700 block font-bold">รัฐอุดหนุน (40%)</span>
+            <span className="text-sm font-extrabold text-emerald-900 font-mono">{thb(tx.govSubsidized)}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── รายจ่าย (Budget/Grants) ── */}
+      <div className="rounded-[22px] bg-white p-4 border border-amber-100 shadow-sm space-y-3">
+        <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">รายจ่ายงบประมาณ (Budget)</p>
+
+        <div className="grid grid-cols-2 gap-2 text-xs">
+          <div className="p-2.5 bg-amber-50 rounded-xl border border-amber-200">
+            <span className="text-[10px] text-amber-700 block font-bold">งบจัดสรรรวม</span>
+            <span className="text-sm font-extrabold text-amber-900 font-mono">{thb(g.totalAllocated)}</span>
+          </div>
+          <div className="p-2.5 bg-rose-50 rounded-xl border border-rose-200">
+            <span className="text-[10px] text-rose-700 block font-bold">ใช้ไปแล้ว</span>
+            <span className="text-sm font-extrabold text-rose-900 font-mono">{thb(g.totalSpent)}</span>
+          </div>
+          <div className="p-2.5 bg-emerald-50 rounded-xl border border-emerald-200">
+            <span className="text-[10px] text-emerald-700 block font-bold">คงเหลือ</span>
+            <span className="text-sm font-extrabold text-emerald-900 font-mono">{thb(g.totalRemaining)}</span>
+          </div>
+          <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-200">
+            <span className="text-[10px] text-slate-500 block font-bold">สิทธิ์ที่เปิดใช้</span>
+            <span className="text-sm font-extrabold text-slate-800">{g.activeGrants} / {g.count} ราย</span>
+          </div>
+        </div>
+
+        {/* Progress bar */}
+        <div>
+          <div className="flex justify-between text-[10px] text-slate-400 mb-1">
+            <span>งบที่ใช้ไป</span>
+            <span className="font-bold text-rose-600">{budgetUsedPct.toFixed(1)}%</span>
+          </div>
+          <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-amber-400 to-rose-500 rounded-full transition-all duration-700"
+              style={{ width: `${budgetUsedPct}%` }}
+            />
+          </div>
+        </div>
+      </div>
+
+      <button
+        onClick={load}
+        className="w-full py-2.5 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-xl hover:bg-amber-100 transition-colors"
+      >
+        รีเฟรชข้อมูล
+      </button>
+    </section>
+  );
+};
+
+// ─────────────────────────────────────────────
+// Budget Allocation Tab
+// ─────────────────────────────────────────────
+const BudgetTab: React.FC = () => {
+  const [grants, setGrants] = useState<GrantRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+
+  // Policy state
+  const [policy, setPolicy] = useState<PolicyRecord | null>(null);
+  const [policyHistory, setPolicyHistory] = useState<PolicyRecord[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const [newGovRatio, setNewGovRatio] = useState<number>(40);
+  const [newGrantAmount, setNewGrantAmount] = useState<number>(1000);
+  const [policyNote, setPolicyNote] = useState('');
+  const [policySubmitting, setPolicySubmitting] = useState(false);
+  const [policyMsg, setPolicyMsg] = useState('');
+
+  // Grant form state
+  const [citizenId, setCitizenId] = useState('');
+  const [grantName, setGrantName] = useState('โครงการไทยช่วยไทย');
+  const [amount, setAmount] = useState<number>(1000);
+  const [govRatio, setGovRatio] = useState<number>(40);
+
+  const loadGrants = useCallback(async () => {
+    setLoading(true);
+    try {
+      const list = await adminService.getGrants();
+      setGrants(list);
+    } catch { /* silent */ } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  const loadPolicy = useCallback(async () => {
+    try {
+      const p = await adminService.getPolicy();
+      setPolicy(p);
+      setNewGovRatio(Math.round(parseFloat(p.Gov_Pay_Ratio) * 100));
+      setNewGrantAmount(parseFloat(p.Grant_Amount));
+      // Also pre-fill grant form
+      setGovRatio(Math.round(parseFloat(p.Gov_Pay_Ratio) * 100));
+      setAmount(parseFloat(p.Grant_Amount));
+    } catch { /* silent */ }
+  }, []);
+
+  useEffect(() => { loadGrants(); loadPolicy(); }, [loadGrants, loadPolicy]);
+
+  const handleSetPolicy = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPolicySubmitting(true);
+    setPolicyMsg('');
+    try {
+      const p = await adminService.setPolicy({
+        Gov_Pay_Ratio: newGovRatio / 100,
+        Grant_Amount: newGrantAmount,
+        Note: policyNote || undefined,
+      });
+      setPolicy(p);
+      setGovRatio(newGovRatio);
+      setAmount(newGrantAmount);
+      setPolicyMsg(`✓ อัปเดตอัตราเป็น รัฐ ${newGovRatio}% / ประชาชน ${100 - newGovRatio}% แล้ว`);
+      setPolicyNote('');
+      // Refresh history
+      adminService.getPolicyHistory().then(setPolicyHistory);
+    } catch (err: unknown) {
+      setPolicyMsg(err instanceof Error ? err.message : 'เกิดข้อผิดพลาด');
+    } finally {
+      setPolicySubmitting(false);
+    }
+  };
+
+  const loadHistory = async () => {
+    const h = await adminService.getPolicyHistory();
+    setPolicyHistory(h);
+    setShowHistory(true);
+  };
+
+  const handleAllocate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!citizenId.trim() || amount <= 0) return;
+    setSubmitting(true);
+    setError('');
+    setSuccess('');
+    try {
+      await adminService.allocateGrant({
+        Citizen_ID: citizenId.trim(),
+        Grant_Name: grantName || 'โครงการไทยช่วยไทย',
+        Total_Grant_Amount: amount,
+      });
+      setSuccess(`จัดสรรงบสำเร็จ ฿${amount.toLocaleString()} ให้ ${citizenId}`);
+      setCitizenId('');
+      loadGrants();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'เกิดข้อผิดพลาด';
+      setError(msg);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <section className="px-4 pt-4 space-y-4">
+
+      {/* ── Policy: Current Rate ── */}
+      <div className="rounded-[22px] bg-white p-4 border border-amber-200 shadow-sm">
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-xs font-bold text-[#78350f]">อัตราสมทบโครงการ (นโยบายปัจจุบัน)</p>
+          <button
+            onClick={showHistory ? () => setShowHistory(false) : loadHistory}
+            className="text-[10px] text-amber-700 hover:text-amber-900 font-bold underline"
+          >
+            {showHistory ? 'ซ่อนประวัติ' : 'ดูประวัติ'}
+          </button>
+        </div>
+
+        {policy && (
+          <div className="grid grid-cols-3 gap-2 text-center text-xs mb-3">
+            <div className="p-2.5 bg-emerald-50 rounded-xl border border-emerald-200">
+              <span className="text-[10px] text-emerald-700 block font-bold">รัฐจ่าย</span>
+              <span className="text-lg font-black text-emerald-800">{Math.round(parseFloat(policy.Gov_Pay_Ratio) * 100)}%</span>
+            </div>
+            <div className="p-2.5 bg-blue-50 rounded-xl border border-blue-200">
+              <span className="text-[10px] text-blue-700 block font-bold">ประชาชนจ่าย</span>
+              <span className="text-lg font-black text-blue-800">{Math.round(parseFloat(policy.User_Pay_Ratio) * 100)}%</span>
+            </div>
+            <div className="p-2.5 bg-amber-50 rounded-xl border border-amber-200">
+              <span className="text-[10px] text-amber-700 block font-bold">วงเงิน/สิทธิ์</span>
+              <span className="text-base font-black text-amber-800">฿{parseFloat(policy.Grant_Amount).toLocaleString()}</span>
+            </div>
+          </div>
+        )}
+
+        {/* History */}
+        {showHistory && policyHistory.length > 0 && (
+          <div className="mb-3 space-y-1.5 border-t border-slate-100 pt-3">
+            <p className="text-[10px] font-bold text-slate-400 mb-1.5">ประวัติการเปลี่ยนแปลง</p>
+            {policyHistory.map((p, i) => (
+              <div key={p.Policy_ID ?? i} className="flex justify-between items-center bg-slate-50 px-3 py-2 rounded-xl text-[10px] border border-slate-100">
+                <span className="font-mono font-bold text-slate-700">
+                  รัฐ {Math.round(parseFloat(p.Gov_Pay_Ratio) * 100)}% / ฿{parseFloat(p.Grant_Amount).toLocaleString()}
+                </span>
+                <span className="text-slate-400">
+                  {p.Effective_From ? new Date(p.Effective_From).toLocaleDateString('th-TH') : '-'}
+                  {p.users ? ` · ${p.users.Citizen_ID}` : ''}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Change rate form */}
+        <form onSubmit={handleSetPolicy} className="space-y-3 text-xs border-t border-slate-100 pt-3">
+          <p className="text-[11px] font-bold text-slate-600">เปลี่ยนอัตราสมทบใหม่</p>
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 mb-1">รัฐจ่าย (%)</label>
+              <input
+                id="policy-gov-ratio"
+                type="number" min={1} max={99}
+                value={newGovRatio}
+                onChange={e => setNewGovRatio(Number(e.target.value))}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 mb-1">วงเงิน/สิทธิ์ (฿)</label>
+              <input
+                id="policy-grant-amount"
+                type="number" min={1}
+                value={newGrantAmount}
+                onChange={e => setNewGrantAmount(Number(e.target.value))}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none"
+              />
+            </div>
+          </div>
+          <div className="flex gap-2 text-[10px]">
+            <span className="px-2 py-1 bg-emerald-50 text-emerald-700 rounded-lg border border-emerald-200 font-bold">รัฐ {newGovRatio}%</span>
+            <span className="px-2 py-1 bg-blue-50 text-blue-700 rounded-lg border border-blue-200 font-bold">ประชาชน {100 - newGovRatio}%</span>
+          </div>
+          <div>
+            <label className="block text-[10px] font-bold text-slate-500 mb-1">หมายเหตุ (ไม่บังคับ)</label>
+            <input
+              type="text"
+              value={policyNote}
+              onChange={e => setPolicyNote(e.target.value)}
+              placeholder="เช่น ปรับตามมติ ครม. 17 ต.ค. 69"
+              className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none"
+            />
+          </div>
+          {policyMsg && (
+            <p className={`text-[10px] px-3 py-2 rounded-xl border ${
+              policyMsg.startsWith('✓')
+                ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                : 'text-rose-600 bg-rose-50 border-rose-200'
+            }`}>{policyMsg}</p>
+          )}
+          <button
+            id="policy-save-btn"
+            type="submit"
+            disabled={policySubmitting}
+            className="w-full py-2.5 bg-[#92400e] hover:bg-[#78350f] disabled:opacity-50 text-white rounded-xl font-bold text-xs transition-all"
+          >
+            {policySubmitting ? 'กำลังบันทึก...' : '✓ บันทึกนโยบายใหม่'}
+          </button>
+        </form>
+      </div>
+      {/* Allocation Form */}
+      <div className="rounded-[22px] bg-white p-4 border border-amber-100 shadow-sm">
+        <p className="text-xs font-bold text-[#78350f] mb-3">จัดสรรงบประมาณให้ประชาชน</p>
+        <form onSubmit={handleAllocate} className="space-y-3 text-xs">
+          <div>
+            <label className="block text-[11px] font-bold text-slate-600 mb-1">เลขบัตรประชาชน (13 หลัก)</label>
+            <input
+              id="admin-citizen-id"
+              type="text"
+              required
+              maxLength={13}
+              value={citizenId}
+              onChange={e => setCitizenId(e.target.value)}
+              placeholder="1234567890123"
+              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400 font-mono"
+            />
+          </div>
+          <div>
+            <label className="block text-[11px] font-bold text-slate-600 mb-1">ชื่อโครงการ</label>
+            <input
+              id="admin-grant-name"
+              type="text"
+              value={grantName}
+              onChange={e => setGrantName(e.target.value)}
+              placeholder="โครงการไทยช่วยไทย"
+              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-400"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="col-span-2">
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">วงเงินสิทธิ์ (บาท)</label>
+              <input
+                id="admin-grant-amount"
+                type="number"
+                min={1}
+                value={amount}
+                onChange={e => setAmount(Number(e.target.value))}
+                className="w-full px-3 py-2.5 border border-slate-200 rounded-xl focus:outline-none"
+              />
+            </div>
+          </div>
+
+          {/* Current policy note */}
+          <div className="flex items-center justify-between p-2.5 bg-amber-50 rounded-xl border border-amber-200 text-[10px] text-amber-800 font-medium">
+            <span>อัตราการร่วมจ่าย (อิงตามนโยบายกลาง):</span>
+            <span className="font-bold text-emerald-800">
+              รัฐ {policy ? Math.round(parseFloat(policy.Gov_Pay_Ratio) * 100) : 40}% / ประชาชน {policy ? 100 - Math.round(parseFloat(policy.Gov_Pay_Ratio) * 100) : 60}%
+            </span>
+          </div>
+
+          {error && <p className="text-[10px] text-rose-600 bg-rose-50 px-3 py-2 rounded-xl border border-rose-200">{error}</p>}
+          {success && <p className="text-[10px] text-emerald-700 bg-emerald-50 px-3 py-2 rounded-xl border border-emerald-200">{success}</p>}
+
+          <button
+            id="admin-allocate-btn"
+            type="submit"
+            disabled={submitting}
+            className="w-full py-3 bg-[#d97706] hover:bg-[#b45309] disabled:opacity-50 text-white rounded-xl font-bold text-xs shadow-md shadow-amber-500/20 transition-all"
+          >
+            {submitting ? 'กำลังจัดสรร...' : '✓ จัดสรรงบประมาณ'}
+          </button>
+        </form>
+      </div>
+
+      {/* Grant list */}
+      <div>
+        <p className="text-[11px] font-bold text-slate-500 mb-2 px-1">ประวัติการจัดสรรล่าสุด</p>
+        {loading ? (
+          <div className="text-center text-xs text-slate-400 py-4 animate-pulse">กำลังโหลด...</div>
+        ) : grants.length === 0 ? (
+          <div className="text-center text-xs text-slate-400 py-4">ยังไม่มีการจัดสรรงบ</div>
+        ) : (
+          <div className="space-y-2">
+            {grants.slice(0, 20).map(gr => {
+              const allocated = Number(gr.Total_Grant_Amount);
+              const remaining = Number(gr.Remaining_Amount);
+              const spent = allocated - remaining;
+              const pct = allocated > 0 ? Math.min(100, (spent / allocated) * 100) : 0;
+              return (
+                <div key={gr.Grant_ID} className="rounded-[18px] bg-white p-3.5 border border-amber-100 shadow-sm">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <p className="text-xs font-bold text-slate-800">{gr.users.Citizen_ID}</p>
+                      <p className="text-[10px] text-slate-400">{gr.Grant_Name || 'โครงการไทยช่วยไทย'}</p>
+                    </div>
+                    <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${
+                      gr.Status === 'ACTIVE'
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        : 'bg-slate-100 text-slate-500 border-slate-200'
+                    }`}>
+                      {gr.Status === 'ACTIVE' ? 'ใช้งาน' : gr.Status}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex justify-between text-[10px] text-slate-500">
+                    <span>วงเงิน: <strong className="text-amber-800">฿{allocated.toLocaleString()}</strong></span>
+                    <span>คงเหลือ: <strong className="text-emerald-700">฿{remaining.toLocaleString()}</strong></span>
+                  </div>
+                  <div className="mt-1.5 w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-amber-400 to-rose-400 rounded-full"
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+};
+
+// ─────────────────────────────────────────────
+// Main Admin Portal View
+// ─────────────────────────────────────────────
 export const AdminPortalView: React.FC = () => {
   const {
     merchants,
@@ -17,7 +457,7 @@ export const AdminPortalView: React.FC = () => {
     triggerAIReanalysis
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'ai' | 'missions' | 'merchants' | 'impact'>('ai');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'budget' | 'ai' | 'missions' | 'merchants'>('dashboard');
   const [newMissionModalOpen, setNewMissionModalOpen] = useState(false);
   const [missionName, setMissionName] = useState('');
   const [description, setDescription] = useState('');
@@ -61,9 +501,17 @@ export const AdminPortalView: React.FC = () => {
     setNewMissionModalOpen(false);
   };
 
+  const tabs: { key: typeof activeTab; label: string }[] = [
+    { key: 'dashboard', label: 'Dashboard' },
+    { key: 'budget', label: 'งบประมาณ' },
+    { key: 'ai', label: 'AI ยอดขาย' },
+    { key: 'missions', label: `ภารกิจ (${missions.length})` },
+    { key: 'merchants', label: `ร้านค้า (${merchants.length})` },
+  ];
+
   return (
     <div className="pb-28">
-      {/* Top Header - เหลืองนวล (Warm Golden Yellow / Amber Cream Gradient) */}
+      {/* Top Header */}
       <header className="relative overflow-hidden bg-gradient-to-br from-[#78350f] via-[#b45309] to-[#f59e0b] px-5 pb-12 pt-5 text-white">
         <div className="absolute -right-12 -top-16 size-48 rounded-full border-[28px] border-white/10 pointer-events-none" />
 
@@ -134,7 +582,7 @@ export const AdminPortalView: React.FC = () => {
         </div>
       </section>
 
-      {/* Action / Quick trigger buttons */}
+      {/* Quick action */}
       <section className="px-4 pt-4">
         <button
           onClick={() => setNewMissionModalOpen(true)}
@@ -145,45 +593,28 @@ export const AdminPortalView: React.FC = () => {
         </button>
       </section>
 
-      {/* Tab Switcher */}
+      {/* Tab Switcher – horizontal scroll for 5 tabs */}
       <div className="px-4 pt-5">
-        <div className="flex bg-[#fef3c7]/60 p-1 rounded-2xl text-xs font-bold text-amber-950">
-          <button
-            onClick={() => setActiveTab('ai')}
-            className={`flex-1 py-2 rounded-xl transition-all ${
-              activeTab === 'ai' ? 'bg-white text-[#92400e] shadow-xs' : 'hover:text-amber-900'
-            }`}
-          >
-            AI วิเคราะห์ยอด
-          </button>
-          <button
-            onClick={() => setActiveTab('missions')}
-            className={`flex-1 py-2 rounded-xl transition-all ${
-              activeTab === 'missions' ? 'bg-white text-[#92400e] shadow-xs' : 'hover:text-amber-900'
-            }`}
-          >
-            ภารกิจ ({missions.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('merchants')}
-            className={`flex-1 py-2 rounded-xl transition-all ${
-              activeTab === 'merchants' ? 'bg-white text-[#92400e] shadow-xs' : 'hover:text-amber-900'
-            }`}
-          >
-            ร้านค้า ({merchants.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('impact')}
-            className={`flex-1 py-2 rounded-xl transition-all ${
-              activeTab === 'impact' ? 'bg-white text-[#92400e] shadow-xs' : 'hover:text-amber-900'
-            }`}
-          >
-            ผลกระทบ
-          </button>
+        <div className="flex bg-[#fef3c7]/60 p-1 rounded-2xl text-[10px] font-bold text-amber-950 overflow-x-auto gap-0.5 no-scrollbar">
+          {tabs.map(t => (
+            <button
+              key={t.key}
+              onClick={() => setActiveTab(t.key)}
+              className={`flex-shrink-0 flex-1 py-2 px-2 rounded-xl transition-all whitespace-nowrap ${
+                activeTab === t.key ? 'bg-white text-[#92400e] shadow-xs' : 'hover:text-amber-900'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* TAB 1: AI SALES ANALYSIS */}
+      {/* Tab Content */}
+      {activeTab === 'dashboard' && <DashboardTab />}
+      {activeTab === 'budget' && <BudgetTab />}
+
+      {/* TAB: AI SALES ANALYSIS */}
       {activeTab === 'ai' && (
         <section className="px-4 pt-4 space-y-3">
           <div className="text-xs text-slate-500 px-1 flex justify-between items-center">
@@ -254,7 +685,7 @@ export const AdminPortalView: React.FC = () => {
         </section>
       )}
 
-      {/* TAB 2: MISSIONS */}
+      {/* TAB: MISSIONS */}
       {activeTab === 'missions' && (
         <section className="px-4 pt-4 space-y-3">
           {missions.map(ms => (
@@ -285,7 +716,7 @@ export const AdminPortalView: React.FC = () => {
         </section>
       )}
 
-      {/* TAB 3: MERCHANTS */}
+      {/* TAB: MERCHANTS */}
       {activeTab === 'merchants' && (
         <section className="px-4 pt-4 space-y-3">
           {merchants.map(m => {
@@ -335,80 +766,6 @@ export const AdminPortalView: React.FC = () => {
               </div>
             );
           })}
-        </section>
-      )}
-
-      {/* TAB 4: SOCIAL IMPACT METRICS */}
-      {activeTab === 'impact' && (
-        <section className="px-4 pt-4 space-y-3">
-          {/* Revenue Breakdown KPIs for Whole System */}
-          <div className="rounded-[22px] bg-white p-4 border border-amber-200/80 shadow-sm space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <span className="grid size-7 place-items-center rounded-lg bg-[#b45309] text-white">
-                  <Icon name="wallet" className="size-3.5" />
-                </span>
-                <span className="text-xs font-bold text-slate-800">
-                  สรุปยอดเงินหมุนเวียน 60/40 (Macro Revenue KPIs)
-                </span>
-              </div>
-              <span className="text-[10px] bg-amber-50 text-amber-800 font-bold px-2 py-0.5 rounded-full border border-amber-200">
-                aipass.go.th
-              </span>
-            </div>
-
-            {/* Total System Revenue */}
-            <div className="p-3 bg-gradient-to-r from-amber-500 to-amber-600 rounded-xl text-white">
-              <span className="text-[10px] text-amber-100 block">ยอดรวมทั้งสิ้นในระบบ (Total Revenue)</span>
-              <p className="text-2xl font-extrabold font-mono mt-0.5">
-                ฿ {metrics.totalTransactionVolume.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
-              </p>
-            </div>
-
-            {/* 60% vs 40% Split */}
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="p-2.5 bg-blue-50 rounded-xl border border-blue-200">
-                <span className="text-[10px] text-blue-700 block font-bold">ประชาชนจ่าย QR (60%)</span>
-                <span className="text-sm font-extrabold text-blue-900 font-mono">
-                  ฿ {metrics.userSpentTotal.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
-                </span>
-              </div>
-              <div className="p-2.5 bg-emerald-50 rounded-xl border border-emerald-200">
-                <span className="text-[10px] text-emerald-700 block font-bold">รัฐโอนสมทบพร้อมเพย์ (40%)</span>
-                <span className="text-sm font-extrabold text-emerald-900 font-mono">
-                  ฿ {metrics.govSubsidizedTotal.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
-                </span>
-              </div>
-            </div>
-
-            {/* PromptPay status */}
-            <div className="p-2 bg-emerald-50/80 rounded-xl border border-emerald-200 flex items-center justify-between text-[10px] text-emerald-900">
-              <span className="flex items-center gap-1">
-                <span>✓</span>
-                <span>โอนเงินสมทบ 40% เข้าบัญชีพร้อมเพย์ร้านค้าครบ 100%</span>
-              </span>
-              <span className="font-bold text-emerald-700 font-mono">ธปท. Verified</span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 text-xs">
-            <div className="rounded-[20px] bg-white p-3.5 border border-amber-100 shadow-xs">
-              <span className="text-[10px] text-slate-400 block">ร้านค้าที่ได้รับประโยชน์</span>
-              <p className="text-xl font-bold text-slate-800 mt-0.5">{metrics.participatingShops} ร้านค้า</p>
-            </div>
-            <div className="rounded-[20px] bg-white p-3.5 border border-amber-100 shadow-xs">
-              <span className="text-[10px] text-slate-400 block">Low-Sales Recovery Rate</span>
-              <p className="text-xl font-bold text-emerald-600 mt-0.5">{metrics.lowSalesRecoveryRate}%</p>
-            </div>
-            <div className="rounded-[20px] bg-white p-3.5 border border-amber-100 shadow-xs">
-              <span className="text-[10px] text-slate-400 block">แสตมป์ดิจิทัลที่แจก</span>
-              <p className="text-xl font-bold text-[#b45309] mt-0.5">{metrics.stampsIssued} ดวง</p>
-            </div>
-            <div className="rounded-[20px] bg-white p-3.5 border border-amber-100 shadow-xs">
-              <span className="text-[10px] text-slate-400 block">มูลค่าแลกสินค้า OTOP</span>
-              <p className="text-xl font-bold text-rose-600 mt-0.5">฿{metrics.otopRedemptionVolume.toLocaleString()}</p>
-            </div>
-          </div>
         </section>
       )}
 

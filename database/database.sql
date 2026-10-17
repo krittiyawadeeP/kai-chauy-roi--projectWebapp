@@ -1,4 +1,4 @@
-﻿CREATE DATABASE IF NOT EXISTS thai_chuay_thai_please
+CREATE DATABASE IF NOT EXISTS thai_chuay_thai_please
 CHARACTER SET utf8mb4
 COLLATE utf8mb4_unicode_ci;
 
@@ -184,8 +184,6 @@ CREATE TABLE `user_grants` (
     `Grant_Name` VARCHAR(200) NULL,
     `Total_Grant_Amount` DECIMAL(12, 2) NOT NULL DEFAULT 1000.00,
     `Remaining_Amount` DECIMAL(12, 2) NOT NULL,
-    `Gov_Pay_Ratio` DECIMAL(5, 4) NOT NULL DEFAULT 0.40,
-    `User_Pay_Ratio` DECIMAL(5, 4) NOT NULL DEFAULT 0.60,
     `Granted_At` DATETIME(0) NOT NULL DEFAULT CURRENT_TIMESTAMP(0),
     `Status` VARCHAR(30) NOT NULL DEFAULT 'ACTIVE',
 
@@ -253,3 +251,19 @@ ALTER TABLE `wallets` ADD CONSTRAINT `fk_wallet_user` FOREIGN KEY (`User_ID`) RE
 -- AddForeignKey
 ALTER TABLE `user_grants` ADD CONSTRAINT `fk_user_grant_user` FOREIGN KEY (`User_ID`) REFERENCES `users`(`User_ID`) ON DELETE CASCADE ON UPDATE CASCADE;
 
+-- CreateTable
+CREATE TABLE `grant_policy` (
+    `Policy_ID`      INTEGER      NOT NULL AUTO_INCREMENT,
+    `Gov_Pay_Ratio`  DECIMAL(5,4) NOT NULL DEFAULT 0.40,
+    `User_Pay_Ratio` DECIMAL(5,4) NOT NULL DEFAULT 0.60,
+    `Grant_Amount`   DECIMAL(12,2) NOT NULL DEFAULT 1000.00,
+    `Effective_From` DATETIME(0)  NOT NULL DEFAULT CURRENT_TIMESTAMP(0),
+    `Created_By`     INTEGER      NOT NULL,
+    `Note`           VARCHAR(255) NULL,
+
+    INDEX `fk_policy_creator` (`Created_By`),
+    PRIMARY KEY (`Policy_ID`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- AddForeignKey
+ALTER TABLE `grant_policy` ADD CONSTRAINT `fk_policy_creator` FOREIGN KEY (`Created_By`) REFERENCES `users`(`User_ID`) ON DELETE RESTRICT ON UPDATE CASCADE;
