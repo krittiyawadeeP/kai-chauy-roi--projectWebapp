@@ -29,7 +29,7 @@ import {
   INITIAL_USER_GRANT,
   INITIAL_REDEMPTIONS
 } from '../mock/initialData';
-import { authStorage } from '../services/api';
+import { api, authStorage } from '../services/api';
 import { ApiMerchant, ApiSale, merchantService } from '../services/merchantService';
 
 interface AppContextType {
@@ -207,6 +207,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const saved = localStorage.getItem(`${STORAGE_KEY}_grant`);
     return saved ? JSON.parse(saved) : INITIAL_USER_GRANT;
   });
+
+  useEffect(() => {
+    let active = true;
+    const refreshPolicy = async () => {
+      try {
+        const policy = await api.get<{ Gov_Pay_Ratio: string; User_Pay_Ratio: string }>('/policy');
+        const govPayRatio = Number(policy.Gov_Pay_Ratio);
+        const userPayRatio = Number(policy.User_Pay_Ratio);
+        if (active && Number.isFinite(govPayRatio) && Number.isFinite(userPayRatio)) {
+          setUserGrant(previous => ({ ...previous, govPayRatio, userPayRatio }));
+        }
+      } catch { /* Keep the last known ratio while the API is unavailable. */ }
+    };
+    void refreshPolicy();
+    window.addEventListener('grant-policy-updated', refreshPolicy);
+    window.addEventListener('focus', refreshPolicy);
+    const interval = window.setInterval(refreshPolicy, 60000);
+    return () => { active = false; window.clearInterval(interval); window.removeEventListener('grant-policy-updated', refreshPolicy); window.removeEventListener('focus', refreshPolicy); };
+  }, [role]);
 
   // Save to localStorage when key states change
   useEffect(() => {
@@ -506,8 +525,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, message: 'ไม่พบข้อมูลร้านค้าในระบบ' };
     }
 
-    const userShare = Math.round(totalAmount * 0.60 * 100) / 100;
-    const govShare = Math.round(totalAmount * 0.40 * 100) / 100;
+    const govShare = Math.round(totalAmount * userGrant.govPayRatio * 100) / 100;
+    const userShare = (Math.round(totalAmount * 100) - Math.round(govShare * 100)) / 100;
 
     if (wallet.balance < userShare) {
       return {

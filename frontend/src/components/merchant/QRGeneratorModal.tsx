@@ -11,7 +11,7 @@ interface QRGeneratorModalProps {
 }
 
 export const QRGeneratorModal: React.FC<QRGeneratorModalProps> = ({ isOpen, onClose }) => {
-  const { currentMerchant, missions, refreshMerchantData } = useApp();
+  const { currentMerchant, missions, refreshMerchantData, userGrant } = useApp();
   const [amount, setAmount] = useState<number>(200);
   const [copied, setCopied] = useState<boolean>(false);
   const [userId, setUserId] = useState('');
@@ -21,8 +21,8 @@ export const QRGeneratorModal: React.FC<QRGeneratorModalProps> = ({ isOpen, onCl
 
   if (!isOpen || !currentMerchant) return null;
 
-  const userPays = saleResult ? Number(saleResult.User_Paid_Amount) : Math.round(amount * 0.40 * 100) / 100;
-  const govPays = saleResult ? Number(saleResult.Gov_Subsidized_Amount) : Math.round(amount * 0.60 * 100) / 100;
+  const govPays = saleResult ? Number(saleResult.Gov_Subsidized_Amount) : Math.round(amount * userGrant.govPayRatio * 100) / 100;
+  const userPays = saleResult ? Number(saleResult.User_Paid_Amount) : (Math.round(amount * 100) - Math.round(govPays * 100)) / 100;
 
   const activeMission = missions.find(
     m => m.status === 'active' && m.targetMerchantId === currentMerchant.mchId
@@ -80,7 +80,7 @@ export const QRGeneratorModal: React.FC<QRGeneratorModalProps> = ({ isOpen, onCl
             </span>
             <div>
               <h3 className="font-bold text-sm text-slate-800">สร้าง QR Code รับเงิน</h3>
-              <p className="text-[10px] text-slate-400">รัฐช่วย 60% · ลูกค้าจ่าย 40%</p>
+              <p className="text-[10px] text-slate-400">รัฐช่วย {Number((userGrant.govPayRatio * 100).toFixed(2))}% · ลูกค้าจ่าย {Number((userGrant.userPayRatio * 100).toFixed(2))}%</p>
             </div>
           </div>
           <button
@@ -141,11 +141,11 @@ export const QRGeneratorModal: React.FC<QRGeneratorModalProps> = ({ isOpen, onCl
           {/* Calculation */}
           <div className="rounded-xl bg-[#eaf2ff] p-2.5 text-xs space-y-1 border border-blue-100">
             <div className="flex justify-between text-slate-600">
-              <span>ลูกค้าชำระ (40%):</span>
+              <span>ลูกค้าชำระ ({Number((userGrant.userPayRatio * 100).toFixed(2))}%):</span>
               <strong className="text-[#123b84]">฿ {userPays.toLocaleString()}</strong>
             </div>
             <div className="flex justify-between text-slate-600">
-              <span>เงินอุดหนุนจากรัฐ (60%):</span>
+              <span>เงินอุดหนุนจากรัฐ ({Number((userGrant.govPayRatio * 100).toFixed(2))}%):</span>
               <strong className="text-emerald-600">฿ {govPays.toLocaleString()}</strong>
             </div>
           </div>

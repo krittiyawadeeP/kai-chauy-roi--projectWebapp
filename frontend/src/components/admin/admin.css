@@ -1,0 +1,25 @@
+.admin-workspace { font-size: 14px; }
+.admin-card { background: #fff; border: 1px solid #e0e5eb; border-radius: 3px; box-shadow: 0 1px 2px rgb(18 40 60 / 2%); }
+.admin-eyebrow { color: #947b44; font-size: 11px; font-weight: 600; letter-spacing: .04em; }
+.admin-input { display: block; width: 100%; background: white; border: 1px solid #cfd7df; border-radius: 3px; padding: 10px 12px; color: #334155; font-size: 13px; font-weight: 400; outline: none; }
+.admin-input:focus { border-color: #315e74; box-shadow: 0 0 0 2px rgb(49 94 116 / 10%); }
+.admin-primary, .admin-secondary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 3px; padding: 10px 15px; font-size: 12px; font-weight: 500; white-space: nowrap; }
+.admin-primary { background: #193f5a; border: 1px solid #193f5a; color: white; }
+.admin-primary:hover { background: #102e45; }
+.admin-secondary { background: white; border: 1px solid #cfd7df; color: #475569; }
+.admin-secondary:hover { background: #f8fafc; }
+.admin-workspace button:disabled { opacity: .45; cursor: default; }
+.admin-workspace :focus-visible { outline: 2px solid #b69a59; outline-offset: 3px; }
+.admin-table { width: 100%; border-collapse: collapse; font-size: 12px; white-space: nowrap; }
+.admin-table th { position: sticky; top: 0; background: #f4f6f8; color: #526170; font-weight: 500; text-align: left; }
+.admin-table th, .admin-table td { padding: 14px 20px; border-bottom: 1px solid #e9edf1; }
+.admin-table th.text-right, .admin-table td.text-right { text-align: right; }
+.admin-table tbody tr:hover { background: #f8fafc; }
+.admin-province-map { z-index: 0; background: #f3f6f8; background-image: linear-gradient(#e9eef2 1px, transparent 1px), linear-gradient(90deg, #e9eef2 1px, transparent 1px); background-size: 30px 30px; }
+.admin-province-map .leaflet-control-zoom { margin-top: 16px; margin-right: 16px; margin-left: 0; border: 1px solid #d4dce3; border-radius: 2px; box-shadow: none; }
+.admin-province-map .leaflet-control-container .leaflet-top.leaflet-left { right: 0; left: auto; }
+.admin-province-map .leaflet-interactive { transition: fill .15s; cursor: pointer; }
+.admin-province-map .leaflet-interactive:hover { filter: brightness(.93); }
+.admin-province-map .leaflet-tooltip { font-family: 'Noto Sans Thai', sans-serif; border-radius: 2px; box-shadow: 0 2px 8px #183f5920; }
+.admin-workspace .legacy-admin section { padding-left: 0; padding-right: 0; }
+.admin-workspace .legacy-admin section > div { border-radius: 4px; }

@@ -54,7 +54,7 @@ export function requireAuth(req: AuthRequest, res: Response, next: NextFunction)
 
 export function requireAdmin(req: AuthRequest, res: Response, next: NextFunction) {
   requireAuth(req, res, () => {
-    if (req.user?.role !== "ADMIN" && req.user?.role !== "GOVERNMENT") {
+    if (req.user?.role !== "ADMIN") {
       return sendJson(res, { message: "Admin permission required" }, 403);
     }
 

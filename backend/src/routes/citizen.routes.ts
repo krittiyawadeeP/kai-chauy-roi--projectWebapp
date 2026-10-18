@@ -9,23 +9,25 @@ import {
 } from "../lib/auth";
 import { badRequest, notFound, sendJson, toNumber } from "../lib/http";
 import { prisma } from "../lib/prisma";
+import { getCurrentPolicy } from '../policy/policy';
 
 export const citizenRoutes = Router();
 
 citizenRoutes.post("/user", async (req, res) => {
-  const { Citizen_ID, Phone, Password, Province_ID, Role } = req.body;
+  const { Citizen_ID, Phone, Password, Province_ID } = req.body;
 
   if (!Citizen_ID || !Phone || !Password) {
     return badRequest(res, "Citizen_ID, Phone, and Password are required");
   }
 
+  const policy = await getCurrentPolicy();
   const user = await prisma.users.create({
     data: {
       Citizen_ID,
       Phone,
       Password,
       Province_ID,
-      Role: Role ?? "USER",
+      Role: "USER",
       wallets: {
         create: {
           Balance: 0,
@@ -35,8 +37,8 @@ citizenRoutes.post("/user", async (req, res) => {
       user_grants: {
         create: {
           Grant_Name: "Default government subsidy",
-          Total_Grant_Amount: 1000,
-          Remaining_Amount: 1000,
+          Total_Grant_Amount: Number(policy.Grant_Amount),
+          Remaining_Amount: Number(policy.Grant_Amount),
           Status: "ACTIVE",
         },
       },

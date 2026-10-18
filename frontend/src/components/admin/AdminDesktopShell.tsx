@@ -1,145 +1,63 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
+import { Building2, LayoutDashboard, Landmark, FileText, Store, ChartNoAxesCombined, LogOut, ChevronRight, ArrowLeft } from 'lucide-react';
 import { AdminLoginPage } from './AdminLoginPage';
 import { AdminPortalView } from './AdminPortalView';
-import { authStorage } from '../../services/api';
+import { GeographicDashboard } from './GeographicDashboard';
+import { GlobalPolicyPanel } from './GlobalPolicyPanel';
+import { authStorage, api } from '../../services/api';
 import { authService } from '../../services/authService';
+import { useApp } from '../../context/AppContext';
+import './admin.css';
 
 type AdminTab = 'dashboard' | 'budget' | 'ai' | 'missions' | 'merchants';
-
-const NAV_ITEMS: { key: AdminTab; label: string; icon: string }[] = [
-  { key: 'dashboard', label: 'Dashboard', icon: '📊' },
-  { key: 'budget', label: 'จัดสรรงบ', icon: '💰' },
-  { key: 'ai', label: 'AI วิเคราะห์', icon: '🤖' },
-  { key: 'missions', label: 'ภารกิจ', icon: '🎯' },
-  { key: 'merchants', label: 'ร้านค้า', icon: '🏪' },
-];
+const navigation = [
+  { key: 'dashboard', label: 'ภาพรวมเศรษฐกิจรายพื้นที่', icon: LayoutDashboard },
+  { key: 'budget', label: 'นโยบายอัตราร่วมจ่าย', icon: Landmark },
+  { key: 'ai', label: 'วิเคราะห์สถานการณ์ร้านค้า', icon: ChartNoAxesCombined },
+  { key: 'missions', label: 'จัดการภารกิจโครงการ', icon: FileText },
+  { key: 'merchants', label: 'ทะเบียนร้านค้า', icon: Store },
+] as const;
 
 export const AdminDesktopShell: React.FC = () => {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const { setRole } = useApp();
+  const [loggedIn, setLoggedIn] = useState(false);
   const [checking, setChecking] = useState(true);
-  const [adminName, setAdminName] = useState('เจ้าหน้าที่');
-
-  // Check existing token on mount
+  const [tab, setTab] = useState<AdminTab>('dashboard');
+  const [adminName, setAdminName] = useState('เจ้าหน้าที่ผู้ดูแลระบบ');
   useEffect(() => {
-    const token = authStorage.getToken();
-    if (!token) { setChecking(false); return; }
-    authService.getMe()
-      .then(me => {
-        if (me?.Role === 'ADMIN' || me?.Role === 'GOVERNMENT') {
-          setAdminName(me.Citizen_ID ?? 'เจ้าหน้าที่');
-          setIsLoggedIn(true);
-        } else {
-          authStorage.removeToken();
-        }
-      })
-      .catch(() => authStorage.removeToken())
-      .finally(() => setChecking(false));
+    let active = true;
+    if (!authStorage.getToken()) { setChecking(false); return; }
+    authService.getMe().then(me => {
+      if (!active) return;
+      if (me.Role === 'ADMIN') { setAdminName(`เจ้าหน้าที่ ···${me.Citizen_ID.slice(-4)}`); setLoggedIn(true); }
+      else authStorage.removeToken();
+    }).catch(() => { if (active) authStorage.removeToken(); }).finally(() => { if (active) setChecking(false); });
+    return () => { active = false; };
   }, []);
-
-  const handleLogout = () => {
-    authStorage.removeToken();
-    setIsLoggedIn(false);
+  const logout = async () => {
+    try { await api.post('/logout'); } catch { /* An expired server session is already unusable. */ }
+    authStorage.removeToken(); setLoggedIn(false);
   };
-
-  if (checking) {
-    return (
-      <div className="min-h-screen bg-[#1c0a00] flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-amber-400/30 border-t-amber-400 rounded-full animate-spin" />
-      </div>
-    );
-  }
-
-  if (!isLoggedIn) {
-    return <AdminLoginPage onLoginSuccess={() => setIsLoggedIn(true)} />;
-  }
-
-  return (
-    <div className="min-h-screen bg-[#fafaf8] flex flex-col">
-
-      {/* ── Top navbar ── */}
-      <header className="h-14 bg-gradient-to-r from-[#78350f] via-[#b45309] to-[#d97706] flex items-center justify-between px-8 shadow-lg z-20 flex-shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center text-sm font-black text-white border border-white/20">
-            รัฐ
-          </div>
-          <div>
-            <span className="text-white font-bold text-sm tracking-tight">ระบบพอร์ทัลภาครัฐ</span>
-            <span className="text-amber-200/60 text-[10px] ml-2 hidden lg:inline">โครงการไทยช่วยไทย</span>
-          </div>
+  if (checking) return <div className="admin-workspace grid min-h-screen place-items-center bg-slate-100 text-sm text-slate-600" role="status">กำลังตรวจสอบสิทธิ์การใช้งาน…</div>;
+  if (!loggedIn) return <AdminLoginPage onLoginSuccess={() => setLoggedIn(true)} />;
+  return <div className="admin-workspace min-h-screen bg-[#f2f4f7] text-slate-700">
+    <div className="h-1 bg-[#b69a59]" />
+    <header className="flex min-h-20 items-center justify-between gap-4 border-b border-[#2c4c68] bg-[#16354f] px-5 py-4 text-white lg:px-8">
+      <div className="flex items-center gap-3"><div className="grid size-11 shrink-0 place-items-center rounded-full border border-[#b69a59] text-[#d8be80]"><Building2 size={24} strokeWidth={1.5} /></div><div><p className="text-[10px] tracking-[0.16em] text-[#d0bd8d]">ระบบสารสนเทศเพื่อการบริหารโครงการ</p><p className="mt-1 text-base font-semibold lg:text-lg">โครงการไทยช่วยไทย</p></div></div>
+      <div className="flex items-center gap-4"><div className="hidden text-right sm:block"><p className="text-xs font-medium">{adminName}</p><p className="mt-1 text-[10px] text-slate-300">ผู้ดูแลระบบส่วนกลาง</p></div><button onClick={logout} className="flex items-center gap-2 border border-white/25 px-3 py-2 text-xs hover:bg-white/10"><LogOut size={14} /><span className="hidden sm:inline">ออกจากระบบ</span></button></div>
+    </header>
+    <div className="flex flex-col lg:flex-row">
+      <aside className="shrink-0 border-b border-slate-200 bg-white lg:sticky lg:top-0 lg:flex lg:min-h-[calc(100vh-84px)] lg:w-64 lg:flex-col lg:self-start lg:border-r">
+        <p className="hidden px-6 pb-3 pt-7 text-[10px] tracking-widest text-slate-400 lg:block">การบริหารและติดตามผล</p>
+        <nav className="flex gap-1 overflow-x-auto p-2 lg:flex-col lg:px-3" aria-label="เมนูผู้ดูแลระบบ">{navigation.map(item => <button key={item.key} onClick={() => setTab(item.key)} aria-current={tab === item.key ? 'page' : undefined} className={`flex shrink-0 items-center gap-3 border-l-[3px] px-4 py-3.5 text-left text-xs transition-colors ${tab === item.key ? 'border-[#ad8d46] bg-[#eef3f6] font-semibold text-[#173d58]' : 'border-transparent text-slate-500 hover:bg-slate-50'}`}><item.icon size={17} strokeWidth={1.6} /><span>{item.label}</span>{tab === item.key && <ChevronRight size={13} className="ml-auto hidden lg:block" />}</button>)}</nav>
+        <div className="mt-auto hidden p-6 lg:block"><button onClick={() => setRole('citizen')} className="flex items-center gap-2 text-xs text-slate-500 hover:text-slate-900"><ArrowLeft size={14} />กลับหน้าประชาชน</button><div className="mt-6 border-t border-slate-200 pt-4 text-[10px] leading-5 text-slate-400">ระบบบริหารโครงการไทยช่วยไทย<br />สำหรับเจ้าหน้าที่ผู้มีสิทธิ์ใช้งาน</div></div>
+      </aside>
+      <main className="min-w-0 flex-1 p-4 lg:p-7 xl:p-9">
+        <div className="mx-auto max-w-[1500px]"><p className="mb-6 flex items-center gap-2 text-[11px] text-slate-400">หน้าหลัก <ChevronRight size={11} /><span className="text-slate-600">{navigation.find(item => item.key === tab)?.label}</span></p>
+          {tab === 'dashboard' ? <GeographicDashboard /> : tab === 'budget' ? <GlobalPolicyPanel /> : <AdminPortalView activeSection={tab} />}
+          <footer className="mt-10 flex flex-wrap justify-between gap-2 border-t border-slate-200 pt-4 text-[10px] text-slate-400"><span>ระบบติดตามและประเมินผลโครงการไทยช่วยไทย</span><span>ข้อมูลสำหรับการบริหารโครงการ</span></footer>
         </div>
-
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 text-xs text-amber-100">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="hidden sm:inline">เจ้าหน้าที่:</span>
-            <span className="font-bold font-mono">{adminName}</span>
-          </div>
-          <button
-            onClick={handleLogout}
-            className="text-xs text-amber-200 hover:text-white border border-white/20 hover:border-white/40 px-3 py-1.5 rounded-lg transition-all"
-          >
-            ออกจากระบบ
-          </button>
-        </div>
-      </header>
-
-      {/* ── Body: sidebar + content ── */}
-      <div className="flex flex-1 overflow-hidden">
-
-        {/* Sidebar */}
-        <aside className="w-56 bg-white border-r border-slate-200 flex flex-col flex-shrink-0 shadow-sm">
-          <div className="p-4 border-b border-slate-100">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">เมนูหลัก</p>
-          </div>
-          <nav className="flex-1 p-3 space-y-1">
-            {NAV_ITEMS.map(item => (
-              /* We pass the active state via URL hash to let AdminPortalView handle it internally.
-                 Instead we just scroll to the tab section — simplest approach. */
-              <a
-                key={item.key}
-                href={`#admin-tab-${item.key}`}
-                className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-amber-50 hover:text-amber-800 transition-colors group"
-              >
-                <span className="text-base group-hover:scale-110 transition-transform">{item.icon}</span>
-                {item.label}
-              </a>
-            ))}
-          </nav>
-          <div className="p-4 border-t border-slate-100">
-            <div className="bg-amber-50 rounded-xl p-3 border border-amber-100">
-              <p className="text-[10px] font-bold text-amber-700">aipass.go.th</p>
-              <p className="text-[9px] text-amber-600/70 mt-0.5">Government Portal v2.1</p>
-            </div>
-          </div>
-        </aside>
-
-        {/* Main content area — AdminPortalView renders in scrollable column */}
-        <main className="flex-1 overflow-y-auto bg-[#fafaf8]">
-          {/* Desktop wrapper: constrain the mobile-designed view to a centered, wider card */}
-          <div className="max-w-5xl mx-auto py-6 px-6">
-            {/* Page header */}
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h1 className="text-2xl font-black text-[#78350f] tracking-tight">Government Admin Portal</h1>
-                <p className="text-sm text-slate-500 mt-0.5">กระทรวงการคลัง · โครงการไทยช่วยไทย</p>
-              </div>
-              <span className="inline-flex items-center gap-2 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-4 py-2 rounded-full">
-                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                ระบบออนไลน์
-              </span>
-            </div>
-
-            {/* The portal content — rendered in a desktop-friendly grid shell */}
-            <div className="bg-white rounded-3xl shadow-sm border border-slate-200 overflow-hidden">
-              {/* AdminPortalView was designed for 430px mobile; we render it in a capped-width container
-                  so it looks native on desktop without re-writing all the card layouts */}
-              <div className="max-w-[860px] mx-auto" id="admin-portal-content">
-                <AdminPortalView />
-              </div>
-            </div>
-          </div>
-        </main>
-      </div>
+      </main>
     </div>
-  );
+  </div>;
 };

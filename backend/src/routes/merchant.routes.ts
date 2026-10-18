@@ -3,6 +3,7 @@ import { Router } from "express";
 import { createSession, requireAuth, requireMerchant, type AuthRequest } from "../lib/auth";
 import { badRequest, notFound, sendJson } from "../lib/http";
 import { prisma } from "../lib/prisma";
+import { getCurrentPolicy } from '../policy/policy';
 
 export const merchantRoutes = Router();
 
@@ -21,6 +22,7 @@ merchantRoutes.post("/register", async (req, res) => {
   }
 
   try {
+    const policy = await getCurrentPolicy();
     const district = await prisma.districts.findUnique({ where: { Dist_ID: districtId } });
     if (!district || district.Prov_ID !== provinceId) {
       return badRequest(res, "The selected district does not belong to the selected province");
@@ -37,10 +39,8 @@ merchantRoutes.post("/register", async (req, res) => {
           user_grants: {
             create: {
               Grant_Name: "Default government subsidy",
-              Total_Grant_Amount: 1000,
-              Remaining_Amount: 1000,
-              Gov_Pay_Ratio: 0.6,
-              User_Pay_Ratio: 0.4,
+              Total_Grant_Amount: Number(policy.Grant_Amount),
+              Remaining_Amount: Number(policy.Grant_Amount),
               Status: "ACTIVE",
             },
           },
@@ -188,16 +188,11 @@ merchantRoutes.post("/me/sales", requireMerchant, async (req: AuthRequest, res) 
     },
   });
 
-  const totalAmount = Number(Total_Amount);
-
   // Fetch current subsidy ratio from global grant_policy
-  const latestPolicy = await prisma.grant_policy.findFirst({
-    orderBy: { Effective_From: "desc" },
-  });
-  const govRatio = latestPolicy ? Number(latestPolicy.Gov_Pay_Ratio) : 0.4;
-  const userRatio = latestPolicy ? Number(latestPolicy.User_Pay_Ratio) : 0.6;
+  const latestPolicy = await getCurrentPolicy();
+  const govRatio = Number(latestPolicy.Gov_Pay_Ratio);
 
-  const requestedGovAmount = totalAmount * govRatio;
+  const requestedGovAmount = Math.round(totalAmount * 100 * govRatio) / 100;
   const remainingGrant = activeGrant ? Number(activeGrant.Remaining_Amount) : 0;
   const govSubsidizedAmount = Math.min(requestedGovAmount, remainingGrant);
   const userPaidAmount = Number((totalAmount - govSubsidizedAmount).toFixed(2));

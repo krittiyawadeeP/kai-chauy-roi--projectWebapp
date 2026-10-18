@@ -1,4 +1,12 @@
 import { api } from './api';
+import type { Region } from '../../../shared/regions';
+
+export interface ProvinceMetrics {
+  code: string; name: string; region: Region; registered: boolean;
+  totalRevenue: number; govSubsidized: number; userPaid: number; transactionCount: number;
+  merchantCount: number; totalAllocated: number; totalRemaining: number;
+}
+export interface GeographicDashboardData { generatedAt: string; provinces: ProvinceMetrics[] }
 
 export interface DashboardData {
   transactions: {
@@ -38,6 +46,7 @@ export interface PolicyRecord {
 }
 
 export const adminService = {
+  getGeographicDashboard: (signal?: AbortSignal) => api.get<GeographicDashboardData>('/admin/dashboard/geography', { signal }),
   getDashboard: () => api.get<DashboardData>('/admin/dashboard'),
 
   getGrants: () => api.get<GrantRecord[]>('/admin/grants'),

@@ -173,13 +173,13 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
 
           <div className="mt-3 grid grid-cols-2 gap-3 pt-3 border-t border-slate-100 text-xs">
             <div className="bg-[#f0fdfa] p-3 rounded-xl border border-teal-100">
-              <span className="text-[10px] text-teal-800 block">ลูกค้าจ่ายผ่าน QR (40%)</span>
+              <span className="text-[10px] text-teal-800 block">ลูกค้าจ่ายผ่าน QR </span>
               <span className="text-sm font-bold text-[#0f766e]">
                 ฿ {merchantTransactions.reduce((acc, tx) => acc + tx.userPaidAmount, 0).toLocaleString()}
               </span>
             </div>
             <div className="bg-[#f0fdf4] p-3 rounded-xl border border-emerald-100">
-              <span className="text-[10px] text-emerald-800 block">รัฐช่วยจ่าย (60%)</span>
+              <span className="text-[10px] text-emerald-800 block">รัฐช่วยจ่าย </span>
               <span className="text-sm font-bold text-emerald-700">
                 ฿ {govSubsidyReceivable.toLocaleString()}
               </span>
@@ -318,7 +318,7 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
                     <p className="font-bold text-xs text-slate-800">{tx.userName}</p>
                     <p className="text-[10px] text-slate-400">{tx.txTimestamp}</p>
                     <span className="text-[10px] text-teal-700 font-medium">
-                      รัฐช่วยจ่าย 60%: ฿{tx.govSubsidizedAmount}
+                      รัฐช่วยจ่าย: ฿{tx.govSubsidizedAmount}
                     </span>
                   </div>
                   <div className="text-right">
@@ -532,7 +532,7 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
               </span>
             </div>
             <p className="text-[11px] text-teal-800 leading-relaxed">
-              ร้านค้าของท่านลงทะเบียนในระบบเรียบร้อย สามารถสร้าง Thai QR Code รับสิทธิ์ 60/40 และรับเงินสมทบ 40% จากภาครัฐเข้าบัญชีพร้อมเพย์ได้ทันที
+              ร้านค้าของท่านลงทะเบียนในระบบเรียบร้อย สามารถสร้าง Thai QR Code และรับเงินสมทบตามอัตรานโยบายกลางได้
             </p>
             <div className="pt-2 flex gap-2">
               <button
