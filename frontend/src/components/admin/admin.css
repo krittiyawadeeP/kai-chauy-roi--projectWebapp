@@ -1,5 +1,16 @@
 .admin-workspace { font-size: 14px; }
-.admin-card { background: #fff; border: 1px solid #e0e5eb; border-radius: 3px; box-shadow: 0 1px 2px rgb(18 40 60 / 2%); }
+.admin-card { background: #fff; border: 1px solid #dce4ef; border-radius: 10px; box-shadow: 0 3px 12px rgb(34 62 116 / 4%); }
+.admin-workspace { background-image: radial-gradient(ellipse at top right, #e7eafa80, transparent 55%); }
+.admin-workspace > header { background: linear-gradient(115deg, #133f60, #263b77 65%, #43366d); }
+.admin-workspace aside nav [aria-current='page'] { background: linear-gradient(90deg, #e6edff, #f0edfb); border-color: #7c66bd; color: #373b81; }
+.admin-section-heading { background: linear-gradient(105deg, #f0f5ff, #f8f5ff 70%, #fff9ee); }
+.admin-kpi { --accent: #2563eb; --wash: #eff6ff; --icon-bg: #dbeafe; border-top: 3px solid var(--accent); background: linear-gradient(140deg, var(--wash), #fff 90%); }
+.admin-kpi-1 { --accent: #059669; --wash: #ecfdf5; --icon-bg: #d1fae5; }
+.admin-kpi-2 { --accent: #7c3aed; --wash: #f5f3ff; --icon-bg: #ede9fe; }
+.admin-kpi-3 { --accent: #c46511; --wash: #fff7ed; --icon-bg: #ffedd5; }
+.admin-kpi-4 { --accent: #0f766e; --wash: #f0fdfa; --icon-bg: #ccfbf1; }
+.admin-kpi-icon { display: grid; place-items: center; flex-shrink: 0; width: 34px; height: 34px; border-radius: 10px; color: var(--accent); background: var(--icon-bg); }
+.admin-kpi-value { color: var(--accent); font-size: clamp(1.1rem, 1.5vw, 1.65rem); overflow-wrap: anywhere; }
 .admin-eyebrow { color: #947b44; font-size: 11px; font-weight: 600; letter-spacing: .04em; }
 .admin-input { display: block; width: 100%; background: white; border: 1px solid #cfd7df; border-radius: 3px; padding: 10px 12px; color: #334155; font-size: 13px; font-weight: 400; outline: none; }
 .admin-input:focus { border-color: #315e74; box-shadow: 0 0 0 2px rgb(49 94 116 / 10%); }
@@ -11,7 +22,7 @@
 .admin-workspace button:disabled { opacity: .45; cursor: default; }
 .admin-workspace :focus-visible { outline: 2px solid #b69a59; outline-offset: 3px; }
 .admin-table { width: 100%; border-collapse: collapse; font-size: 12px; white-space: nowrap; }
-.admin-table th { position: sticky; top: 0; background: #f4f6f8; color: #526170; font-weight: 500; text-align: left; }
+.admin-table th { position: sticky; top: 0; background: #edf2fc; color: #42517a; font-weight: 500; text-align: left; }
 .admin-table th, .admin-table td { padding: 14px 20px; border-bottom: 1px solid #e9edf1; }
 .admin-table th.text-right, .admin-table td.text-right { text-align: right; }
 .admin-table tbody tr:hover { background: #f8fafc; }
@@ -21,5 +32,12 @@
 .admin-province-map .leaflet-interactive { transition: fill .15s; cursor: pointer; }
 .admin-province-map .leaflet-interactive:hover { filter: brightness(.93); }
 .admin-province-map .leaflet-tooltip { font-family: 'Noto Sans Thai', sans-serif; border-radius: 2px; box-shadow: 0 2px 8px #183f5920; }
+.admin-shop-marker > span { display: grid; place-items: center; width: 28px; height: 28px; border: 2px solid white; border-radius: 50% 50% 50% 5px; background: #c4510c; color: white; box-shadow: 0 2px 6px #7c2d1240; transform: rotate(-45deg); }
+.admin-shop-marker svg { transform: rotate(45deg); }
+.admin-shop-marker:focus-visible { outline: 3px solid #312e81; border-radius: 50%; }
+.admin-shop-popup { min-width: 160px; font: 12px/1.7 'Noto Sans Thai', sans-serif; }
+.admin-shop-popup strong { color: #9a3412; font-size: 14px; }
+.admin-shop-popup p { margin: 5px 0; color: #475569; }
+.admin-shop-popup small { color: #64748b; font-variant-numeric: tabular-nums; }
 .admin-workspace .legacy-admin section { padding-left: 0; padding-right: 0; }
 .admin-workspace .legacy-admin section > div { border-radius: 4px; }

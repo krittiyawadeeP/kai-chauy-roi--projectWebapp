@@ -6,7 +6,11 @@ export interface ProvinceMetrics {
   totalRevenue: number; govSubsidized: number; userPaid: number; transactionCount: number;
   merchantCount: number; totalAllocated: number; totalRemaining: number;
 }
-export interface GeographicDashboardData { generatedAt: string; provinces: ProvinceMetrics[] }
+export interface MerchantLocation {
+  merchantId: number; shopName: string; category: string | null; lat: number; lng: number;
+  provinceCode: string; provinceName: string; districtName: string; region: Region;
+}
+export interface GeographicDashboardData { generatedAt: string; provinces: ProvinceMetrics[]; merchants: MerchantLocation[] }
 
 export interface DashboardData {
   transactions: {

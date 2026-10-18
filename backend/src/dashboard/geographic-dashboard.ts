@@ -11,6 +11,28 @@ type TransactionInput = { District_ID: number; _sum: { Total_Amount: unknown; Go
 type GrantInput = { User_ID: number; _sum: { Total_Grant_Amount: unknown; Remaining_Amount: unknown } };
 const cents = (value: unknown) => Math.round(Number(value ?? 0) * 100);
 
+type MerchantInput = {
+  Mch_ID: number; Shop_Name: string; Category: string | null; Lat: unknown; Lng: unknown;
+  districts: { Dist_Name: string; provinces: { Prov_ID: number; Prov_Name: string } };
+};
+
+export function buildMerchantLocations(merchants: MerchantInput[]) {
+  return merchants.flatMap(merchant => {
+    if (merchant.Lat == null || merchant.Lng == null) return [];
+    const lat = Number(merchant.Lat);
+    const lng = Number(merchant.Lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) return [];
+    const province = merchant.districts.provinces;
+    const match = findProvince(province.Prov_Name);
+    return [{
+      merchantId: merchant.Mch_ID, shopName: merchant.Shop_Name, category: merchant.Category,
+      lat, lng, provinceCode: match?.code ?? `db-${province.Prov_ID}`,
+      provinceName: match?.name ?? province.Prov_Name, districtName: merchant.districts.Dist_Name,
+      region: match?.region ?? 'Unmapped',
+    }];
+  });
+}
+
 export function buildGeographicDashboard(provinces: ProvinceInput[], transactions: TransactionInput[], grants: GrantInput[], users: { User_ID: number; Province_ID: number | null }[]) {
   const blank = (code: string, name: string, region: Region): AreaMetrics => ({ code, name, region, registered: false, totalRevenue: 0, govSubsidized: 0, userPaid: 0, transactionCount: 0, merchantCount: 0, totalAllocated: 0, totalRemaining: 0 });
   const areas: AreaMetrics[] = PROVINCES.map(p => blank(p.code, p.name, p.region));

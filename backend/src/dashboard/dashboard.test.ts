@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
-import { buildGeographicDashboard } from './geographic-dashboard';
+import { buildGeographicDashboard, buildMerchantLocations } from './geographic-dashboard';
 import { findProvince } from '../../../shared/regions';
 import { PROVINCES } from '../../../shared/geography';
 
@@ -39,4 +39,25 @@ test('geographic totals join actual database IDs, preserve money and keep unmapp
   assert.equal(Math.round(result.reduce((sum, p) => sum + p.totalRevenue, 0) * 100), 36001);
   assert.equal(result.find(p => p.code === '83')?.totalRevenue, 0);
   assert.equal(result.find(p => p.code === '83')?.registered, false);
+  assert.equal(result.reduce((sum, p) => sum + p.merchantCount, 0), 4);
+});
+
+test('merchant pins use actual coordinates and province identity, excluding missing or invalid coordinates', () => {
+  const merchant = { Mch_ID: 1, Shop_Name: 'ร้านชุมชน', Category: 'อาหาร', Lat: '13.7563', Lng: '100.5018', districts: { Dist_Name: 'เขตพระนคร', provinces: { Prov_ID: 99, Prov_Name: 'Bangkok' } } };
+  const locations = buildMerchantLocations([
+    merchant,
+    { ...merchant, Mch_ID: 2, Lat: null },
+    { ...merchant, Mch_ID: 3, Lng: null },
+    { ...merchant, Mch_ID: 4, Lat: NaN },
+    { ...merchant, Mch_ID: 5, Lat: '91' },
+    { ...merchant, Mch_ID: 6, Lng: '181' },
+    { ...merchant, Mch_ID: 7, Lat: -91 },
+    { ...merchant, Mch_ID: 8, Lng: -181 },
+    { ...merchant, Mch_ID: 9, Lat: 0, Lng: 0, districts: { ...merchant.districts, provinces: { Prov_ID: 3, Prov_Name: 'พื้นที่เดิม' } } },
+  ]);
+  assert.equal(locations.length, 2);
+  assert.deepEqual(locations[0], { merchantId: 1, shopName: 'ร้านชุมชน', category: 'อาหาร', lat: 13.7563, lng: 100.5018, provinceCode: '10', provinceName: 'กรุงเทพมหานคร', districtName: 'เขตพระนคร', region: 'Central' });
+  assert.equal(locations[1].provinceCode, 'db-3');
+  assert.equal(locations[1].region, 'Unmapped');
+  assert.equal(locations[1].lat, 0);
 });
