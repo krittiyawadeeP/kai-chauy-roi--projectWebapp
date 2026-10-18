@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc --noEmit",
-    "prisma:generate": "prisma generate"
+    "prisma:generate": "prisma generate",
+    "seed:nakhon-pathom": "tsx prisma/seed-nakhon-pathom.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
