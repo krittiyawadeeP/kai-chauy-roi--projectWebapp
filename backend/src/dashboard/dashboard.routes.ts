@@ -8,18 +8,18 @@ export const dashboardRoutes = Router();
 
 dashboardRoutes.get('/geography', async (_req, res) => {
   const [provinces, transactions, grants, users, merchants] = await Promise.all([
-    prisma.provinces.findMany({ select: { Prov_ID: true, Prov_Name: true, districts: { select: { Dist_ID: true, _count: { select: { merchants: true } } } } } }),
+    prisma.provinces.findMany({ select: { Prov_ID: true, Prov_Name: true, districts: { select: { Dist_ID: true, Dist_Name: true, _count: { select: { merchants: true } } } } } }),
     prisma.sales_transactions.groupBy({ by: ['District_ID'], where: { Status: 'COMPLETED' }, _sum: { Total_Amount: true, Gov_Subsidized_Amount: true, User_Paid_Amount: true }, _count: { Tx_ID: true } }),
     prisma.user_grants.groupBy({ by: ['User_ID'], _sum: { Total_Grant_Amount: true, Remaining_Amount: true } }),
     prisma.users.findMany({ select: { User_ID: true, Province_ID: true } }),
     prisma.merchants.findMany({ select: {
       Mch_ID: true, Shop_Name: true, Category: true, Lat: true, Lng: true,
-      districts: { select: { Dist_Name: true, provinces: { select: { Prov_ID: true, Prov_Name: true } } } },
+      districts: { select: { Dist_ID: true, Dist_Name: true, provinces: { select: { Prov_ID: true, Prov_Name: true } } } },
     } }),
   ]);
   sendJson(res, {
     generatedAt: new Date().toISOString(),
-    provinces: buildGeographicDashboard(provinces, transactions, grants, users),
+    ...buildGeographicDashboard(provinces, transactions, grants, users),
     merchants: buildMerchantLocations(merchants),
   });
 });

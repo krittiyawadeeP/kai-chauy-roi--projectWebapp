@@ -26,7 +26,7 @@
 .admin-table th, .admin-table td { padding: 14px 20px; border-bottom: 1px solid #e9edf1; }
 .admin-table th.text-right, .admin-table td.text-right { text-align: right; }
 .admin-table tbody tr:hover { background: #f8fafc; }
-.admin-province-map { z-index: 0; background: #f3f6f8; background-image: linear-gradient(#e9eef2 1px, transparent 1px), linear-gradient(90deg, #e9eef2 1px, transparent 1px); background-size: 30px 30px; }
+.admin-province-map { z-index: 0; background: #d7e9f4; background-image: linear-gradient(#ffffff45 1px, transparent 1px), linear-gradient(90deg, #ffffff45 1px, transparent 1px); background-size: 30px 30px; }
 .admin-province-map .leaflet-control-zoom { margin-top: 16px; margin-right: 16px; margin-left: 0; border: 1px solid #d4dce3; border-radius: 2px; box-shadow: none; }
 .admin-province-map .leaflet-control-container .leaflet-top.leaflet-left { right: 0; left: auto; }
 .admin-province-map .leaflet-interactive { transition: fill .15s; cursor: pointer; }

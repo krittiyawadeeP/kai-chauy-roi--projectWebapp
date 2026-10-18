@@ -1,4 +1,10 @@
 import { api, authStorage } from './api';
+import type { Merchant } from '../types';
+
+export function getCoordinates(lat: number | null | undefined, lng: number | null | undefined): [number, number] | null {
+  return typeof lat === 'number' && Number.isFinite(lat) && lat >= -90 && lat <= 90
+    && typeof lng === 'number' && Number.isFinite(lng) && lng >= -180 && lng <= 180 ? [lat, lng] : null;
+}
 
 export interface CreateSalePayload {
   User_ID: number;
@@ -17,6 +23,34 @@ export interface ApiMerchant {
   Dist_ID: number;
   districts?: { Dist_Name: string; Prov_ID: number; provinces?: { Prov_Name: string } };
   users?: { Phone?: string; Role?: string };
+}
+
+export function mapApiMerchant(data: ApiMerchant): Merchant {
+  const provinceName = data.districts?.provinces?.Prov_Name ?? '';
+  const lat = data.Lat == null ? null : Number(data.Lat);
+  const lng = data.Lng == null ? null : Number(data.Lng);
+  const coordinates = getCoordinates(lat, lng);
+  return {
+    mchId: data.Mch_ID,
+    userId: data.User_ID,
+    shopName: data.Shop_Name,
+    category: (data.Category || 'อาหารและเครื่องดื่ม') as Merchant['category'],
+    address: data.districts?.Dist_Name ?? '',
+    lat: coordinates?.[0] ?? null,
+    lng: coordinates?.[1] ?? null,
+    distId: data.Dist_ID,
+    provId: data.districts?.Prov_ID ?? 0,
+    ownerName: data.users?.Phone ?? 'เจ้าของร้าน',
+    phone: data.users?.Phone ?? '',
+    status: 'approved',
+    registeredAt: '',
+    imageUrl: '',
+    promptpayId: data.users?.Phone ?? '',
+    dailyAvgSales: 0,
+    currentDailySales: 0,
+    isAiTarget: false,
+    description: provinceName ? `อำเภอ${data.districts?.Dist_Name} จังหวัด${provinceName}` : undefined,
+  };
 }
 
 export interface ApiSale {

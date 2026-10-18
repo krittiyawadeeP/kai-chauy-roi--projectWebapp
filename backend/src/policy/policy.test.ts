@@ -24,8 +24,8 @@ test('feature routes keep their URLs and admin guards; merchant sales use the gl
   replace(prisma.grant_policy, 'create', async ({ data }: any) => { policy = { Policy_ID: policy.Policy_ID + 1, ...data }; return policy; });
   replace(prisma.merchants, 'findFirst', async () => ({ Mch_ID: 1, Dist_ID: 99 }));
   replace(prisma.merchants, 'findMany', async () => [
-    { Mch_ID: 1, Shop_Name: 'ร้านตัวอย่าง', Category: null, Lat: '13.7563', Lng: '100.5018', districts: { Dist_Name: 'พระนคร', provinces: { Prov_ID: 1, Prov_Name: 'Bangkok' } } },
-    { Mch_ID: 2, Shop_Name: 'ร้านไม่มีพิกัด', Category: null, Lat: null, Lng: null, districts: { Dist_Name: 'พระนคร', provinces: { Prov_ID: 1, Prov_Name: 'Bangkok' } } },
+    { Mch_ID: 1, Shop_Name: 'ร้านตัวอย่าง', Category: null, Lat: '13.7563', Lng: '100.5018', districts: { Dist_ID: 99, Dist_Name: 'พระนคร', provinces: { Prov_ID: 1, Prov_Name: 'Bangkok' } } },
+    { Mch_ID: 2, Shop_Name: 'ร้านไม่มีพิกัด', Category: null, Lat: null, Lng: null, districts: { Dist_ID: 99, Dist_Name: 'พระนคร', provinces: { Prov_ID: 1, Prov_Name: 'Bangkok' } } },
   ]);
   replace(prisma.users, 'findUnique', async () => ({ User_ID: 10, Role: 'USER' }));
   replace(prisma.user_grants, 'findFirst', async () => ({ Grant_ID: 1n, Remaining_Amount: 1000 }));
@@ -35,7 +35,7 @@ test('feature routes keep their URLs and admin guards; merchant sales use the gl
   replace(prisma.user_grants, 'groupBy', async () => []);
   replace(prisma.sales_transactions, 'aggregate', async () => ({ _sum: { Total_Amount: 200, Gov_Subsidized_Amount: 80, User_Paid_Amount: 120 }, _count: { Tx_ID: 2 } }));
   replace(prisma.sales_transactions, 'groupBy', async () => []);
-  replace(prisma.provinces, 'findMany', async () => [{ Prov_ID: 1, Prov_Name: 'Bangkok', districts: [{ Dist_ID: 99, _count: { merchants: 2 } }] }]);
+  replace(prisma.provinces, 'findMany', async () => [{ Prov_ID: 1, Prov_Name: 'Bangkok', districts: [{ Dist_ID: 99, Dist_Name: 'พระนคร', _count: { merchants: 2 } }] }]);
   replace(prisma.users, 'findMany', async () => []);
   replace(prisma, '$transaction', async (callback: any) => callback({
     sales_transactions: { create: async ({ data }: any) => ({ Tx_ID: 1n, ...data }) },
@@ -70,6 +70,8 @@ test('feature routes keep their URLs and admin guards; merchant sales use the gl
     assert.equal(geographicData.merchants.length, 1);
     assert.equal(geographicData.merchants[0].lat, 13.7563);
     assert.equal(geographicData.merchants[0].provinceCode, '10');
+    assert.equal(geographicData.merchants[0].districtCode, '1001');
+    assert.equal(geographicData.districts.find((d: any) => d.code === '1001').merchantCount, 2);
     assert.equal((await request('/admin/grants', admin, {})).status, 400);
     const grant = await request('/admin/grants', admin, { Citizen_ID: 'test', Total_Grant_Amount: 999 });
     assert.equal(grant.status, 201);

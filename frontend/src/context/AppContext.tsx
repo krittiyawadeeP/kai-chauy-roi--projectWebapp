@@ -30,7 +30,7 @@ import {
   INITIAL_REDEMPTIONS
 } from '../mock/initialData';
 import { api, authStorage } from '../services/api';
-import { ApiMerchant, ApiSale, merchantService } from '../services/merchantService';
+import { ApiSale, merchantService, mapApiMerchant, getCoordinates } from '../services/merchantService';
 
 interface AppContextType {
   role: Role;
@@ -85,31 +85,6 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | null>(null);
 
 const STORAGE_KEY = 'thai_chuay_thai_please_state_v1';
-
-function mapApiMerchant(data: ApiMerchant): Merchant {
-  const provinceName = data.districts?.provinces?.Prov_Name ?? '';
-  return {
-    mchId: data.Mch_ID,
-    userId: data.User_ID,
-    shopName: data.Shop_Name,
-    category: (data.Category || 'อาหารและเครื่องดื่ม') as Merchant['category'],
-    address: data.districts?.Dist_Name ?? '',
-    lat: Number(data.Lat ?? 13.8475),
-    lng: Number(data.Lng ?? 100.4932),
-    distId: data.Dist_ID,
-    provId: data.districts?.Prov_ID ?? 0,
-    ownerName: data.users?.Phone ?? 'เจ้าของร้าน',
-    phone: data.users?.Phone ?? '',
-    status: 'approved',
-    registeredAt: '',
-    imageUrl: '',
-    promptpayId: data.users?.Phone ?? '',
-    dailyAvgSales: 0,
-    currentDailySales: 0,
-    isAiTarget: false,
-    description: provinceName ? `อำเภอ${data.districts?.Dist_Name} จังหวัด${provinceName}` : undefined,
-  };
-}
 
 function mapApiSale(data: ApiSale): SalesTransaction {
   return {
@@ -370,6 +345,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Update Merchant Pin Location (Lat, Lng)
   const updateMerchantLocation = async (mchId: number, lat: number, lng: number, address?: string) => {
+    if (!getCoordinates(lat, lng)) throw new Error('กรุณาระบุละติจูดและลองจิจูดให้ถูกต้อง');
     if (mchId === currentMerchant?.mchId && authStorage.getToken()) {
       await merchantService.updateProfile({ Lat: lat, Lng: lng });
       await refreshMerchantData();
@@ -452,8 +428,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       shopName: data.shopName,
       category: data.category,
       address: data.address,
-      lat: data.lat || 13.8475,
-      lng: data.lng || 100.4932,
+      lat: data.lat ?? null,
+      lng: data.lng ?? null,
       distId: data.distId,
       provId: data.provId,
       ownerName: data.ownerName,

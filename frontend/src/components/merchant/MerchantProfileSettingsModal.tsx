@@ -230,7 +230,9 @@ export const MerchantProfileSettingsModal: React.FC<MerchantProfileSettingsModal
               <div>
                 <span className="font-bold text-[#042f2e] text-[11px] block">พิกัดแผนที่ร้านค้า (GPS)</span>
                 <span className="text-[10px] text-[#115e59] font-mono">
-                  ละติจูด {currentMerchant.lat.toFixed(6)}, ลองจิจูด {currentMerchant.lng.toFixed(6)}
+                  {currentMerchant.lat != null && currentMerchant.lng != null
+                    ? `ละติจูด ${currentMerchant.lat.toFixed(6)}, ลองจิจูด ${currentMerchant.lng.toFixed(6)}`
+                    : 'ยังไม่ได้ระบุพิกัดร้าน'}
                 </span>
               </div>
               <button

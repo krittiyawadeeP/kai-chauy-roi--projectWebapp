@@ -486,39 +486,21 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
             <div className="grid grid-cols-2 gap-2 bg-slate-50 p-2.5 rounded-xl border border-slate-200/70 text-[11px]">
               <div>
                 <span className="text-slate-400 block text-[10px]">ละติจูด (Lat)</span>
-                <strong className="text-[#115e59] font-mono">{currentMerchant.lat.toFixed(6)}</strong>
+                <strong className="text-[#115e59] font-mono">{currentMerchant.lat?.toFixed(6) ?? 'ยังไม่ระบุ'}</strong>
               </div>
               <div>
                 <span className="text-slate-400 block text-[10px]">ลองจิจูด (Lng)</span>
-                <strong className="text-[#115e59] font-mono">{currentMerchant.lng.toFixed(6)}</strong>
+                <strong className="text-[#115e59] font-mono">{currentMerchant.lng?.toFixed(6) ?? 'ยังไม่ระบุ'}</strong>
               </div>
             </div>
 
-            {/* Simulated Mini Map Preview with Visual Pin */}
-            <div
+            <button
+              type="button"
               onClick={() => setMapPickerOpen(true)}
-              className="relative h-28 rounded-xl overflow-hidden border border-teal-200 cursor-pointer group bg-slate-200"
+              className="w-full rounded-xl border border-teal-200 bg-teal-50 p-4 text-xs font-semibold text-teal-800 hover:bg-teal-100"
             >
-              <div
-                className="w-full h-full bg-cover bg-center filter saturate-75 brightness-95 group-hover:scale-105 transition-transform duration-300"
-                style={{
-                  backgroundImage: `url('https://tile.openstreetmap.org/15/${Math.floor((currentMerchant.lng + 180) / 360 * Math.pow(2, 15))}/${Math.floor((1 - Math.log(Math.tan(currentMerchant.lat * Math.PI / 180) + 1 / Math.cos(currentMerchant.lat * Math.PI / 180)) / Math.PI) / 2 * Math.pow(2, 15))}.png'), url('https://a.tile.openstreetmap.org/14/12765/7112.png')`
-                }}
-              />
-              <div className="absolute inset-0 bg-teal-900/10 group-hover:bg-teal-900/20 transition-colors flex items-center justify-center">
-                <div className="flex flex-col items-center">
-                  <div className="bg-[#115e59] text-white p-2 rounded-full shadow-lg ring-2 ring-white animate-bounce">
-                    <Icon name="shop" className="size-4" />
-                  </div>
-                  <span className="bg-slate-900/80 text-white text-[10px] font-bold px-2.5 py-0.5 rounded-full mt-1 backdrop-blur-xs">
-                    {currentMerchant.shopName}
-                  </span>
-                </div>
-              </div>
-              <div className="absolute bottom-1 right-2 text-[9px] bg-white/90 text-slate-700 px-2 py-0.5 rounded shadow-xs font-semibold">
-                แตะเพื่อเปิดแผนที่เต็ม
-              </div>
-            </div>
+              เปิดแผนที่เพื่อตรวจสอบหรือแก้ไขที่ตั้งร้าน
+            </button>
           </div>
 
           {/* Card 3: Government Verification & Co-payment participation status */}

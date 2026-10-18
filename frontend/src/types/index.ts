@@ -31,8 +31,8 @@ export interface Merchant {
   shopName: string;
   category: 'อาหารและเครื่องดื่ม' | 'ของใช้ทั่วไป' | 'หัตถกรรม/ของฝาก' | 'บริการชุมชน' | 'ผลไม้/เกษตรแปรรูป';
   address: string;
-  lat: number;
-  lng: number;
+  lat: number | null;
+  lng: number | null;
   distId: number;
   provId: number;
   ownerName: string;

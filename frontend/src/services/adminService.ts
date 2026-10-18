@@ -8,9 +8,10 @@ export interface ProvinceMetrics {
 }
 export interface MerchantLocation {
   merchantId: number; shopName: string; category: string | null; lat: number; lng: number;
-  provinceCode: string; provinceName: string; districtName: string; region: Region;
+  provinceCode: string; provinceName: string; districtCode: string; districtName: string; region: Region;
 }
-export interface GeographicDashboardData { generatedAt: string; provinces: ProvinceMetrics[]; merchants: MerchantLocation[] }
+export type DistrictMetrics = Omit<ProvinceMetrics, 'totalAllocated' | 'totalRemaining'> & { provinceCode: string; provinceName: string };
+export interface GeographicDashboardData { generatedAt: string; provinces: ProvinceMetrics[]; districts: DistrictMetrics[]; merchants: MerchantLocation[] }
 
 export interface DashboardData {
   transactions: {
@@ -50,7 +51,11 @@ export interface PolicyRecord {
 }
 
 export const adminService = {
-  getGeographicDashboard: (signal?: AbortSignal) => api.get<GeographicDashboardData>('/admin/dashboard/geography', { signal }),
+  getGeographicDashboard: async (signal?: AbortSignal) => {
+    const data = await api.get<GeographicDashboardData>('/admin/dashboard/geography', { signal });
+    if (!Array.isArray(data.districts)) throw new Error('Backend ยังไม่ส่งข้อมูลอำเภอ/เขต กรุณารีสตาร์ต backend แล้วโหลดข้อมูลใหม่');
+    return data;
+  },
   getDashboard: () => api.get<DashboardData>('/admin/dashboard'),
 
   getGrants: () => api.get<GrantRecord[]>('/admin/grants'),
