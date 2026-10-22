@@ -76,6 +76,7 @@ export const StoreMapPickerModal: React.FC<StoreMapPickerModalProps> = ({
   const [loadingLocations, setLoadingLocations] = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [gpsLoading, setGpsLoading] = useState(false);
+  const [gpsMessage, setGpsMessage] = useState('');
   const [saving, setSaving] = useState(false);
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [saveError, setSaveError] = useState('');
@@ -399,27 +400,39 @@ export const StoreMapPickerModal: React.FC<StoreMapPickerModalProps> = ({
 
   // Handle GPS Button
   const handleUseCurrentGPS = () => {
-    if (navigator.geolocation) {
-      setGpsLoading(true);
-      navigator.geolocation.getCurrentPosition(
-        position => {
-          const newLat = Number(position.coords.latitude.toFixed(6));
-          const newLng = Number(position.coords.longitude.toFixed(6));
-          setLat(newLat);
-          setLng(newLng);
-          if (mapInstanceRef.current && markerRef.current) {
-            mapInstanceRef.current.flyTo([newLat, newLng], 16);
-            markerRef.current.setLatLng([newLat, newLng]);
-          }
-          reverseGeocodePin(newLat, newLng);
-          setGpsLoading(false);
-        },
-        () => {
-          setGpsLoading(false);
-        },
-        { enableHighAccuracy: true, timeout: 6000 }
-      );
+    setGpsMessage('');
+
+    if (!navigator.geolocation) {
+      setGpsMessage('เบราว์เซอร์นี้ไม่รองรับการระบุตำแหน่ง');
+      return;
     }
+
+    setGpsLoading(true);
+    navigator.geolocation.getCurrentPosition(
+      position => {
+        const newLat = Number(position.coords.latitude.toFixed(6));
+        const newLng = Number(position.coords.longitude.toFixed(6));
+        setLat(newLat);
+        setLng(newLng);
+        setGpsMessage('ได้พิกัดปัจจุบันแล้ว');
+        if (mapInstanceRef.current && markerRef.current) {
+          mapInstanceRef.current.flyTo([newLat, newLng], 16);
+          markerRef.current.setLatLng([newLat, newLng]);
+        }
+        void reverseGeocodePin(newLat, newLng);
+        setGpsLoading(false);
+      },
+      error => {
+        const message = error.code === error.PERMISSION_DENIED
+          ? 'กรุณาอนุญาตการเข้าถึงตำแหน่งในเบราว์เซอร์'
+          : error.code === error.POSITION_UNAVAILABLE
+            ? 'ไม่สามารถระบุตำแหน่งได้ในขณะนี้'
+            : 'ระบุตำแหน่งใช้เวลานานเกินไป กรุณาลองอีกครั้ง';
+        setGpsMessage(message);
+        setGpsLoading(false);
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
   };
 
   // Quick Preset Locations with Real DOPA District IDs
@@ -542,7 +555,7 @@ export const StoreMapPickerModal: React.FC<StoreMapPickerModalProps> = ({
         </div>
 
         {/* Quick Presets with Real DOPA District IDs */}
-        <div className="py-2 flex items-center gap-1.5 overflow-x-auto text-[10px] font-bold">
+        {/* <div className="py-2 flex items-center gap-1.5 overflow-x-auto text-[10px] font-bold">
           <button
             type="button"
             onClick={() => setPresetLocation(13.8475, 100.4932, '12/4 ถ.ประชาราษฎร์ ต.สวนใหญ่ อ.เมือง จ.นนทบุรี', 12, 1201)}
@@ -571,7 +584,7 @@ export const StoreMapPickerModal: React.FC<StoreMapPickerModalProps> = ({
           >
             กาดหลวง (5001)
           </button>
-        </div>
+        </div> */}
 
         {/* 2-Way Dropdown: จังหวัด & อำเภอ with Auto-Pan */}
         <div className="pt-1 pb-1 space-y-1.5">
@@ -642,6 +655,11 @@ export const StoreMapPickerModal: React.FC<StoreMapPickerModalProps> = ({
             </span>
           )}
         </div>
+        {gpsMessage && (
+          <p role="status" aria-live="polite" className={`text-[10px] ${gpsMessage === 'ได้พิกัดปัจจุบันแล้ว' ? 'text-emerald-700' : 'text-rose-700'}`}>
+            {gpsMessage}
+          </p>
+        )}
 
         {/* Map Container */}
         <div className="relative w-full h-[240px] rounded-2xl overflow-hidden border border-slate-200 shadow-inner my-1">

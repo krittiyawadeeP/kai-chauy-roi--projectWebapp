@@ -134,7 +134,7 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
         </div>
 
         {/* Quick Merchant Switcher dropdown */}
-        <div className="relative mt-4 flex items-center justify-between bg-black/25 p-2 rounded-xl text-xs">
+        {/* <div className="relative mt-4 flex items-center justify-between bg-black/25 p-2 rounded-xl text-xs">
           <span className="text-teal-100 text-[11px]">สลับร้านค้าทดสอบ:</span>
           <select
             value={currentMerchant?.mchId}
@@ -150,7 +150,7 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
               </option>
             ))}
           </select>
-        </div>
+        </div> */}
       </header>
 
       {/* Overlapping Sales Balance Card */}
@@ -284,14 +284,14 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
           >
             ยอดขายวันนี้ ({merchantTransactions.length})
           </button>
-          {/* <button
-            onClick={() => setActiveTab('ai')}
+          <button
+            // onClick={() => setActiveTab('ai')}
             className={`flex-1 py-2 rounded-xl transition-all cursor-pointer ${
               activeTab === 'ai' ? 'bg-white text-[#115e59] shadow-xs' : 'hover:text-teal-900'
             }`}
           >
-            วิเคราะห์ AI
-          </button> */}
+            ถุงเงิน
+          </button>
           {/* <button
             onClick={() => setActiveTab('info')}
             className={`flex-1 py-2 rounded-xl transition-all cursor-pointer ${
