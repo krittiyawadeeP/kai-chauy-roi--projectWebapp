@@ -11,6 +11,8 @@ export interface RegisterPayload {
   Citizen_ID: string;
   Phone: string;
   Password: string;
+  Name?: string;
+  Pin?: string;
   Province_ID?: number;
   Dist_ID?: number;
   Role?: 'USER' | 'MERCHANT';

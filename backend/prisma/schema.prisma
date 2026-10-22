@@ -8,6 +8,17 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum MerchantCategory {
+  FOOD_DRINK @map("อาหารและเครื่องดื่ม")
+  GENERAL @map("ของใช้ทั่วไป")
+  HANDICRAFT @map("หัตถกรรม/ของฝาก")
+  COMMUNITY_SERVICE @map("บริการชุมชน")
+  AGRICULTURE @map("ผลไม้/เกษตรแปรรูป")
+  CLOTHING @map("เสื้อผ้าและเครื่องแต่งกาย")
+  HEALTH_BEAUTY @map("สุขภาพและความงาม")
+  HOME_LIVING @map("บ้านและเครื่องใช้")
+}
+
 model ai_sales_analysis {
   Analysis_ID       BigInt    @id @default(autoincrement())
   Merchant_ID       Int
@@ -49,7 +60,8 @@ model merchants {
   Mch_ID             Int                  @id @default(autoincrement())
   User_ID            Int
   Shop_Name          String               @db.VarChar(200)
-  Category           String?              @db.VarChar(100)
+  Name               String?              @db.VarChar(200)
+  Category           MerchantCategory?
   Lat                Decimal?             @db.Decimal(10, 7)
   Lng                Decimal?             @db.Decimal(10, 7)
   Dist_ID            Int
@@ -58,6 +70,7 @@ model merchants {
   users              users                @relation(fields: [User_ID], references: [User_ID], map: "fk_merchant_user")
   missions           missions[]
   sales_transactions sales_transactions[]
+  wallet             wallets?
 
   @@index([Dist_ID], map: "fk_merchant_district")
   @@index([User_ID], map: "fk_merchant_user")
@@ -171,6 +184,8 @@ model users {
   User_ID            Int                  @id @default(autoincrement())
   Citizen_ID         String               @unique(map: "Citizen_ID") @db.VarChar(20)
   Phone              String               @unique(map: "Phone") @db.VarChar(15)
+  Name               String?              @db.VarChar(200)
+  Pin_Hash           String?              @db.VarChar(255)
   Password           String               @db.VarChar(255)
   Role               String               @default("USER") @db.VarChar(20)
   Province_ID        Int?
@@ -188,12 +203,14 @@ model users {
 
 model wallets {
   Wallet_ID  Int      @id @default(autoincrement())
-  User_ID    Int      @unique(map: "User_ID")
+  User_ID    Int?     @unique(map: "User_ID")
+  Merchant_ID Int?   @unique(map: "Merchant_ID")
   Balance    Decimal  @default(0.00) @db.Decimal(12, 2)
   Status     String   @default("ACTIVE") @db.VarChar(30)
   Updated_At DateTime @updatedAt @db.DateTime(0)
   
-  users      users    @relation(fields: [User_ID], references: [User_ID], onDelete: Cascade, map: "fk_wallet_user")
+  users      users?   @relation(fields: [User_ID], references: [User_ID], onDelete: Cascade, map: "fk_wallet_user")
+  merchant   merchants? @relation(fields: [Merchant_ID], references: [Mch_ID], onDelete: Cascade, map: "fk_wallet_merchant")
 }
 
 model user_grants {

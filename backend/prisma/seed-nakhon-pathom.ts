@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import 'dotenv/config';
 import { PrismaClient } from '../src/generated/prisma/client';
 import { findProvince } from '../../shared/regions';
+import { merchantCategory } from '../src/lib/merchant-category';
 
 type Point = [number, number]; // GeoJSON: longitude, latitude.
 type Area = {
@@ -99,7 +100,7 @@ async function main() {
         const merchant = existing ? existing.merchants[0] : (await tx.users.create({
           data: {
             Citizen_ID: shop.citizenId, Phone: shop.phone, Password: randomUUID(), Role: 'MERCHANT', Province_ID: province.Prov_ID,
-            merchants: { create: { Shop_Name: shop.name, Category: shop.category, Dist_ID: district.Dist_ID, Lat: point[1], Lng: point[0] } },
+            merchants: { create: { Shop_Name: shop.name, Category: merchantCategory(shop.category), Dist_ID: district.Dist_ID, Lat: point[1], Lng: point[0], wallet: { create: {} } } },
           }, include: { merchants: true },
         })).merchants[0];
         assert.equal(merchant.Dist_ID, district.Dist_ID);

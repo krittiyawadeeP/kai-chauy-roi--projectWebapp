@@ -1,9 +1,14 @@
 import type { Response } from "express";
+import { merchantCategories } from "./merchant-category";
 
 export function sendJson(res: Response, data: unknown, status = 200) {
   const body = JSON.stringify(data, (_key, value) => {
-    if (_key === "Password") {
+    if (_key === "Password" || _key === "Pin_Hash") {
       return undefined;
+    }
+
+    if (_key === "Category" && typeof value === "string") {
+      return Object.entries(merchantCategories).find(([, category]) => category === value)?.[0] ?? value;
     }
 
     if (typeof value === "bigint") {

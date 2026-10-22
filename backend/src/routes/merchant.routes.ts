@@ -3,18 +3,25 @@ import { Router } from "express";
 import { createSession, requireAuth, requireMerchant, type AuthRequest } from "../lib/auth";
 import { badRequest, notFound, sendJson } from "../lib/http";
 import { prisma } from "../lib/prisma";
+import { merchantCategory } from "../lib/merchant-category";
+import { hashPin, validPin } from "../lib/pin";
 import { getCurrentPolicy } from '../policy/policy';
 
 export const merchantRoutes = Router();
 
 merchantRoutes.post("/register", async (req, res) => {
-  const { Citizen_ID, Phone, Password, Province_ID, Shop_Name, Category, Dist_ID } = req.body;
+  const { Citizen_ID, Phone, Password, Province_ID, Shop_Name, Name, User_Name, Pin, Category, Dist_ID } = req.body;
   if (!Citizen_ID || !Phone || !Password || !Shop_Name || !Province_ID || !Dist_ID) {
     return badRequest(res, "Citizen_ID, Phone, Password, Province_ID, Shop_Name, and Dist_ID are required");
   }
   if (!/^\d{13}$/.test(String(Citizen_ID))) return badRequest(res, "Citizen_ID must contain 13 digits");
   if (!/^\d{9,15}$/.test(String(Phone).replace(/\D/g, ""))) return badRequest(res, "Phone number is invalid");
   if (String(Password).length < 6) return badRequest(res, "Password must be at least 6 characters");
+  if (Pin !== undefined && !validPin(Pin)) return badRequest(res, "Pin must contain exactly 6 digits");
+  if (User_Name !== undefined && (typeof User_Name !== "string" || !User_Name.trim() || User_Name.length > 200)) return badRequest(res, "User_Name must be 1-200 characters");
+  if (Name !== undefined && (typeof Name !== "string" || !Name.trim() || Name.length > 200)) return badRequest(res, "Name must be 1-200 characters");
+  const category = merchantCategory(Category);
+  if (Category !== undefined && category === undefined) return badRequest(res, "Invalid merchant Category");
   const provinceId = Number(Province_ID);
   const districtId = Number(Dist_ID);
   if (!Number.isInteger(provinceId) || provinceId <= 0 || !Number.isInteger(districtId) || districtId <= 0) {
@@ -33,6 +40,8 @@ merchantRoutes.post("/register", async (req, res) => {
           Citizen_ID: String(Citizen_ID),
           Phone: String(Phone).replace(/\D/g, ""),
           Password: String(Password),
+          Name: User_Name?.trim(),
+          Pin_Hash: Pin === undefined ? undefined : hashPin(Pin),
           Province_ID: provinceId,
           Role: "MERCHANT",
           wallets: { create: { Balance: 0, Status: "ACTIVE" } },
@@ -50,8 +59,10 @@ merchantRoutes.post("/register", async (req, res) => {
         data: {
           User_ID: user.User_ID,
           Shop_Name: String(Shop_Name).trim(),
-          Category: Category ? String(Category) : null,
+          Name: Name?.trim(),
+          Category: category,
           Dist_ID: districtId,
+          wallet: { create: { Balance: 0, Status: "ACTIVE" } },
         },
         include: { districts: { include: { provinces: true } } },
       });
@@ -69,7 +80,7 @@ merchantRoutes.post("/register", async (req, res) => {
 });
 
 merchantRoutes.post("/", requireAuth, async (req: AuthRequest, res) => {
-  const { Shop_Name, Category, Lat, Lng, Dist_ID } = req.body;
+  const { Shop_Name, Name, Category, Lat, Lng, Dist_ID } = req.body;
 
   if (!Shop_Name || !Dist_ID) {
     return badRequest(res, "Shop_Name and Dist_ID are required");
@@ -78,6 +89,9 @@ merchantRoutes.post("/", requireAuth, async (req: AuthRequest, res) => {
   if (!Number.isInteger(Number(Dist_ID)) || Number(Dist_ID) <= 0) {
     return badRequest(res, "Dist_ID must be a positive integer");
   }
+  if (Name !== undefined && (typeof Name !== "string" || !Name.trim() || Name.length > 200)) return badRequest(res, "Name must be 1-200 characters");
+  const category = merchantCategory(Category);
+  if (Category !== undefined && category === undefined) return badRequest(res, "Invalid merchant Category");
 
   const existingMerchant = await prisma.merchants.findFirst({ where: { User_ID: req.user!.userId } });
   if (existingMerchant) return badRequest(res, "This user already has a merchant profile");
@@ -89,10 +103,12 @@ merchantRoutes.post("/", requireAuth, async (req: AuthRequest, res) => {
     data: {
       User_ID: req.user!.userId,
       Shop_Name,
-      Category,
+      Name: Name?.trim(),
+      Category: category,
       Lat,
       Lng,
       Dist_ID: Number(Dist_ID),
+      wallet: { create: { Balance: 0, Status: "ACTIVE" } },
     },
     include: {
       districts: true,
@@ -110,6 +126,7 @@ merchantRoutes.get("/me", requireMerchant, async (req: AuthRequest, res) => {
     include: {
       districts: true,
       users: true,
+      wallet: true,
     },
   });
 
@@ -131,9 +148,12 @@ merchantRoutes.patch("/me", requireMerchant, async (req: AuthRequest, res) => {
     return notFound(res, "Merchant not found");
   }
 
-  const { Shop_Name, Category, Lat, Lng, Dist_ID } = req.body;
+  const { Shop_Name, Name, Category, Lat, Lng, Dist_ID } = req.body;
 
   if (Shop_Name !== undefined && !String(Shop_Name).trim()) return badRequest(res, "Shop_Name cannot be empty");
+  if (Name !== undefined && (typeof Name !== "string" || !Name.trim() || Name.length > 200)) return badRequest(res, "Name must be 1-200 characters");
+  const category = merchantCategory(Category);
+  if (Category !== undefined && category === undefined) return badRequest(res, "Invalid merchant Category");
   if (Lat !== undefined && (typeof Lat !== "number" || Lat < -90 || Lat > 90)) return badRequest(res, "Lat must be between -90 and 90");
   if (Lng !== undefined && (typeof Lng !== "number" || Lng < -180 || Lng > 180)) return badRequest(res, "Lng must be between -180 and 180");
   if (Dist_ID !== undefined && (!Number.isInteger(Number(Dist_ID)) || Number(Dist_ID) <= 0)) return badRequest(res, "Dist_ID must be a positive integer");
@@ -144,7 +164,8 @@ merchantRoutes.patch("/me", requireMerchant, async (req: AuthRequest, res) => {
     },
     data: {
       Shop_Name,
-      Category,
+      Name: Name?.trim(),
+      Category: category,
       Lat,
       Lng,
       Dist_ID,
@@ -155,7 +176,7 @@ merchantRoutes.patch("/me", requireMerchant, async (req: AuthRequest, res) => {
 });
 
 merchantRoutes.post("/me/sales", requireMerchant, async (req: AuthRequest, res) => {
-  const { User_ID, Total_Amount, District_ID, Status } = req.body;
+  const { User_ID, Total_Amount, District_ID } = req.body;
 
   if (!Number.isInteger(Number(User_ID)) || Number(User_ID) <= 0 || !Number.isFinite(Number(Total_Amount)) || Number(Total_Amount) <= 0 || !Number.isInteger(Number(District_ID)) || Number(District_ID) <= 0) {
     return badRequest(res, "User_ID, Total_Amount, and District_ID are required");
@@ -164,6 +185,7 @@ merchantRoutes.post("/me/sales", requireMerchant, async (req: AuthRequest, res) 
   const userId = Number(User_ID);
   const districtId = Number(District_ID);
   const totalAmount = Number(Number(Total_Amount).toFixed(2));
+  if (totalAmount <= 0) return badRequest(res, "Total_Amount must be at least 0.01");
 
   const merchant = await prisma.merchants.findFirst({
     where: {
@@ -174,6 +196,8 @@ merchantRoutes.post("/me/sales", requireMerchant, async (req: AuthRequest, res) 
   if (!merchant) {
     return notFound(res, "Merchant not found");
   }
+  if (merchant.Dist_ID !== districtId) return badRequest(res, "District_ID must match the merchant district");
+  if (merchant.User_ID === userId) return badRequest(res, "Merchant cannot pay their own shop");
 
   const customer = await prisma.users.findUnique({ where: { User_ID: userId } });
   if (!customer) return notFound(res, "Customer not found");
@@ -197,7 +221,22 @@ merchantRoutes.post("/me/sales", requireMerchant, async (req: AuthRequest, res) 
   const govSubsidizedAmount = Math.min(requestedGovAmount, remainingGrant);
   const userPaidAmount = Number((totalAmount - govSubsidizedAmount).toFixed(2));
 
-  const transaction = await prisma.$transaction(async (tx) => {
+  try {
+    const transaction = await prisma.$transaction(async (tx) => {
+    const paid = await tx.wallets.updateMany({
+      where: { User_ID: userId, Status: "ACTIVE", Balance: { gte: userPaidAmount } },
+      data: { Balance: { decrement: userPaidAmount } },
+    });
+    if (paid.count !== 1) throw new Error("INSUFFICIENT_WALLET_BALANCE");
+
+    if (activeGrant && govSubsidizedAmount > 0) {
+      const granted = await tx.user_grants.updateMany({
+        where: { Grant_ID: activeGrant.Grant_ID, Status: "ACTIVE", Remaining_Amount: { gte: govSubsidizedAmount } },
+        data: { Remaining_Amount: { decrement: govSubsidizedAmount } },
+      });
+      if (granted.count !== 1) throw new Error("GRANT_BALANCE_CHANGED");
+    }
+
     const sale = await tx.sales_transactions.create({
       data: {
         User_ID: userId,
@@ -207,7 +246,7 @@ merchantRoutes.post("/me/sales", requireMerchant, async (req: AuthRequest, res) 
         Gov_Subsidized_Amount: govSubsidizedAmount,
         Tx_Timestamp: new Date(),
         District_ID: districtId,
-        Status: Status ?? "COMPLETED",
+        Status: "COMPLETED",
       },
       include: {
         users: true,
@@ -215,21 +254,20 @@ merchantRoutes.post("/me/sales", requireMerchant, async (req: AuthRequest, res) 
       },
     });
 
-    if (activeGrant && govSubsidizedAmount > 0) {
-      await tx.user_grants.update({
-        where: {
-          Grant_ID: activeGrant.Grant_ID,
-        },
-        data: {
-          Remaining_Amount: Number((remainingGrant - govSubsidizedAmount).toFixed(2)),
-        },
-      });
-    }
+    await tx.wallets.update({
+      where: { Merchant_ID: merchant.Mch_ID },
+      data: { Balance: { increment: totalAmount } },
+    });
 
     return sale;
-  });
+    });
 
-  sendJson(res, transaction, 201);
+    sendJson(res, transaction, 201);
+  } catch (error) {
+    if (error instanceof Error && error.message === "INSUFFICIENT_WALLET_BALANCE") return badRequest(res, "Customer wallet balance is insufficient");
+    if (error instanceof Error && error.message === "GRANT_BALANCE_CHANGED") return badRequest(res, "Customer grant balance changed; retry the sale");
+    throw error;
+  }
 });
 
 merchantRoutes.get("/me/sales", requireMerchant, async (req: AuthRequest, res) => {

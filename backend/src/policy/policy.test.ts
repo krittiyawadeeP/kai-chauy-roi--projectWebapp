@@ -19,6 +19,9 @@ test('feature routes keep their URLs and admin guards; merchant sales use the gl
   const replace = (target: any, key: string, value: unknown) => { const original = target[key]; target[key] = value; originals.push(() => { target[key] = original; }); };
   let policy: any = { Policy_ID: 1, Gov_Pay_Ratio: 0.4, User_Pay_Ratio: 0.6, Grant_Amount: 1000 };
   let grantUpdates = 0;
+  let walletDebits = 0;
+  let merchantCredits = 0;
+  let allowPayment = true;
   replace(prisma.grant_policy, 'findFirst', async () => policy);
   replace(prisma.grant_policy, 'findMany', async () => [policy]);
   replace(prisma.grant_policy, 'create', async ({ data }: any) => { policy = { Policy_ID: policy.Policy_ID + 1, ...data }; return policy; });
@@ -39,7 +42,11 @@ test('feature routes keep their URLs and admin guards; merchant sales use the gl
   replace(prisma.users, 'findMany', async () => []);
   replace(prisma, '$transaction', async (callback: any) => callback({
     sales_transactions: { create: async ({ data }: any) => ({ Tx_ID: 1n, ...data }) },
-    user_grants: { update: async () => { grantUpdates += 1; } },
+    user_grants: { updateMany: async () => { grantUpdates += 1; return { count: 1 }; } },
+    wallets: {
+      updateMany: async ({ data }: any) => { if (!allowPayment) return { count: 0 }; walletDebits += data.Balance.decrement; return { count: 1 }; },
+      update: async ({ data }: any) => { merchantCredits += data.Balance.increment; },
+    },
   }));
   const server = app.listen(0, '127.0.0.1');
   await new Promise<void>(resolve => server.once('listening', resolve));
@@ -87,10 +94,17 @@ test('feature routes keep their URLs and admin guards; merchant sales use the gl
     const first = await sale.json() as any;
     assert.equal(first.Gov_Subsidized_Amount, 150);
     assert.equal(first.User_Paid_Amount, 50);
+    assert.equal(walletDebits, 50);
+    assert.equal(merchantCredits, 200);
     await request('/admin/policy', admin, { Gov_Pay_Ratio: 0.3, Grant_Amount: 1500, Note: 'ปรับนโยบายรอบถัดไป' });
     const second = await (await request('/merchants/me/sales', merchant, { User_ID: 10, Total_Amount: 200, District_ID: 99 })).json() as any;
     assert.equal(second.Gov_Subsidized_Amount, 60);
     assert.equal(second.User_Paid_Amount, 140);
+    assert.equal(walletDebits, 190);
+    assert.equal(merchantCredits, 400);
+    allowPayment = false;
+    assert.equal((await request('/merchants/me/sales', merchant, { User_ID: 10, Total_Amount: 200, District_ID: 99 })).status, 400);
+    assert.equal(merchantCredits, 400, 'failed payment must not credit the merchant');
     assert.equal(first.Gov_Subsidized_Amount, 150, 'historical transaction amounts stay unchanged');
   } finally {
     [admin, merchant, government, citizen].forEach(destroySession);

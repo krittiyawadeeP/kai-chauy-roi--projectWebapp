@@ -171,6 +171,12 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
             </span>
           </div>
 
+          {authStorage.getToken() && currentMerchant?.walletBalance !== undefined && (
+            <p className="mt-3 border-t border-teal-100 pt-3 text-sm font-semibold text-[#115e59]">
+              ยอดเงินในกระเป๋าร้านค้า: ฿ {currentMerchant.walletBalance.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+            </p>
+          )}
+
           <div className="mt-3 grid grid-cols-2 gap-3 pt-3 border-t border-slate-100 text-xs">
             <div className="bg-[#f0fdfa] p-3 rounded-xl border border-teal-100">
               <span className="text-[10px] text-teal-800 block">ลูกค้าจ่ายผ่าน QR </span>

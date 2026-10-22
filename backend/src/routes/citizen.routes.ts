@@ -9,16 +9,19 @@ import {
 } from "../lib/auth";
 import { badRequest, notFound, sendJson, toNumber } from "../lib/http";
 import { prisma } from "../lib/prisma";
+import { hashPin, validPin } from "../lib/pin";
 import { getCurrentPolicy } from '../policy/policy';
 
 export const citizenRoutes = Router();
 
 citizenRoutes.post("/user", async (req, res) => {
-  const { Citizen_ID, Phone, Password, Province_ID } = req.body;
+  const { Citizen_ID, Phone, Password, Province_ID, Name, Pin } = req.body;
 
   if (!Citizen_ID || !Phone || !Password) {
     return badRequest(res, "Citizen_ID, Phone, and Password are required");
   }
+  if (Name !== undefined && (typeof Name !== "string" || !Name.trim() || Name.length > 200)) return badRequest(res, "Name must be 1-200 characters");
+  if (Pin !== undefined && !validPin(Pin)) return badRequest(res, "Pin must contain exactly 6 digits");
 
   const policy = await getCurrentPolicy();
   const user = await prisma.users.create({
@@ -26,6 +29,8 @@ citizenRoutes.post("/user", async (req, res) => {
       Citizen_ID,
       Phone,
       Password,
+      Name: Name?.trim(),
+      Pin_Hash: Pin === undefined ? undefined : hashPin(Pin),
       Province_ID,
       Role: "USER",
       wallets: {
@@ -141,7 +146,9 @@ citizenRoutes.patch("/user/:userId", requireAuth, async (req: AuthRequest, res) 
     return sendJson(res, { message: "You can update only your own user profile" }, 403);
   }
 
-  const { Phone, Province_ID } = req.body;
+  const { Phone, Province_ID, Name, Pin } = req.body;
+  if (Name !== undefined && (typeof Name !== "string" || !Name.trim() || Name.length > 200)) return badRequest(res, "Name must be 1-200 characters");
+  if (Pin !== undefined && !validPin(Pin)) return badRequest(res, "Pin must contain exactly 6 digits");
 
   const user = await prisma.users.update({
     where: {
@@ -150,6 +157,8 @@ citizenRoutes.patch("/user/:userId", requireAuth, async (req: AuthRequest, res) 
     data: {
       Phone,
       Province_ID,
+      Name: Name?.trim(),
+      Pin_Hash: Pin === undefined ? undefined : hashPin(Pin),
     },
   });
 

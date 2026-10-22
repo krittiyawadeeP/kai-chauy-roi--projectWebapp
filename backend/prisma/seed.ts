@@ -56,7 +56,7 @@ async function main() {
     data: {
       User_ID: user1.User_ID,
       Shop_Name: 'ร้านป้าแจ่ม ข้าวมันไก่',
-      Category: 'Food',
+      Category: 'FOOD_DRINK',
       Dist_ID: dist1.Dist_ID
     }
   });
@@ -64,7 +64,7 @@ async function main() {
     data: {
       User_ID: user2.User_ID,
       Shop_Name: 'ร้านลุงพล กาแฟโบราณ',
-      Category: 'Beverage',
+      Category: 'FOOD_DRINK',
       Dist_ID: dist2.Dist_ID
     }
   });

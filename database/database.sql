@@ -45,7 +45,8 @@ CREATE TABLE `merchants` (
     `Mch_ID` INTEGER NOT NULL AUTO_INCREMENT,
     `User_ID` INTEGER NOT NULL,
     `Shop_Name` VARCHAR(200) NOT NULL,
-    `Category` VARCHAR(100) NULL,
+    `Name` VARCHAR(200) NULL,
+    `Category` ENUM('อาหารและเครื่องดื่ม','ของใช้ทั่วไป','หัตถกรรม/ของฝาก','บริการชุมชน','ผลไม้/เกษตรแปรรูป','เสื้อผ้าและเครื่องแต่งกาย','สุขภาพและความงาม','บ้านและเครื่องใช้') NULL,
     `Lat` DECIMAL(10, 7) NULL,
     `Lng` DECIMAL(10, 7) NULL,
     `Dist_ID` INTEGER NOT NULL,
@@ -155,6 +156,8 @@ CREATE TABLE `users` (
     `User_ID` INTEGER NOT NULL AUTO_INCREMENT,
     `Citizen_ID` VARCHAR(20) NOT NULL,
     `Phone` VARCHAR(15) NOT NULL,
+    `Name` VARCHAR(200) NULL,
+    `Pin_Hash` VARCHAR(255) NULL,
     `Password` VARCHAR(255) NOT NULL,
     `Role` VARCHAR(20) NOT NULL DEFAULT 'USER',
     `Province_ID` INTEGER NULL,
@@ -168,12 +171,14 @@ CREATE TABLE `users` (
 -- CreateTable
 CREATE TABLE `wallets` (
     `Wallet_ID` INTEGER NOT NULL AUTO_INCREMENT,
-    `User_ID` INTEGER NOT NULL,
+    `User_ID` INTEGER NULL,
+    `Merchant_ID` INTEGER NULL,
     `Balance` DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
     `Status` VARCHAR(30) NOT NULL DEFAULT 'ACTIVE',
     `Updated_At` DATETIME(0) NOT NULL,
 
     UNIQUE INDEX `User_ID`(`User_ID`),
+    UNIQUE INDEX `Merchant_ID`(`Merchant_ID`),
     PRIMARY KEY (`Wallet_ID`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -247,6 +252,8 @@ ALTER TABLE `users` ADD CONSTRAINT `fk_user_province` FOREIGN KEY (`Province_ID`
 
 -- AddForeignKey
 ALTER TABLE `wallets` ADD CONSTRAINT `fk_wallet_user` FOREIGN KEY (`User_ID`) REFERENCES `users`(`User_ID`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+ALTER TABLE `wallets` ADD CONSTRAINT `fk_wallet_merchant` FOREIGN KEY (`Merchant_ID`) REFERENCES `merchants`(`Mch_ID`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `user_grants` ADD CONSTRAINT `fk_user_grant_user` FOREIGN KEY (`User_ID`) REFERENCES `users`(`User_ID`) ON DELETE CASCADE ON UPDATE CASCADE;

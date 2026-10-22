@@ -510,6 +510,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                       <option value="หัตถกรรม/ของฝาก">หัตถกรรม/ของฝาก (OTOP)</option>
                       <option value="บริการชุมชน">บริการชุมชน</option>
                       <option value="ผลไม้/เกษตรแปรรูป">ผลไม้/เกษตรแปรรูป</option>
+                      <option value="เสื้อผ้าและเครื่องแต่งกาย">เสื้อผ้าและเครื่องแต่งกาย</option>
+                      <option value="สุขภาพและความงาม">สุขภาพและความงาม</option>
+                      <option value="บ้านและเครื่องใช้">บ้านและเครื่องใช้</option>
                     </select>
                   </div>
 

@@ -75,6 +75,8 @@ erDiagram
 | `User_ID` | `INT` | PK, Auto Inc | รหัสผู้ใช้งาน |
 | `Citizen_ID` | `VARCHAR(20)` | Unique, Not Null | เลขประจำตัวประชาชน 13 หลัก |
 | `Phone` | `VARCHAR(15)` | Unique, Not Null | หมายเลขโทรศัพท์มือถือ |
+| `Name` | `VARCHAR(200)` | Nullable | ชื่อผู้ใช้งาน |
+| `Pin_Hash` | `VARCHAR(255)` | Nullable | hash ของ PIN ตัวเลข 6 หลัก ไม่เก็บ PIN ดิบ |
 | `Password` | `VARCHAR(255)` | Not Null | รหัสผ่าน (Hashed หรือข้อความที่ปลอดภัย) |
 | `Role` | `VARCHAR(20)` | Default `"USER"` | บทบาทผู้ใช้งาน (`USER`, `MERCHANT`, `ADMIN`) |
 | `Province_ID` | `INT` | FK -> `provinces(Prov_ID)`, Nullable | จังหวัดที่พำนักอาศัย |
@@ -83,7 +85,8 @@ erDiagram
 | คอลัมน์ | ชนิดข้อมูล | เงื่อนไข | คำอธิบาย |
 | :--- | :--- | :---: | :--- |
 | `Wallet_ID` | `INT` | PK, Auto Inc | รหัสกระเป๋าเงิน |
-| `User_ID` | `INT` | Unique, FK -> `users(User_ID)` | เจ้าของกระเป๋าเงิน (1:1 กับ User, On Delete Cascade) |
+| `User_ID` | `INT` | Unique, FK -> `users(User_ID)`, Nullable | เจ้าของกระเป๋าผู้ใช้ |
+| `Merchant_ID` | `INT` | Unique, FK -> `merchants(Mch_ID)`, Nullable | เจ้าของกระเป๋าร้านค้า (API กำหนดอย่างใดอย่างหนึ่งกับ `User_ID`) |
 | `Balance` | `DECIMAL(12,2)` | Default `0.00` | ยอดเงินคงเหลือในกระเป๋า |
 | `Status` | `VARCHAR(30)` | Default `"ACTIVE"` | สถานะกระเป๋าเงิน |
 | `Updated_At` | `DATETIME` | Auto Update | วันเวลาที่อัปเดตยอดล่าสุด |
@@ -120,7 +123,8 @@ erDiagram
 | `Mch_ID` | `INT` | PK, Auto Inc | รหัสประจำร้านค้า |
 | `User_ID` | `INT` | FK -> `users(User_ID)` | ผู้ใช้ที่เป็นเจ้าของร้านค้า |
 | `Shop_Name` | `VARCHAR(200)` | Not Null | ชื่อร้านค้า |
-| `Category` | `VARCHAR(100)` | Nullable | หมวดหมู่ร้าน (เช่น Food, Drink, OTOP, Grocery) |
+| `Name` | `VARCHAR(200)` | Nullable | ชื่อเจ้าของหรือผู้ติดต่อร้าน |
+| `Category` | `ENUM` | Nullable | อาหารและเครื่องดื่ม, ของใช้ทั่วไป, หัตถกรรม/ของฝาก, บริการชุมชน, ผลไม้/เกษตรแปรรูป, เสื้อผ้าและเครื่องแต่งกาย, สุขภาพและความงาม, บ้านและเครื่องใช้ |
 | `Lat` | `DECIMAL(10,7)` | Nullable | พิกัดละติจูดของร้าน |
 | `Lng` | `DECIMAL(10,7)` | Nullable | พิกัดลองจิจูดของร้าน |
 | `Dist_ID` | `INT` | FK -> `districts(Dist_ID)` | รหัสอำเภอที่ร้านค้าตั้งอยู่ |

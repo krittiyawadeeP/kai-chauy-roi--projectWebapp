@@ -29,7 +29,7 @@ export interface Merchant {
   mchId: number;
   userId: number;
   shopName: string;
-  category: 'อาหารและเครื่องดื่ม' | 'ของใช้ทั่วไป' | 'หัตถกรรม/ของฝาก' | 'บริการชุมชน' | 'ผลไม้/เกษตรแปรรูป';
+  category: 'อาหารและเครื่องดื่ม' | 'ของใช้ทั่วไป' | 'หัตถกรรม/ของฝาก' | 'บริการชุมชน' | 'ผลไม้/เกษตรแปรรูป' | 'เสื้อผ้าและเครื่องแต่งกาย' | 'สุขภาพและความงาม' | 'บ้านและเครื่องใช้';
   address: string;
   lat: number | null;
   lng: number | null;
@@ -43,6 +43,7 @@ export interface Merchant {
   promptpayId: string;
   dailyAvgSales: number;
   currentDailySales: number;
+  walletBalance?: number;
   isAiTarget: boolean;
   openingHours?: string;
   description?: string;

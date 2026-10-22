@@ -17,12 +17,14 @@ export interface ApiMerchant {
   Mch_ID: number;
   User_ID: number;
   Shop_Name: string;
+  Name?: string | null;
   Category: string | null;
   Lat: number | string | null;
   Lng: number | string | null;
   Dist_ID: number;
   districts?: { Dist_Name: string; Prov_ID: number; provinces?: { Prov_Name: string } };
   users?: { Phone?: string; Role?: string };
+  wallet?: { Balance: number | string } | null;
 }
 
 export function mapApiMerchant(data: ApiMerchant): Merchant {
@@ -40,7 +42,7 @@ export function mapApiMerchant(data: ApiMerchant): Merchant {
     lng: coordinates?.[1] ?? null,
     distId: data.Dist_ID,
     provId: data.districts?.Prov_ID ?? 0,
-    ownerName: data.users?.Phone ?? 'เจ้าของร้าน',
+    ownerName: data.Name ?? data.users?.Phone ?? 'เจ้าของร้าน',
     phone: data.users?.Phone ?? '',
     status: 'approved',
     registeredAt: '',
@@ -48,6 +50,7 @@ export function mapApiMerchant(data: ApiMerchant): Merchant {
     promptpayId: data.users?.Phone ?? '',
     dailyAvgSales: 0,
     currentDailySales: 0,
+    walletBalance: data.wallet ? Number(data.wallet.Balance) : undefined,
     isAiTarget: false,
     description: provinceName ? `อำเภอ${data.districts?.Dist_Name} จังหวัด${provinceName}` : undefined,
   };
@@ -70,8 +73,11 @@ export interface MerchantRegistrationPayload {
   Citizen_ID: string;
   Phone: string;
   Password: string;
+  User_Name?: string;
+  Pin?: string;
   Province_ID: number;
   Shop_Name: string;
+  Name?: string;
   Category: string;
   Dist_ID: number;
 }
@@ -116,6 +122,6 @@ export const merchantService = {
     return api.patch('/merchants/me', data);
   },
 
-  register: (data: { Shop_Name: string; Category: string; Lat?: number; Lng?: number; Dist_ID: number }) =>
+  register: (data: { Shop_Name: string; Name?: string; Category: string; Lat?: number; Lng?: number; Dist_ID: number }) =>
     api.post<ApiMerchant>('/merchants', data),
 };

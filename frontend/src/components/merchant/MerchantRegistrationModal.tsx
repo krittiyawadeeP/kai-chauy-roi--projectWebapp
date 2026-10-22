@@ -43,7 +43,7 @@ export const MerchantRegistrationModal: React.FC<MerchantRegistrationModalProps>
       setSubmitting(true);
       setSubmitError('');
       try {
-        await merchantService.register({ Shop_Name: shopName, Category: category, Dist_ID: distId });
+        await merchantService.register({ Shop_Name: shopName, Name: ownerName, Category: category, Dist_ID: distId });
         await refreshMerchantData();
         setSubmitted(true);
         setTimeout(() => { setActiveTab('status'); setSubmitted(false); }, 1500);
@@ -179,6 +179,9 @@ export const MerchantRegistrationModal: React.FC<MerchantRegistrationModalProps>
                   <option value="หัตถกรรม/ของฝาก">หัตถกรรม/ของฝาก (OTOP)</option>
                   <option value="บริการชุมชน">บริการชุมชน</option>
                   <option value="ผลไม้/เกษตรแปรรูป">ผลไม้/เกษตรแปรรูป</option>
+                  <option value="เสื้อผ้าและเครื่องแต่งกาย">เสื้อผ้าและเครื่องแต่งกาย</option>
+                  <option value="สุขภาพและความงาม">สุขภาพและความงาม</option>
+                  <option value="บ้านและเครื่องใช้">บ้านและเครื่องใช้</option>
                 </select>
               </div>
 
