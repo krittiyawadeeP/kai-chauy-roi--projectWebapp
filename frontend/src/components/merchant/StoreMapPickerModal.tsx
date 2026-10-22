@@ -8,6 +8,10 @@ interface StoreMapPickerModalProps {
   isOpen: boolean;
   onClose: () => void;
   mchId?: number;
+  inline?: boolean;
+  initialLocation?: { lat: number; lng: number; provinceId?: number; districtId?: number };
+  onLocationSelect?: (location: { lat: number; lng: number; provinceId: number; districtId: number }) => void;
+  onLocationChange?: (location: { lat: number; lng: number; provinceId: number; districtId: number }) => void;
 }
 
 // Fallback dictionary mapping legacy mock IDs to real DOPA IDs in MySQL table `districts`
@@ -30,20 +34,25 @@ const DUMMY_TO_REAL_DISTRICT: Record<number, { provId: number; distId: number }>
 export const StoreMapPickerModal: React.FC<StoreMapPickerModalProps> = ({
   isOpen,
   onClose,
-  mchId
+  mchId,
+  inline = false,
+  initialLocation,
+  onLocationSelect,
+  onLocationChange
 }) => {
   const { currentMerchant, updateMerchantLocation, merchants } = useApp();
 
   const targetShop = mchId ? merchants.find(m => m.mchId === mchId) : currentMerchant;
 
-  const [lat, setLat] = useState<number>(targetShop?.lat || 13.8475);
-  const [lng, setLng] = useState<number>(targetShop?.lng || 100.4932);
+  const [lat, setLat] = useState<number>(initialLocation?.lat || targetShop?.lat || 13.8475);
+  const [lng, setLng] = useState<number>(initialLocation?.lng || targetShop?.lng || 100.4932);
   const [addressInput, setAddressInput] = useState<string>(targetShop?.address || '');
 
   // Geographic state (Stores real IDs from MySQL database: Prov_ID e.g. 12, Dist_ID e.g. 1201)
   const [provinces, setProvinces] = useState<ApiProvince[]>([]);
   const [districts, setDistricts] = useState<ApiDistrict[]>([]);
   const [provinceId, setProvinceId] = useState<number>(() => {
+    if (initialLocation?.provinceId) return initialLocation.provinceId;
     const rawDistId = targetShop?.distId;
     if (rawDistId && DUMMY_TO_REAL_DISTRICT[rawDistId]) {
       return DUMMY_TO_REAL_DISTRICT[rawDistId].provId;
@@ -52,15 +61,16 @@ export const StoreMapPickerModal: React.FC<StoreMapPickerModalProps> = ({
     if (targetShop?.provId === 2) return 10;
     if (targetShop?.provId === 3) return 50;
     if (targetShop?.provId === 4) return 14;
-    return targetShop?.provId || 12;
+    return initialLocation?.provinceId || targetShop?.provId || 12;
   });
 
   const [districtId, setDistrictId] = useState<number>(() => {
+    if (initialLocation?.districtId) return initialLocation.districtId;
     const rawDistId = targetShop?.distId;
     if (rawDistId && DUMMY_TO_REAL_DISTRICT[rawDistId]) {
       return DUMMY_TO_REAL_DISTRICT[rawDistId].distId;
     }
-    return targetShop?.distId || 1201;
+    return initialLocation?.districtId || targetShop?.distId || 1201;
   });
 
   const [loadingLocations, setLoadingLocations] = useState(false);
@@ -73,6 +83,10 @@ export const StoreMapPickerModal: React.FC<StoreMapPickerModalProps> = ({
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
+  const initialAutoPanDoneRef = useRef(false);
+  const initialAutoPanCompleteRef = useRef(false);
+  const onLocationChangeRef = useRef(onLocationChange);
+  onLocationChangeRef.current = onLocationChange;
 
   // 1. Initial Load: Fetch Provinces from DB
   useEffect(() => {
@@ -87,10 +101,10 @@ export const StoreMapPickerModal: React.FC<StoreMapPickerModalProps> = ({
         setProvinces(provs);
 
         // Sanitize initial provId
-        let targetProvId = targetShop?.provId || 12;
-        if (targetShop?.distId && DUMMY_TO_REAL_DISTRICT[targetShop.distId]) {
+        let targetProvId = initialLocation?.provinceId || (inline ? provs[0]?.Prov_ID : targetShop?.provId) || 12;
+        if (!inline && !initialLocation?.provinceId && targetShop?.distId && DUMMY_TO_REAL_DISTRICT[targetShop.distId]) {
           targetProvId = DUMMY_TO_REAL_DISTRICT[targetShop.distId].provId;
-        } else if (targetProvId === 1) {
+        } else if (!inline && !initialLocation?.provinceId && targetProvId === 1) {
           targetProvId = 12;
         }
 
@@ -109,7 +123,7 @@ export const StoreMapPickerModal: React.FC<StoreMapPickerModalProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [isOpen, targetShop?.provId, targetShop?.distId]);
+  }, [isOpen, inline, targetShop?.provId, targetShop?.distId, initialLocation?.provinceId]);
 
   // 2. Load Districts from DB when provinceId changes
   useEffect(() => {
@@ -130,8 +144,8 @@ export const StoreMapPickerModal: React.FC<StoreMapPickerModalProps> = ({
         }
 
         // Check if targetShop had a mapped districtId
-        let targetDist = targetShop?.distId || 0;
-        if (targetDist && DUMMY_TO_REAL_DISTRICT[targetDist]) {
+        let targetDist = initialLocation?.districtId || (inline ? 0 : targetShop?.distId) || 0;
+        if (!inline && !initialLocation?.districtId && targetDist && DUMMY_TO_REAL_DISTRICT[targetDist]) {
           targetDist = DUMMY_TO_REAL_DISTRICT[targetDist].distId;
         }
 
@@ -142,7 +156,7 @@ export const StoreMapPickerModal: React.FC<StoreMapPickerModalProps> = ({
         }
 
         // Try matching district name in shop address (e.g. "ปากเกร็ด" or "เมืองนนทบุรี")
-        const matchByAddr = dists.find(d => targetShop?.address && targetShop.address.includes(d.Dist_Name));
+        const matchByAddr = !inline && dists.find(d => targetShop?.address && targetShop.address.includes(d.Dist_Name));
         if (matchByAddr) {
           setDistrictId(matchByAddr.Dist_ID);
           return;
@@ -163,18 +177,18 @@ export const StoreMapPickerModal: React.FC<StoreMapPickerModalProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [isOpen, provinceId]);
+  }, [isOpen, provinceId, initialLocation?.districtId]);
 
   // Sync initial coords and address when modal opens
   useEffect(() => {
-    if (isOpen && targetShop) {
-      setLat(targetShop.lat || 13.8475);
-      setLng(targetShop.lng || 100.4932);
-      setAddressInput(targetShop.address || '');
+    if (isOpen && (targetShop || onLocationSelect || onLocationChange)) {
+      setLat(initialLocation?.lat || targetShop?.lat || 13.8475);
+      setLng(initialLocation?.lng || targetShop?.lng || 100.4932);
+      if (!inline) setAddressInput(targetShop?.address || '');
       setSavedSuccess(false);
       setSaveError('');
     }
-  }, [isOpen, targetShop]);
+  }, [isOpen, inline, targetShop, initialLocation?.lat, initialLocation?.lng]);
 
   // Reverse Geocode: From Pin (Lat, Lng) -> Auto Select Real Province & District from DB
   const reverseGeocodePin = async (targetLat: number, targetLng: number) => {
@@ -367,7 +381,21 @@ export const StoreMapPickerModal: React.FC<StoreMapPickerModalProps> = ({
     };
   }, [isOpen]);
 
-  if (!isOpen || !targetShop) return null;
+  useEffect(() => {
+    const selectedDistrict = districts.find(item => item.Dist_ID === districtId);
+    const selectedProvince = provinces.find(item => item.Prov_ID === provinceId);
+    if (!inline || !isOpen || initialAutoPanDoneRef.current || !selectedDistrict || !selectedProvince) return;
+    initialAutoPanDoneRef.current = true;
+    void panToDistrict(selectedProvince.Prov_Name, selectedDistrict.Dist_Name)
+      .finally(() => { initialAutoPanCompleteRef.current = true; });
+  }, [inline, isOpen, provinces, districts, provinceId, districtId]);
+
+  useEffect(() => {
+    if (!inline || !initialAutoPanCompleteRef.current || isGeocoding || loadingLocations || !districts.some(item => item.Dist_ID === districtId)) return;
+    onLocationChangeRef.current?.({ lat, lng, provinceId, districtId });
+  }, [inline, districts, lat, lng, provinceId, districtId, isGeocoding, loadingLocations]);
+
+  if (!isOpen || (!targetShop && !onLocationSelect && !onLocationChange)) return null;
 
   // Handle GPS Button
   const handleUseCurrentGPS = () => {
@@ -453,6 +481,17 @@ export const StoreMapPickerModal: React.FC<StoreMapPickerModalProps> = ({
     }
 
     try {
+      if (onLocationSelect) {
+        onLocationSelect({ lat, lng, provinceId, districtId: validDistId });
+        setSavedSuccess(true);
+        setTimeout(() => {
+          setSavedSuccess(false);
+          onClose();
+        }, 900);
+        return;
+      }
+
+      if (!targetShop) return;
       await updateMerchantLocation(targetShop.mchId, lat, lng, addressInput, validDistId);
       setSavedSuccess(true);
       setTimeout(() => {
@@ -473,11 +512,11 @@ export const StoreMapPickerModal: React.FC<StoreMapPickerModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-[#07162d]/75 p-3 backdrop-blur-sm animate-fade-in"
-      onClick={onClose}
+      className={inline ? 'w-full animate-fade-in' : 'fixed inset-0 z-50 grid place-items-center bg-[#07162d]/75 p-3 backdrop-blur-sm animate-fade-in'}
+      onClick={inline ? undefined : onClose}
     >
       <div
-        className="w-full max-w-[450px] rounded-[28px] bg-white p-5 shadow-2xl overflow-hidden flex flex-col max-h-[94vh]"
+        className={inline ? 'w-full rounded-2xl border border-teal-200 bg-white p-3 shadow-sm' : 'w-full max-w-[450px] rounded-[28px] bg-white p-5 shadow-2xl overflow-hidden flex flex-col max-h-[94vh]'}
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -488,38 +527,45 @@ export const StoreMapPickerModal: React.FC<StoreMapPickerModalProps> = ({
             </span>
             <div>
               <h3 className="font-bold text-sm text-slate-800">ปักหมุดพิกัดร้านค้าบนแผนที่ (GPS)</h3>
-              <p className="text-[10px] text-slate-400">{targetShop.shopName}</p>
+              <p className="text-[10px] text-slate-400">{inline ? 'เลือกจังหวัด/อำเภอ แล้วลากหมุดให้ตรงร้านค้า' : targetShop?.shopName || 'เลือกตำแหน่งร้านค้า'}</p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="grid size-8 place-items-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 cursor-pointer"
-          >
-            <Icon name="x" className="size-4" />
-          </button>
+          {!inline && (
+            <button
+              type="button"
+              onClick={onClose}
+              className="grid size-8 place-items-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 cursor-pointer"
+            >
+              <Icon name="x" className="size-4" />
+            </button>
+          )}
         </div>
 
         {/* Quick Presets with Real DOPA District IDs */}
         <div className="py-2 flex items-center gap-1.5 overflow-x-auto text-[10px] font-bold">
           <button
+            type="button"
             onClick={() => setPresetLocation(13.8475, 100.4932, '12/4 ถ.ประชาราษฎร์ ต.สวนใหญ่ อ.เมือง จ.นนทบุรี', 12, 1201)}
             className="px-2.5 py-1 rounded-lg bg-teal-50 text-[#115e59] border border-teal-200 hover:bg-teal-100 shrink-0 cursor-pointer"
           >
             ท่าน้ำนนท์ (1201)
           </button>
           <button
+            type="button"
             onClick={() => setPresetLocation(13.9123, 100.4908, '55 หมู่ 1 ต.เกาะเกร็ด อ.ปากเกร็ด จ.นนทบุรี', 12, 1206)}
             className="px-2.5 py-1 rounded-lg bg-teal-50 text-[#115e59] border border-teal-200 hover:bg-teal-100 shrink-0 cursor-pointer"
           >
             เกาะเกร็ด (1206)
           </button>
           <button
+            type="button"
             onClick={() => setPresetLocation(13.7516, 100.5015, '88 ถ.ดินสอ แขวงเสาชิงช้า เขตพระนคร กรุงเทพฯ', 10, 1001)}
             className="px-2.5 py-1 rounded-lg bg-teal-50 text-[#115e59] border border-teal-200 hover:bg-teal-100 shrink-0 cursor-pointer"
           >
             เสาชิงช้า/พระนคร (1001)
           </button>
           <button
+            type="button"
             onClick={() => setPresetLocation(18.7903, 98.9972, '14 ถ.วิชยานนท์ ต.ช้างม่อย อ.เมือง จ.เชียงใหม่', 50, 5001)}
             className="px-2.5 py-1 rounded-lg bg-teal-50 text-[#115e59] border border-teal-200 hover:bg-teal-100 shrink-0 cursor-pointer"
           >
@@ -581,6 +627,7 @@ export const StoreMapPickerModal: React.FC<StoreMapPickerModalProps> = ({
         {/* GPS Quick Action */}
         <div className="py-1 flex items-center justify-between text-[11px]">
           <button
+            type="button"
             onClick={handleUseCurrentGPS}
             disabled={gpsLoading}
             className="px-2.5 py-1 rounded-lg bg-[#115e59] text-white flex items-center gap-1 hover:bg-teal-800 transition-colors cursor-pointer text-[10px] font-bold"
@@ -675,14 +722,16 @@ export const StoreMapPickerModal: React.FC<StoreMapPickerModalProps> = ({
             </p>
           )}
 
-          <div className="flex gap-2 pt-1">
+          {!inline && <div className="flex gap-2 pt-1">
             <button
+              type="button"
               onClick={onClose}
               className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold cursor-pointer"
             >
               ยกเลิก
             </button>
             <button
+              type="button"
               onClick={handleSavePin}
               disabled={saving}
               className="flex-[2] py-2.5 bg-[#115e59] hover:bg-[#0f766e] text-white rounded-xl text-xs font-bold shadow-md shadow-teal-900/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
@@ -690,7 +739,7 @@ export const StoreMapPickerModal: React.FC<StoreMapPickerModalProps> = ({
               <Icon name="check" className="size-4" />
               <span>{saving ? 'กำลังบันทึก…' : 'บันทึกตำแหน่งร้านนี้'}</span>
             </button>
-          </div>
+          </div>}
         </div>
       </div>
     </div>

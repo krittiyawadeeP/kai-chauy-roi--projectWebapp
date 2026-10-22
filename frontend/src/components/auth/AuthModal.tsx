@@ -1,12 +1,12 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Icon } from '../common/Icon';
 import { INITIAL_PROVINCES, INITIAL_DISTRICTS } from '../../mock/initialData';
 import { Merchant } from '../../types';
 import { authService, LoginPayload } from '../../services/authService';
 import { ApiError } from '../../services/api';
-import { ApiDistrict, ApiProvince, geoService } from '../../services/geoService';
 import { merchantService } from '../../services/merchantService';
+import { StoreMapPickerModal } from '../merchant/StoreMapPickerModal';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -66,42 +66,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [mchAddress, setMchAddress] = useState('');
   const [mchProvId, setMchProvId] = useState(0);
   const [mchDistId, setMchDistId] = useState(0);
-  const [merchantProvinces, setMerchantProvinces] = useState<ApiProvince[]>([]);
-  const [merchantDistricts, setMerchantDistricts] = useState<ApiDistrict[]>([]);
-  const [loadingMerchantLocations, setLoadingMerchantLocations] = useState(false);
+  const [mchPinLocation, setMchPinLocation] = useState<{ lat: number; lng: number; provinceId: number; districtId: number } | null>(null);
 
   const [notice, setNotice] = useState<string>('');
   const [errorNotice, setErrorNotice] = useState<string>('');
 
   const filteredDistricts = INITIAL_DISTRICTS.filter(d => d.provId === regProvId);
-
-  useEffect(() => {
-    if (!isOpen || authRole !== 'merchant' || authMode !== 'register') return;
-    setLoadingMerchantLocations(true);
-    geoService.getProvinces()
-      .then(items => {
-        setMerchantProvinces(items);
-        setMchProvId(current => items.some(item => item.Prov_ID === current) ? current : items[0]?.Prov_ID ?? 0);
-      })
-      .catch(error => setErrorNotice(error instanceof Error ? error.message : 'โหลดจังหวัดไม่สำเร็จ'))
-      .finally(() => setLoadingMerchantLocations(false));
-  }, [isOpen, authRole, authMode]);
-
-  useEffect(() => {
-    if (!isOpen || authRole !== 'merchant' || authMode !== 'register' || !mchProvId) {
-      setMerchantDistricts([]);
-      setMchDistId(0);
-      return;
-    }
-    setLoadingMerchantLocations(true);
-    geoService.getDistricts(mchProvId)
-      .then(items => {
-        setMerchantDistricts(items);
-        setMchDistId(current => items.some(item => item.Dist_ID === current) ? current : items[0]?.Dist_ID ?? 0);
-      })
-      .catch(error => setErrorNotice(error instanceof Error ? error.message : 'โหลดอำเภอไม่สำเร็จ'))
-      .finally(() => setLoadingMerchantLocations(false));
-  }, [isOpen, authRole, authMode, mchProvId]);
 
   if (!isOpen) return null;
 
@@ -174,7 +144,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         setErrorNotice(error instanceof ApiError && error.status === 401 ? 'เบอร์โทรศัพท์หรือรหัสผ่านไม่ถูกต้อง' : error instanceof Error ? error.message : 'เข้าสู่ระบบไม่สำเร็จ');
       }
     } else {
-      if (!mchShopName || !mchOwnerName || !mchPhone || !mchProvId || !mchDistId) {
+      if (!mchShopName || !mchOwnerName || !mchPhone || !mchProvId || !mchDistId || !mchPinLocation) {
         setErrorNotice('กรุณากรอกข้อมูลร้านค้าให้ครบถ้วน');
         return;
       }
@@ -195,10 +165,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           Citizen_ID: mchCitizenId.replace(/\D/g, ''),
           Phone: mchPhone,
           Password: mchRegisterPassword,
-          Province_ID: mchProvId,
+          Province_ID: mchPinLocation.provinceId,
           Shop_Name: mchShopName,
           Category: mchCategory,
-          Dist_ID: mchDistId,
+          Dist_ID: mchPinLocation.districtId,
+          Lat: mchPinLocation.lat,
+          Lng: mchPinLocation.lng,
         });
         setRole('merchant');
         setIsAuthenticated(true);
@@ -558,22 +530,17 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     <label className="block text-[11px] font-bold text-slate-600 mb-1">เบอร์โทรศัพท์ *</label>
                     <input type="tel" required value={mchPhone} onChange={e => setMchPhone(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-xl" />
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-600 mb-1">จังหวัด *</label>
-                      <select required value={mchProvId || ''} disabled={loadingMerchantLocations || merchantProvinces.length === 0} onChange={e => { setMchProvId(Number(e.target.value)); setMchDistId(0); }} className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white">
-                        <option value="" disabled>{loadingMerchantLocations ? 'กำลังโหลดจังหวัด...' : 'เลือกจังหวัด'}</option>
-                        {merchantProvinces.map(item => <option key={item.Prov_ID} value={item.Prov_ID}>{item.Prov_Name}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-bold text-slate-600 mb-1">อำเภอ *</label>
-                      <select required value={mchDistId || ''} disabled={loadingMerchantLocations || !mchProvId || merchantDistricts.length === 0} onChange={e => setMchDistId(Number(e.target.value))} className="w-full px-3 py-2 border border-slate-200 rounded-xl bg-white">
-                        <option value="" disabled>{loadingMerchantLocations ? 'กำลังโหลดอำเภอ...' : 'เลือกอำเภอ'}</option>
-                        {merchantDistricts.map(item => <option key={item.Dist_ID} value={item.Dist_ID}>{item.Dist_Name}</option>)}
-                      </select>
-                    </div>
-                  </div>
+                  <StoreMapPickerModal
+                    isOpen
+                    inline
+                    onClose={() => undefined}
+                    initialLocation={mchPinLocation || undefined}
+                    onLocationChange={location => {
+                      setMchPinLocation(location);
+                      setMchProvId(location.provinceId);
+                      setMchDistId(location.districtId);
+                    }}
+                  />
                   <div>
                     <label className="block text-[11px] font-bold text-slate-600 mb-1">ตั้งรหัสผ่าน (อย่างน้อย 6 ตัวอักษร) *</label>
                     <input type="password" required minLength={6} autoComplete="new-password" value={mchRegisterPassword} onChange={e => setMchRegisterPassword(e.target.value)} className="w-full px-3 py-2 border border-slate-200 rounded-xl" />
@@ -600,7 +567,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     <label className="block text-[11px] font-bold text-slate-600 mb-1">ที่ตั้งร้านค้า *</label>
                     <textarea rows={2} required value={mchAddress} onChange={e => setMchAddress(e.target.value)} placeholder="ระบุที่ตั้งร้านค้า" className="w-full px-3 py-2 border border-slate-200 rounded-xl" />
                   </div> */}
-                  <button type="submit" disabled={loadingMerchantLocations || !mchProvId || !mchDistId} className="w-full py-2.5 bg-[#115e59] hover:bg-[#0f766e] text-white rounded-xl font-bold shadow-md shadow-teal-900/20 transition-all mt-1">
+                  <button type="submit" disabled={!mchProvId || !mchDistId || !mchPinLocation} className="w-full py-2.5 bg-[#115e59] hover:bg-[#0f766e] text-white rounded-xl font-bold shadow-md shadow-teal-900/20 transition-all mt-1">
                     ยืนยันลงทะเบียนร้านค้าใหม่
                   </button>
                 </form>

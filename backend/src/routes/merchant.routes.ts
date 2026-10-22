@@ -7,7 +7,7 @@ import { prisma } from "../lib/prisma";
 export const merchantRoutes = Router();
 
 merchantRoutes.post("/register", async (req, res) => {
-  const { Citizen_ID, Phone, Password, Province_ID, Shop_Name, Category, Dist_ID } = req.body;
+  const { Citizen_ID, Phone, Password, Province_ID, Shop_Name, Category, Dist_ID, Lat, Lng } = req.body;
   if (!Citizen_ID || !Phone || !Password || !Shop_Name || !Province_ID || !Dist_ID) {
     return badRequest(res, "Citizen_ID, Phone, Password, Province_ID, Shop_Name, and Dist_ID are required");
   }
@@ -19,6 +19,8 @@ merchantRoutes.post("/register", async (req, res) => {
   if (!Number.isInteger(provinceId) || provinceId <= 0 || !Number.isInteger(districtId) || districtId <= 0) {
     return badRequest(res, "Province_ID and Dist_ID must be positive integers");
   }
+  if (Lat !== undefined && (typeof Lat !== "number" || Lat < -90 || Lat > 90)) return badRequest(res, "Lat must be between -90 and 90");
+  if (Lng !== undefined && (typeof Lng !== "number" || Lng < -180 || Lng > 180)) return badRequest(res, "Lng must be between -180 and 180");
 
   try {
     const district = await prisma.districts.findUnique({ where: { Dist_ID: districtId } });
@@ -50,6 +52,8 @@ merchantRoutes.post("/register", async (req, res) => {
           Shop_Name: String(Shop_Name).trim(),
           Category: Category ? String(Category) : null,
           Dist_ID: districtId,
+          Lat,
+          Lng,
         },
         include: { districts: { include: { provinces: true } } },
       });

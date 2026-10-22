@@ -40,6 +40,8 @@ export interface MerchantRegistrationPayload {
   Shop_Name: string;
   Category: string;
   Dist_ID: number;
+  Lat?: number;
+  Lng?: number;
 }
 
 export interface MerchantRegistrationResponse {
