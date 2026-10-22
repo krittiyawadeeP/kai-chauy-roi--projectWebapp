@@ -21,7 +21,6 @@ export const MerchantProfileSettingsModal: React.FC<MerchantProfileSettingsModal
   const [category, setCategory] = useState<Merchant['category']>('อาหารและเครื่องดื่ม');
   const [ownerName, setOwnerName] = useState('');
   const [phone, setPhone] = useState('');
-  const [promptpayId, setPromptpayId] = useState('');
   const [provinceId, setProvinceId] = useState(0);
   const [districtId, setDistrictId] = useState(0);
   const [provinces, setProvinces] = useState<ApiProvince[]>([]);
@@ -41,7 +40,6 @@ export const MerchantProfileSettingsModal: React.FC<MerchantProfileSettingsModal
       setCategory(currentMerchant.category || 'อาหารและเครื่องดื่ม');
       setOwnerName(currentMerchant.ownerName || '');
       setPhone(currentMerchant.phone || '');
-      setPromptpayId(currentMerchant.promptpayId || currentMerchant.phone || '');
       setProvinceId(currentMerchant.provId || 0);
       setDistrictId(currentMerchant.distId || 0);
       setOpeningHours(currentMerchant.openingHours || '08:00 - 17:00 น.');
@@ -90,6 +88,7 @@ export const MerchantProfileSettingsModal: React.FC<MerchantProfileSettingsModal
     try {
     await updateMerchantProfile(currentMerchant.mchId, {
       shopName,
+      ownerName,
       category,
       distId: districtId,
     });
@@ -177,6 +176,24 @@ export const MerchantProfileSettingsModal: React.FC<MerchantProfileSettingsModal
 
           <div className="grid grid-cols-2 gap-2">
             <div>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">ชื่อเจ้าของร้าน</label>
+              <input
+                type="text"
+                value={ownerName}
+                onChange={e => setOwnerName(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">กระเป๋ารับเงินร้านค้า</label>
+              <input
+                type="text"
+                value={currentMerchant.walletBalance === undefined ? 'ยังไม่มีข้อมูลยอดเงิน' : `฿ ${currentMerchant.walletBalance.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`}
+                readOnly
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl font-mono"
+              />
+            </div>
+            <div>
               <label className="block text-[11px] font-bold text-slate-600 mb-1">หมวดหมู่ร้านค้า</label>
               <select
                 value={category}
@@ -192,38 +209,6 @@ export const MerchantProfileSettingsModal: React.FC<MerchantProfileSettingsModal
                 <option value="สุขภาพและความงาม">สุขภาพและความงาม</option>
                 <option value="บ้านและเครื่องใช้">บ้านและเครื่องใช้</option>
               </select>
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-bold text-slate-600 mb-1">เวลาเปิด-ปิด</label>
-              <input
-                type="text"
-                value={openingHours}
-                onChange={e => setOpeningHours(e.target.value)}
-                placeholder="เช่น 08:00 - 18:00 น."
-                className="w-full px-3 py-2 border border-slate-200 rounded-xl"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            {/* <div>
-              <label className="block text-[11px] font-bold text-slate-600 mb-1">ชื่อเจ้าของร้าน</label>
-              <input
-                type="text"
-                value={ownerName}
-                onChange={e => setOwnerName(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-xl"
-              />
-            </div> */}
-            <div>
-              <label className="block text-[11px] font-bold text-slate-600 mb-1">หมายเลขพร้อมเพย์ (รับเงิน)</label>
-              <input
-                type="text"
-                value={promptpayId}
-                onChange={e => setPromptpayId(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-xl font-mono"
-              />
             </div>
           </div>
 
@@ -251,7 +236,7 @@ export const MerchantProfileSettingsModal: React.FC<MerchantProfileSettingsModal
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
+          {/* <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="block text-[11px] font-bold text-slate-600 mb-1">จังหวัด</label>
               <select
@@ -278,9 +263,9 @@ export const MerchantProfileSettingsModal: React.FC<MerchantProfileSettingsModal
                 {districts.map(item => <option key={item.Dist_ID} value={item.Dist_ID}>{item.Dist_Name}</option>)}
               </select>
             </div>
-          </div>
+          </div> */}
 
-          <div>
+          {/* <div>
             <label className="block text-[11px] font-bold text-slate-600 mb-1">คำแนะนำ / รายละเอียดร้าน</label>
             <textarea
               rows={2}
@@ -289,7 +274,7 @@ export const MerchantProfileSettingsModal: React.FC<MerchantProfileSettingsModal
               placeholder="จุดเด่น สินค้าแนะนำ หรือโปรโมชันของร้าน"
               className="w-full px-3 py-2 border border-slate-200 rounded-xl"
             />
-          </div>
+          </div> */}
 
           <div className="flex gap-2 pt-2">
             <button

@@ -55,6 +55,8 @@ test('feature routes keep their URLs and admin guards; merchant sales use the gl
   const government = createSession(3, 'GOVERNMENT'); const citizen = createSession(10, 'USER');
   const request = (path: string, token: string, body?: unknown) => fetch(base + path, { method: body ? 'POST' : 'GET', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) });
   try {
+    assert.equal((await fetch(base + '/merchants/1', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ Lat: 13 }) })).status, 404);
+    assert.equal((await fetch(base + '/merchants/me', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ Lat: 13 }) })).status, 401);
     for (const token of ['', citizen, merchant, government]) {
       assert.equal((await request('/admin/policy', token, { Gov_Pay_Ratio: 0.75, Grant_Amount: 1500, Note: 'ทดสอบ' })).status, token ? 403 : 401);
       for (const path of ['/admin/dashboard', '/admin/dashboard/geography', '/admin/policy', '/admin/policy/history', '/admin/grants']) {

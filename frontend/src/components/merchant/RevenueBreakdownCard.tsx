@@ -5,10 +5,10 @@ import { SalesTransaction } from '../../types';
 
 interface RevenueBreakdownCardProps {
   className?: string;
-  initialPeriod?: 'today' | '7days' | 'month' | 'all';
+  initialPeriod?: 'today' | 'yesterday' | '7days' | 'month' | 'all';
 }
 
-type PeriodType = 'today' | '7days' | 'month' | 'all';
+type PeriodType = 'today' | 'yesterday' | '7days' | 'month' | 'all';
 
 export const RevenueBreakdownCard: React.FC<RevenueBreakdownCardProps> = ({
   className = '',
@@ -76,6 +76,11 @@ export const RevenueBreakdownCard: React.FC<RevenueBreakdownCardProps> = ({
       if (selectedPeriod === 'today') {
         return txDate.toDateString() === referenceDate.toDateString();
       }
+      if (selectedPeriod === 'yesterday') {
+        const yesterday = new Date(referenceDate);
+        yesterday.setDate(yesterday.getDate() - 1);
+        return txDate.toDateString() === yesterday.toDateString();
+      }
       if (selectedPeriod === '7days') {
         return diffDays >= 0 && diffDays <= 7;
       }
@@ -108,10 +113,17 @@ export const RevenueBreakdownCard: React.FC<RevenueBreakdownCardProps> = ({
   const currentMonthLabel = availableMonths.find(m => m.key === selectedMonth)?.label || 'ประจำเดือน';
   const periodLabelMap: Record<PeriodType, string> = {
     today: 'วันนี้',
+    yesterday: 'เมื่อวาน',
     '7days': '7 วันย้อนหลัง',
     month: selectedMonth === 'all' ? 'ทุกเดือน' : `ประจำเดือน ${currentMonthLabel}`,
     all: 'ยอดรวมสะสมทุกช่วงเวลา'
   };
+  const statementDate = new Intl.DateTimeFormat('th-TH', {
+    dateStyle: 'long'
+  }).format(new Date());
+  const statementRows = [...filteredTransactions].sort(
+    (a, b) => new Date(a.txTimestamp.replace(' ', 'T')).getTime() - new Date(b.txTimestamp.replace(' ', 'T')).getTime()
+  );
 
   // Search filtered bills
   const searchedTransactions = useMemo(() => {
@@ -144,11 +156,11 @@ export const RevenueBreakdownCard: React.FC<RevenueBreakdownCardProps> = ({
               <h2 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
                 <span>สรุปยอดรายได้ตามช่วงเวลา</span>
                 <span className="text-[10px] bg-teal-50 text-[#115e59] border border-teal-200/80 px-2 py-0.2 rounded-full font-bold">
-                  สิทธิ์ 60/40
+                  สิทธิ์ตามนโยบาย
                 </span>
               </h2>
               <p className="text-[10px] text-slate-400">
-                ระบบคำนวณสัดส่วน 60/40 และเงินสมทบพร้อมเพย์แบบเรียลไทม์
+                ระบบคำนวณสัดส่วนตามนโยบายและยอดเข้ากระเป๋าร้านค้า
               </p>
             </div>
           </div>
@@ -158,7 +170,7 @@ export const RevenueBreakdownCard: React.FC<RevenueBreakdownCardProps> = ({
             onClick={() => {
               window.print();
             }}
-            className="p-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-500 hover:text-slate-800 border border-slate-200 text-[11px] font-medium transition-colors flex items-center gap-1"
+            className="print:hidden p-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-500 hover:text-slate-800 border border-slate-200 text-[11px] font-medium transition-colors flex items-center gap-1"
             title="พิมพ์ / ส่งออกสรุปรายงาน"
           >
             <span>🖨️</span>
@@ -191,6 +203,16 @@ export const RevenueBreakdownCard: React.FC<RevenueBreakdownCardProps> = ({
               }`}
             >
               วันนี้
+            </button>
+            <button
+              onClick={() => setSelectedPeriod('yesterday')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer ${
+                selectedPeriod === 'yesterday'
+                  ? 'bg-[#115e59] text-white shadow-sm shadow-teal-900/20'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              เมื่อวาน
             </button>
             <button
               onClick={() => setSelectedPeriod('7days')}
@@ -286,7 +308,7 @@ export const RevenueBreakdownCard: React.FC<RevenueBreakdownCardProps> = ({
               </div>
               <div className="text-right">
                 <span className="bg-white/20 text-teal-50 px-2.5 py-1 rounded-lg text-[10px] font-bold backdrop-blur-xs border border-white/20 block mb-1">
-                  สิทธิ์โครงการ 60/40
+                  สิทธิ์โครงการ
                 </span>
                 <span className="text-[10px] text-teal-200">
                   เฉลี่ย ฿{kpiData.avgPerBill.toLocaleString()} / บิล
@@ -295,7 +317,7 @@ export const RevenueBreakdownCard: React.FC<RevenueBreakdownCardProps> = ({
             </div>
           </div>
 
-          {/* 60% vs 40% Split Breakdown Row */}
+          {/* Actual payment split */}
           <div className="grid grid-cols-2 gap-2.5">
             {/* KPI 2: ส่วนที่ลูกค้าชำระผ่าน QR  */}
             <div className="rounded-2xl bg-gradient-to-b from-blue-50/90 to-sky-50/50 p-3.5 border border-blue-200/80 shadow-xs relative">
@@ -344,7 +366,7 @@ export const RevenueBreakdownCard: React.FC<RevenueBreakdownCardProps> = ({
                   ฿ {kpiData.governmentSubsidy60.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
               </p>
               <div className="mt-1.5 pt-1.5 border-t border-emerald-200/60 flex items-center justify-between text-[10px] text-emerald-800">
-                <span>เข้าพร้อมเพย์</span>
+                <span>เข้ากระเป๋าร้านค้า</span>
                 <span className="font-semibold text-emerald-700 flex items-center gap-0.5">
                   <span>✓</span> สำเร็จ 100%
                 </span>
@@ -381,18 +403,72 @@ export const RevenueBreakdownCard: React.FC<RevenueBreakdownCardProps> = ({
             <div className="flex items-center gap-1.5">
               <span>💳</span>
               <span>
-                บัญชีพร้อมเพย์ร้านค้า:&nbsp;
+                กระเป๋าร้านค้า:&nbsp;
                 <strong className="font-mono text-[#115e59]">
-                  {currentMerchant?.promptpayId || '0892234455'}
+                  ฿ {currentMerchant?.walletBalance?.toLocaleString('th-TH', { minimumFractionDigits: 2 }) ?? '—'}
                 </strong>
               </span>
             </div>
             <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-bold">
-              ✓ ผูกระบบภาครัฐแล้ว
+              ยอดคงเหลือ
             </span>
           </div>
         </div>
       </div>
+
+      <section className="merchant-statement hidden print:block" aria-label="Bank statement">
+        <header className="statement-header">
+          <div>
+            <p className="statement-eyebrow">MERCHANT ACCOUNT STATEMENT</p>
+            <h1>รายการเดินบัญชีร้านค้า</h1>
+            <p>สรุปรายการรับชำระและเงินสนับสนุนตามช่วงเวลาที่เลือก</p>
+          </div>
+          <div className="statement-meta">
+            <span>วันที่จัดทำรายงาน</span><strong>{statementDate}</strong>
+            <span>ช่วงเวลารายงาน</span><strong>{periodLabelMap[selectedPeriod]}</strong>
+          </div>
+        </header>
+
+        <div className="statement-account">
+          <div><span>ชื่อบัญชีร้านค้า</span><strong>{currentMerchant?.shopName || '—'}</strong></div>
+          <div><span>ยอดกระเป๋าร้านค้า</span><strong>฿ {currentMerchant?.walletBalance?.toLocaleString('th-TH', { minimumFractionDigits: 2 }) ?? '—'}</strong></div>
+          <div><span>จำนวนรายการ</span><strong>{statementRows.length.toLocaleString('th-TH')} รายการ</strong></div>
+        </div>
+
+        <table className="statement-table">
+          <thead>
+            <tr>
+              <th>วันและเวลา</th><th>เลขที่รายการ</th><th>รายละเอียด</th>
+              <th>ลูกค้าชำระ</th><th>เงินสนับสนุน</th><th>ยอดรวม</th>
+            </tr>
+          </thead>
+          <tbody>
+            {statementRows.map(tx => (
+              <tr key={tx.txId}>
+                <td>{tx.txTimestamp}</td>
+                <td>#{tx.txId}</td>
+                <td>รับชำระจาก {tx.userName}</td>
+                <td>{tx.userPaidAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}</td>
+                <td>{tx.govSubsidizedAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}</td>
+                <td>{tx.totalAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}</td>
+              </tr>
+            ))}
+            {statementRows.length === 0 && (
+              <tr><td colSpan={6} className="statement-empty">ไม่มีรายการในช่วงเวลาที่เลือก</td></tr>
+            )}
+          </tbody>
+          <tfoot>
+            <tr>
+              <th colSpan={3}>รวม {kpiData.totalBills.toLocaleString('th-TH')} รายการ</th>
+              <th>{kpiData.customerPaid40.toLocaleString('th-TH', { minimumFractionDigits: 2 })}</th>
+              <th>{kpiData.governmentSubsidy60.toLocaleString('th-TH', { minimumFractionDigits: 2 })}</th>
+              <th>{kpiData.totalRevenue.toLocaleString('th-TH', { minimumFractionDigits: 2 })}</th>
+            </tr>
+          </tfoot>
+        </table>
+
+        <footer className="statement-footer">เอกสารสรุปรายการจากระบบร้านค้า • ยอดเงินแสดงเป็นบาท</footer>
+      </section>
 
       {/* ======================================================== */}
       {/* 🧾 รายการบิลในช่วงเวลาที่เลือก (TRANSACTION BILLS LOG)     */}
@@ -405,7 +481,7 @@ export const RevenueBreakdownCard: React.FC<RevenueBreakdownCardProps> = ({
               <span>รายการบิลทั้งหมดในช่วงเวลา ({filteredTransactions.length} บิล)</span>
             </h3>
             <p className="text-[10px] text-slate-400">
-              แตะที่รายการเพื่อดูใบเสร็จรับเงินดิจิทัล & สลิปพร้อมเพย์ 60/40
+              แตะที่รายการเพื่อดูใบเสร็จรับเงินดิจิทัล
             </p>
           </div>
         </div>
@@ -478,7 +554,7 @@ export const RevenueBreakdownCard: React.FC<RevenueBreakdownCardProps> = ({
       </div>
 
       {/* ======================================================== */}
-      {/* 📄 DIGITAL RECEIPT MODAL (ใบเสร็จรับเงิน & สลิปพร้อมเพย์) */}
+      {/* Digital receipt */}
       {/* ======================================================== */}
       {selectedTxForReceipt && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in">
@@ -489,7 +565,7 @@ export const RevenueBreakdownCard: React.FC<RevenueBreakdownCardProps> = ({
                 <Icon name="shield" className="size-6 text-white mx-auto" />
               </span>
               <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                ใบเสร็จรับเงินดิจิทัล & บันทึกสิทธิ์ 60/40
+                ใบเสร็จรับเงินดิจิทัล & บันทึกสิทธิ์
               </h4>
               <p className="text-[10px] text-slate-400">โครงการไทยช่วยไทยพลีส • aipass.go.th</p>
             </div>
@@ -533,22 +609,17 @@ export const RevenueBreakdownCard: React.FC<RevenueBreakdownCardProps> = ({
                 <strong className="font-mono">฿ {selectedTxForReceipt.userPaidAmount.toFixed(2)}</strong>
               </div>
               <div className="flex justify-between text-emerald-700">
-                <span>รัฐบาลโอนสมทบพร้อมเพย์ :</span>
+                <span>รัฐช่วยจ่าย :</span>
                 <strong className="font-mono">
                   ฿ {selectedTxForReceipt.govSubsidizedAmount.toFixed(2)}
                 </strong>
               </div>
               <div className="pt-2 border-t border-slate-200 text-[10px] text-emerald-800 flex justify-between items-center">
-                <span>สถานะโอนเงินเข้าบัญชีพร้อมเพย์:</span>
+                <span>สถานะรายการ:</span>
                 <span className="font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">
                   ✓ สำเร็จแล้ว
                 </span>
               </div>
-            </div>
-
-            {/* PromptPay Reference */}
-            <div className="text-[10px] text-slate-400 text-center font-mono">
-              PromptPay Ref: PROMPT-{selectedTxForReceipt.txId}-THAI-GOV
             </div>
 
             {/* Close Button */}

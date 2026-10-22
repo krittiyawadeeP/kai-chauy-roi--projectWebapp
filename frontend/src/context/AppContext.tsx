@@ -60,7 +60,7 @@ interface AppContextType {
   loginMerchant: (phoneOrTax: string, passwordOrPin?: string, mchId?: number) => { success: boolean; message: string; merchant?: Merchant };
   logout: () => void;
   updateMerchantProfile: (mchId: number, data: Partial<Merchant>) => Promise<void>;
-  updateMerchantLocation: (mchId: number, lat: number, lng: number, address?: string) => Promise<void>;
+  updateMerchantLocation: (mchId: number, lat: number, lng: number, address?: string, distId?: number) => Promise<void>;
   refreshMerchantData: () => Promise<void>;
 
   // Actions
@@ -85,6 +85,22 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | null>(null);
 
 const STORAGE_KEY = 'thai_chuay_thai_please_state_v1';
+const DUMMY_TO_REAL_DISTRICT: Record<number, { provId: number; distId: number }> = {
+  101: { provId: 12, distId: 1201 }, // เมืองนนทบุรี
+  102: { provId: 12, distId: 1206 }, // ปากเกร็ด
+  103: { provId: 12, distId: 1202 }, // บางกรวย
+  104: { provId: 12, distId: 1203 }, // บางใหญ่
+  201: { provId: 10, distId: 1001 }, // พระนคร
+  202: { provId: 10, distId: 1002 }, // ดุสิต
+  203: { provId: 10, distId: 1013 }, // สัมพันธวงศ์
+  301: { provId: 50, distId: 5001 }, // เมืองเชียงใหม่
+  302: { provId: 50, distId: 5007 }, // แม่ริม
+  303: { provId: 50, distId: 5013 }, // สันกำแพง
+  401: { provId: 14, distId: 1401 }, // พระนครศรีอยุธยา
+  1: { provId: 10, distId: 1007 },   // Pathum Wan
+  2: { provId: 50, distId: 5001 },   // Mueang Chiang Mai
+};
+
 
 function mapApiSale(data: ApiSale): SalesTransaction {
   return {
@@ -109,7 +125,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Stored state with default fallback
   const [merchants, setMerchants] = useState<Merchant[]>(() => {
     const saved = localStorage.getItem(`${STORAGE_KEY}_merchants`);
-    return saved ? JSON.parse(saved) : INITIAL_MERCHANTS;
+    const rawList: Merchant[] = saved ? JSON.parse(saved) : INITIAL_MERCHANTS;
+    return rawList.map(m => {
+      if (m.distId && DUMMY_TO_REAL_DISTRICT[m.distId]) {
+        return {
+          ...m,
+          provId: DUMMY_TO_REAL_DISTRICT[m.distId].provId,
+          distId: DUMMY_TO_REAL_DISTRICT[m.distId].distId,
+        };
+      }
+      return m;
+    });
   });
 
   const [users, setUsers] = useState<User[]>(() => {
@@ -323,6 +349,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (mchId === currentMerchant?.mchId && authStorage.getToken()) {
       await merchantService.updateProfile({
         ...(data.shopName !== undefined ? { Shop_Name: data.shopName } : {}),
+        ...(data.ownerName !== undefined ? { Name: data.ownerName } : {}),
         ...(data.category !== undefined ? { Category: data.category } : {}),
         ...(data.distId !== undefined ? { Dist_ID: data.distId } : {}),
       });
@@ -343,11 +370,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
-  // Update Merchant Pin Location (Lat, Lng)
-  const updateMerchantLocation = async (mchId: number, lat: number, lng: number, address?: string) => {
+  // Update Merchant Pin Location (Lat, Lng, Dist_ID)
+  const updateMerchantLocation = async (mchId: number, lat: number, lng: number, address?: string, distId?: number) => {
     if (!getCoordinates(lat, lng)) throw new Error('กรุณาระบุละติจูดและลองจิจูดให้ถูกต้อง');
     if (mchId === currentMerchant?.mchId && authStorage.getToken()) {
-      await merchantService.updateProfile({ Lat: lat, Lng: lng });
+      await merchantService.updateProfile({ Lat: lat, Lng: lng, ...(distId ? { Dist_ID: distId } : {}) });
       await refreshMerchantData();
       return;
     }
@@ -501,20 +528,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, message: 'ไม่พบข้อมูลร้านค้าในระบบ' };
     }
 
-    const govShare = Math.round(totalAmount * userGrant.govPayRatio * 100) / 100;
+    const requestedGovShare = Math.round(totalAmount * userGrant.govPayRatio * 100) / 100;
+    const govShare = Math.min(requestedGovShare, userGrant.remainingAmount);
     const userShare = (Math.round(totalAmount * 100) - Math.round(govShare * 100)) / 100;
 
     if (wallet.balance < userShare) {
       return {
         success: false,
         message: `ยอดเงินในกระเป๋าไม่เพียงพอ (ต้องการ ${userShare.toLocaleString()} บาท มีอยู่ ${wallet.balance.toLocaleString()} บาท) กรุณาเติมเงิน`
-      };
-    }
-
-    if (userGrant.remainingAmount < govShare) {
-      return {
-        success: false,
-        message: `วงเงินสิทธิรัฐอุดหนุนคงเหลือไม่เพียงพอ (คงเหลือ ${userGrant.remainingAmount.toLocaleString()} บาท)`
       };
     }
 

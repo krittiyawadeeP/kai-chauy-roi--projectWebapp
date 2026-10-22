@@ -66,7 +66,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     }
   };
 
-  const govPays = Math.round(amount * userGrant.govPayRatio * 100) / 100;
+  const govPays = Math.min(Math.round(amount * userGrant.govPayRatio * 100) / 100, userGrant.remainingAmount);
   const userPays = (Math.round(amount * 100) - Math.round(govPays * 100)) / 100;
 
   const matchingMission = selectedMerchant
@@ -91,7 +91,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     const res = executePayment({
       merchantId: selectedMerchant.mchId,
       totalAmount: amount,
-      note: `ชำระเงินสิทธิ์ 60/40 ณ ร้าน ${selectedMerchant.shopName}`
+      note: `ชำระเงินสิทธิ์ร่วมจ่าย ณ ร้าน ${selectedMerchant.shopName}`
     });
 
     if (!res.success) {
@@ -127,7 +127,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
               <Icon name="scan" className="size-5" />
             </span>
             <div>
-              <h3 className="font-bold text-sm text-slate-800">สแกน QR ชำระเงิน (60/40)</h3>
+              <h3 className="font-bold text-sm text-slate-800">สแกน QR ชำระเงิน</h3>
               <p className="text-[10px] text-slate-400">โครงการไทยช่วยไทยพลีส</p>
             </div>
           </div>
@@ -165,7 +165,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
               <div className="absolute inset-x-4 h-0.5 bg-gradient-to-r from-transparent via-cyan-400 to-transparent shadow-[0_0_10px_#38bdf8] animate-bounce pointer-events-none" />
             </div>
 
-            <p className="text-[11px] text-slate-400 mb-3">รองรับมาตรฐาน Thai QR & PromptPay</p>
+            <p className="text-[11px] text-amber-700 mb-3">โหมดสาธิต: รายการนี้บันทึกในเครื่อง ยังไม่บันทึกลงฐานข้อมูล</p>
 
             {/* Quick Demo Shop Presets */}
             <div className="w-full border-t border-slate-100 pt-3">
@@ -217,7 +217,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
                 <p className="font-bold text-xs text-slate-800 line-clamp-1">{selectedMerchant.shopName}</p>
                 <p className="text-[10px] text-slate-400">{selectedMerchant.category}</p>
                 <p className="text-[10px] text-[#1769ed] font-medium mt-0.5">
-                  พร้อมเพย์: {selectedMerchant.promptpayId}
+                  รับเงินเข้ากระเป๋าร้านค้า
                 </p>
               </div>
             </div>
@@ -260,7 +260,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
             {/* Split Calculation */}
             <div className="rounded-2xl bg-[#eaf2ff] p-3.5 text-xs space-y-2 border border-blue-100">
               <div className="flex justify-between items-center text-slate-700 pb-1.5 border-b border-blue-200/60 font-semibold">
-                <span>สรุปการแบ่งจ่าย 60/40</span>
+                <span>สรุปการแบ่งจ่ายตามนโยบาย</span>
                 <span>ยอดรวม ฿{amount.toLocaleString()}</span>
               </div>
               <div className="flex justify-between items-center">

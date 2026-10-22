@@ -64,7 +64,7 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
     {
       icon: 'qr' as IconName,
       label: 'สร้าง QR รับเงิน',
-      detail: 'สิทธิ์ 60/40 ชุมชน',
+      detail: 'สิทธิ์ร่วมจ่ายชุมชน',
       color: 'green',
       onClick: () => setQrModalOpen(true)
     },
@@ -134,7 +134,7 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
         </div>
 
         {/* Quick Merchant Switcher dropdown */}
-        <div className="relative mt-4 flex items-center justify-between bg-black/25 p-2 rounded-xl text-xs">
+        {/* <div className="relative mt-4 flex items-center justify-between bg-black/25 p-2 rounded-xl text-xs">
           <span className="text-teal-100 text-[11px]">สลับร้านค้าทดสอบ:</span>
           <select
             value={currentMerchant?.mchId}
@@ -150,7 +150,7 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
               </option>
             ))}
           </select>
-        </div>
+        </div> */}
       </header>
 
       {/* Overlapping Sales Balance Card */}
@@ -291,21 +291,21 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
             ยอดขายวันนี้ ({merchantTransactions.length})
           </button>
           <button
-            onClick={() => setActiveTab('ai')}
+            // onClick={() => setActiveTab('ai')}
             className={`flex-1 py-2 rounded-xl transition-all cursor-pointer ${
               activeTab === 'ai' ? 'bg-white text-[#115e59] shadow-xs' : 'hover:text-teal-900'
             }`}
           >
-            วิเคราะห์ AI
+            ถุงเงิน
           </button>
-          <button
+          {/* <button
             onClick={() => setActiveTab('info')}
             className={`flex-1 py-2 rounded-xl transition-all cursor-pointer ${
               activeTab === 'info' ? 'bg-white text-[#115e59] shadow-xs' : 'hover:text-teal-900'
             }`}
           >
             ตั้งค่าร้าน & พิกัด
-          </button>
+          </button> */}
         </div>
       </div>
 
@@ -454,8 +454,8 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
 
             <div className="p-3 bg-[#f0fdfa] rounded-xl text-xs space-y-1.5 border border-teal-100">
               <div className="flex justify-between text-slate-600">
-                <span>หมายเลขพร้อมเพย์ (รับเงิน):</span>
-                <strong className="text-[#115e59] font-mono">{currentMerchant.promptpayId}</strong>
+                <span>ยอดกระเป๋าร้านค้า:</span>
+                <strong className="text-[#115e59] font-mono">฿ {currentMerchant.walletBalance?.toLocaleString('th-TH', { minimumFractionDigits: 2 }) ?? '—'}</strong>
               </div>
               <div className="flex justify-between text-slate-600">
                 <span>เบอร์โทรศัพท์ติดต่อ:</span>

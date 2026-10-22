@@ -56,8 +56,8 @@ export interface SalesTransaction {
   merchantId: number;
   merchantName: string;
   totalAmount: number;
-  userPaidAmount: number; // 60%
-  govSubsidizedAmount: number; // 40%
+  userPaidAmount: number;
+  govSubsidizedAmount: number;
   txTimestamp: string;
   distId: number;
   status: 'completed' | 'cancelled';

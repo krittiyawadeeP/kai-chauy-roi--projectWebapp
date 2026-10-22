@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { mapApiMerchant, getCoordinates, type ApiMerchant } from './merchantService';
+import { INITIAL_DISTRICTS, INITIAL_PROVINCES } from '../mock/initialData';
 
 const shop: ApiMerchant = {
   Mch_ID: 4, User_ID: 4, Shop_Name: 'Shop', Category: null, Dist_ID: 1,
@@ -35,4 +36,11 @@ test('actual database coordinates keep their latitude/longitude order, including
   assert.deepEqual(getCoordinates(90, 180), [90, 180]);
   assert.equal(getCoordinates(Infinity, 100), null);
   assert.equal(getCoordinates(13, NaN), null);
+});
+
+test('mock districts reference provinces by the same IDs used by the database', () => {
+  const provinceIds = new Set(INITIAL_PROVINCES.map(province => province.provId));
+  for (const district of INITIAL_DISTRICTS) {
+    assert.ok(provinceIds.has(district.provId), `District ${district.distId} has an unknown province`);
+  }
 });

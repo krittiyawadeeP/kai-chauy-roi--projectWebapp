@@ -80,6 +80,8 @@ export interface MerchantRegistrationPayload {
   Name?: string;
   Category: string;
   Dist_ID: number;
+  Lat?: number;
+  Lng?: number;
 }
 
 export interface MerchantRegistrationResponse {
@@ -118,7 +120,7 @@ export const merchantService = {
     return api.get<T>('/merchants/me/sales');
   },
 
-  updateProfile: (data: { Shop_Name?: string; Category?: string; Lat?: number; Lng?: number; Dist_ID?: number }) => {
+  updateProfile: (data: { Shop_Name?: string; Name?: string; Category?: string; Lat?: number; Lng?: number; Dist_ID?: number }) => {
     return api.patch('/merchants/me', data);
   },
 

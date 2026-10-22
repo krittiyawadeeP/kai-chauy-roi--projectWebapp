@@ -136,8 +136,8 @@ erDiagram
 | `User_ID` | `INT` | FK -> `users(User_ID)` | รหัสผู้ซื้อสินค้า |
 | `Merchant_ID` | `INT` | FK -> `merchants(Mch_ID)` | รหัสร้านค้าที่เกิดรายการ |
 | `Total_Amount` | `DECIMAL(12,2)` | Not Null | ยอดเงินรวมทั้งสิ้นของบิล |
-| `User_Paid_Amount` | `DECIMAL(12,2)` | Default `0.00` | ยอดเงินที่ประชาชนจ่ายจริง (40%) |
-| `Gov_Subsidized_Amount` | `DECIMAL(12,2)` | Default `0.00` | ยอดเงินที่ภาครัฐช่วยจ่าย (60%) |
+| `User_Paid_Amount` | `DECIMAL(12,2)` | Default `0.00` | ยอดเงินที่ประชาชนจ่ายจริงตามนโยบาย |
+| `Gov_Subsidized_Amount` | `DECIMAL(12,2)` | Default `0.00` | ยอดเงินที่ภาครัฐช่วยจ่ายตามนโยบาย |
 | `Tx_Timestamp` | `DATETIME` | Not Null | วันเวลาที่เกิดธุรกรรม |
 | `District_ID` | `INT` | FK -> `districts(Dist_ID)` | อำเภอที่เกิดการซื้อขาย |
 | `Status` | `VARCHAR(30)` | Not Null | สถานะธุรกรรม (`COMPLETED`, `CANCELLED`) |

@@ -21,7 +21,7 @@ export const QRGeneratorModal: React.FC<QRGeneratorModalProps> = ({ isOpen, onCl
 
   if (!isOpen || !currentMerchant) return null;
 
-  const govPays = saleResult ? Number(saleResult.Gov_Subsidized_Amount) : Math.round(amount * userGrant.govPayRatio * 100) / 100;
+  const govPays = saleResult ? Number(saleResult.Gov_Subsidized_Amount) : Math.min(Math.round(amount * userGrant.govPayRatio * 100) / 100, userGrant.remainingAmount);
   const userPays = saleResult ? Number(saleResult.User_Paid_Amount) : (Math.round(amount * 100) - Math.round(govPays * 100)) / 100;
 
   const activeMission = missions.find(
@@ -30,10 +30,9 @@ export const QRGeneratorModal: React.FC<QRGeneratorModalProps> = ({ isOpen, onCl
 
   const qrPayload = JSON.stringify({
     app: 'thai-chuay-thai-please',
-    scheme: '60/40',
+    scheme: 'co-payment',
     mchId: currentMerchant.mchId,
     shopName: currentMerchant.shopName,
-    promptpay: currentMerchant.promptpayId,
     amount: amount,
     userShare: userPays,
     govShare: govPays,
@@ -94,7 +93,7 @@ export const QRGeneratorModal: React.FC<QRGeneratorModalProps> = ({ isOpen, onCl
         <div className="pt-3 space-y-3">
           <div className="p-2.5 rounded-xl bg-[#f8faff] border border-blue-50 text-xs flex items-center justify-between">
             <span className="font-bold text-slate-800">{currentMerchant.shopName}</span>
-            <span className="text-[#1769ed] font-mono text-[11px]">{currentMerchant.promptpayId}</span>
+            <span className="text-[#1769ed] text-[11px]">รับเข้ากระเป๋าร้านค้า</span>
           </div>
 
           <div>
