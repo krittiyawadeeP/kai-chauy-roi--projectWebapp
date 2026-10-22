@@ -176,34 +176,6 @@ export const MerchantProfileSettingsModal: React.FC<MerchantProfileSettingsModal
           </div>
 
           <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="block text-[11px] font-bold text-slate-600 mb-1">หมวดหมู่ร้านค้า</label>
-              <select
-                value={category}
-                onChange={e => setCategory(e.target.value as any)}
-                className="w-full px-2.5 py-2 border border-slate-200 rounded-xl bg-white"
-              >
-                <option value="อาหารและเครื่องดื่ม">อาหารและเครื่องดื่ม</option>
-                <option value="ของใช้ทั่วไป">ของใช้ทั่วไป</option>
-                <option value="หัตถกรรม/ของฝาก">หัตถกรรม/ของฝาก (OTOP)</option>
-                <option value="บริการชุมชน">บริการชุมชน</option>
-                <option value="ผลไม้/เกษตรแปรรูป">ผลไม้/เกษตรแปรรูป</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-bold text-slate-600 mb-1">เวลาเปิด-ปิด</label>
-              <input
-                type="text"
-                value={openingHours}
-                onChange={e => setOpeningHours(e.target.value)}
-                placeholder="เช่น 08:00 - 18:00 น."
-                className="w-full px-3 py-2 border border-slate-200 rounded-xl"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
             {/* <div>
               <label className="block text-[11px] font-bold text-slate-600 mb-1">ชื่อเจ้าของร้าน</label>
               <input
@@ -221,6 +193,20 @@ export const MerchantProfileSettingsModal: React.FC<MerchantProfileSettingsModal
                 onChange={e => setPromptpayId(e.target.value)}
                 className="w-full px-3 py-2 border border-slate-200 rounded-xl font-mono"
               />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">หมวดหมู่ร้านค้า</label>
+              <select
+                value={category}
+                onChange={e => setCategory(e.target.value as any)}
+                className="w-full px-2.5 py-2 border border-slate-200 rounded-xl bg-white"
+              >
+                <option value="อาหารและเครื่องดื่ม">อาหารและเครื่องดื่ม</option>
+                <option value="ของใช้ทั่วไป">ของใช้ทั่วไป</option>
+                <option value="หัตถกรรม/ของฝาก">หัตถกรรม/ของฝาก (OTOP)</option>
+                <option value="บริการชุมชน">บริการชุมชน</option>
+                <option value="ผลไม้/เกษตรแปรรูป">ผลไม้/เกษตรแปรรูป</option>
+              </select>
             </div>
           </div>
 
@@ -246,7 +232,7 @@ export const MerchantProfileSettingsModal: React.FC<MerchantProfileSettingsModal
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
+          {/* <div className="grid grid-cols-2 gap-2">
             <div>
               <label className="block text-[11px] font-bold text-slate-600 mb-1">จังหวัด</label>
               <select
@@ -273,9 +259,9 @@ export const MerchantProfileSettingsModal: React.FC<MerchantProfileSettingsModal
                 {districts.map(item => <option key={item.Dist_ID} value={item.Dist_ID}>{item.Dist_Name}</option>)}
               </select>
             </div>
-          </div>
+          </div> */}
 
-          <div>
+          {/* <div>
             <label className="block text-[11px] font-bold text-slate-600 mb-1">คำแนะนำ / รายละเอียดร้าน</label>
             <textarea
               rows={2}
@@ -284,7 +270,7 @@ export const MerchantProfileSettingsModal: React.FC<MerchantProfileSettingsModal
               placeholder="จุดเด่น สินค้าแนะนำ หรือโปรโมชันของร้าน"
               className="w-full px-3 py-2 border border-slate-200 rounded-xl"
             />
-          </div>
+          </div> */}
 
           <div className="flex gap-2 pt-2">
             <button

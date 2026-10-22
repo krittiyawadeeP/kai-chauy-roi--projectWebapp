@@ -60,7 +60,7 @@ interface AppContextType {
   loginMerchant: (phoneOrTax: string, passwordOrPin?: string, mchId?: number) => { success: boolean; message: string; merchant?: Merchant };
   logout: () => void;
   updateMerchantProfile: (mchId: number, data: Partial<Merchant>) => Promise<void>;
-  updateMerchantLocation: (mchId: number, lat: number, lng: number, address?: string) => Promise<void>;
+  updateMerchantLocation: (mchId: number, lat: number, lng: number, address?: string, distId?: number) => Promise<void>;
   refreshMerchantData: () => Promise<void>;
 
   // Actions
@@ -85,6 +85,22 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | null>(null);
 
 const STORAGE_KEY = 'thai_chuay_thai_please_state_v1';
+const DUMMY_TO_REAL_DISTRICT: Record<number, { provId: number; distId: number }> = {
+  101: { provId: 12, distId: 1201 }, // เมืองนนทบุรี
+  102: { provId: 12, distId: 1206 }, // ปากเกร็ด
+  103: { provId: 12, distId: 1202 }, // บางกรวย
+  104: { provId: 12, distId: 1203 }, // บางใหญ่
+  201: { provId: 10, distId: 1001 }, // พระนคร
+  202: { provId: 10, distId: 1002 }, // ดุสิต
+  203: { provId: 10, distId: 1013 }, // สัมพันธวงศ์
+  301: { provId: 50, distId: 5001 }, // เมืองเชียงใหม่
+  302: { provId: 50, distId: 5007 }, // แม่ริม
+  303: { provId: 50, distId: 5013 }, // สันกำแพง
+  401: { provId: 14, distId: 1401 }, // พระนครศรีอยุธยา
+  1: { provId: 10, distId: 1007 },   // Pathum Wan
+  2: { provId: 50, distId: 5001 },   // Mueang Chiang Mai
+};
+
 
 function mapApiMerchant(data: ApiMerchant): Merchant {
   const provinceName = data.districts?.provinces?.Prov_Name ?? '';
@@ -134,7 +150,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Stored state with default fallback
   const [merchants, setMerchants] = useState<Merchant[]>(() => {
     const saved = localStorage.getItem(`${STORAGE_KEY}_merchants`);
-    return saved ? JSON.parse(saved) : INITIAL_MERCHANTS;
+    const rawList: Merchant[] = saved ? JSON.parse(saved) : INITIAL_MERCHANTS;
+    return rawList.map(m => {
+      if (m.distId && DUMMY_TO_REAL_DISTRICT[m.distId]) {
+        return {
+          ...m,
+          provId: DUMMY_TO_REAL_DISTRICT[m.distId].provId,
+          distId: DUMMY_TO_REAL_DISTRICT[m.distId].distId,
+        };
+      }
+      return m;
+    });
   });
 
   const [users, setUsers] = useState<User[]>(() => {
@@ -349,12 +375,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   };
 
-  // Update Merchant Pin Location (Lat, Lng)
-  const updateMerchantLocation = async (mchId: number, lat: number, lng: number, address?: string) => {
+  // Update Merchant Pin Location (Lat, Lng, Dist_ID)
+  const updateMerchantLocation = async (mchId: number, lat: number, lng: number, address?: string, distId?: number) => {
+    let syncedToBackend = false;
+
+    // 1. If merchant token exists and matches currentMerchant, update via /merchants/me
     if (mchId === currentMerchant?.mchId && authStorage.getToken()) {
-      await merchantService.updateProfile({ Lat: lat, Lng: lng });
-      await refreshMerchantData();
-      return;
+      try {
+        await merchantService.updateProfile({
+          Lat: lat,
+          Lng: lng,
+          ...(distId ? { Dist_ID: distId } : {}),
+        });
+        syncedToBackend = true;
+      } catch (err) {
+        console.warn('updateProfile (/merchants/me) failed, trying direct location update:', err);
+      }
+    }
+
+    // 2. Direct database update via /merchants/:mchId
+    if (!syncedToBackend) {
+      try {
+        await merchantService.updateLocation(mchId, {
+          Lat: lat,
+          Lng: lng,
+          ...(distId ? { Dist_ID: distId } : {}),
+        });
+        syncedToBackend = true;
+      } catch (err) {
+        console.warn('updateLocation (/merchants/:mchId) failed:', err);
+      }
+    }
+
+    if (syncedToBackend) {
+      try {
+        await refreshMerchantData();
+      } catch (e) {
+        console.warn('refreshMerchantData failed:', e);
+      }
     }
     setMerchants(prev =>
       prev.map(m => {

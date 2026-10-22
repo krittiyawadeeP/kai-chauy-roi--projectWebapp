@@ -15,26 +15,26 @@ import {
 } from '../types';
 
 export const INITIAL_PROVINCES: Province[] = [
-  { provId: 1, provName: 'นนทบุรี' },
-  { provId: 2, provName: 'กรุงเทพมหานคร' },
-  { provId: 3, provName: 'เชียงใหม่' },
-  { provId: 4, provName: 'พระนครศรีอยุธยา' },
+  { provId: 12, provName: 'นนทบุรี' },
+  { provId: 10, provName: 'กรุงเทพมหานคร' },
+  { provId: 50, provName: 'เชียงใหม่' },
+  { provId: 14, provName: 'พระนครศรีอยุธยา' },
 ];
 
 export const INITIAL_DISTRICTS: District[] = [
   // นนทบุรี
-  { distId: 101, distName: 'เมืองนนทบุรี', provId: 1 },
-  { distId: 102, distName: 'ปากเกร็ด (เกาะเกร็ด)', provId: 1 },
-  { distId: 103, distName: 'บางกรวย', provId: 1 },
-  { distId: 104, distName: 'บางใหญ่', provId: 1 },
+  { distId: 1201, distName: 'เมืองนนทบุรี', provId: 1 },
+  { distId: 1206, distName: 'ปากเกร็ด (เกาะเกร็ด)', provId: 1 },
+  { distId: 1202, distName: 'บางกรวย', provId: 1 },
+  { distId: 1203, distName: 'บางใหญ่', provId: 1 },
   // กรุงเทพมหานคร
-  { distId: 201, distName: 'พระนคร', provId: 2 },
-  { distId: 202, distName: 'ดุสิต', provId: 2 },
-  { distId: 203, distName: 'สัมพันธวงศ์ (เยาวราช)', provId: 2 },
+  { distId: 1001, distName: 'พระนคร', provId: 2 },
+  { distId: 1002, distName: 'ดุสิต', provId: 2 },
+  { distId: 1013, distName: 'สัมพันธวงศ์ (เยาวราช)', provId: 2 },
   // เชียงใหม่
-  { distId: 301, distName: 'เมืองเชียงใหม่', provId: 3 },
-  { distId: 302, distName: 'แม่ริม', provId: 3 },
-  { distId: 303, distName: 'สันกำแพง', provId: 3 },
+  { distId: 5001, distName: 'เมืองเชียงใหม่', provId: 3 },
+  { distId: 5007, distName: 'แม่ริม', provId: 3 },
+  { distId: 5013, distName: 'สันกำแพง', provId: 3 },
 ];
 
 export const INITIAL_USERS: User[] = [
@@ -44,8 +44,8 @@ export const INITIAL_USERS: User[] = [
     name: 'นายกิตติคุณ ศรีสวัสดิ์ (ประชาชนทดสอบ)',
     role: 'citizen',
     phone: '081-456-7890',
-    provId: 1,
-    distId: 101,
+    provId: 12,
+    distId: 1201,
     status: 'approved',
     registeredAt: '2026-10-01 09:30:00'
   },
@@ -55,8 +55,8 @@ export const INITIAL_USERS: User[] = [
     name: 'นายเปี๊ยก มั่นเจริญ (เจ้าของร้านกาแฟโบราณ)',
     role: 'merchant',
     phone: '089-223-4455',
-    provId: 1,
-    distId: 101,
+    provId: 12,
+    distId: 1201,
     status: 'approved',
     registeredAt: '2026-10-02 11:15:00'
   },
@@ -66,8 +66,8 @@ export const INITIAL_USERS: User[] = [
     name: 'เจ้าหน้าที่สำนักงานส่งเสริมเศรษฐกิจดิจิทัลภาครัฐ (Admin)',
     role: 'admin',
     phone: '02-142-1234',
-    provId: 1,
-    distId: 101,
+    provId: 12,
+    distId: 1201,
     status: 'approved',
     registeredAt: '2026-09-01 08:00:00'
   }
@@ -82,8 +82,8 @@ export const INITIAL_MERCHANTS: Merchant[] = [
     address: '24/1 ถ.ประชาราษฎร์ ต.สวนใหญ่ อ.เมือง จ.นนทบุรี',
     lat: 13.8475,
     lng: 100.4932,
-    distId: 101,
-    provId: 1,
+    distId: 1201,
+    provId: 12,
     ownerName: 'นายเปี๊ยก มั่นเจริญ',
     phone: '089-223-4455',
     status: 'approved',
@@ -102,8 +102,8 @@ export const INITIAL_MERCHANTS: Merchant[] = [
     address: 'หมู่ 6 ต.เกาะเกร็ด อ.ปากเกร็ด จ.นนทบุรี',
     lat: 13.9123,
     lng: 100.4908,
-    distId: 102,
-    provId: 1,
+    distId: 1206,
+    provId: 12,
     ownerName: 'นางสมร สุขสมบูรณ์',
     phone: '084-555-1234',
     status: 'approved',
@@ -122,8 +122,8 @@ export const INITIAL_MERCHANTS: Merchant[] = [
     address: '12 ต.เกาะเกร็ด อ.ปากเกร็ด จ.นนทบุรี',
     lat: 13.9145,
     lng: 100.4921,
-    distId: 102,
-    provId: 1,
+    distId: 1206,
+    provId: 12,
     ownerName: 'นายประสิทธิ์ ศิลปหัตถ์',
     phone: '082-998-7711',
     status: 'approved',
@@ -142,8 +142,8 @@ export const INITIAL_MERCHANTS: Merchant[] = [
     address: '88 หมู่ 3 ต.บางกร่าง อ.เมือง จ.นนทบุรี',
     lat: 13.8340,
     lng: 100.4650,
-    distId: 101,
-    provId: 1,
+    distId: 1201,
+    provId: 12,
     ownerName: 'นายเชวง นนทกานต์',
     phone: '086-123-9988',
     status: 'approved',
@@ -162,8 +162,8 @@ export const INITIAL_MERCHANTS: Merchant[] = [
     address: '45 ถ.โชตนา ต.ริมใต้ อ.แม่ริม จ.เชียงใหม่',
     lat: 18.9145,
     lng: 98.9450,
-    distId: 302,
-    provId: 3,
+    distId: 5007,
+    provId: 50,
     ownerName: 'นางคำดี นวลจันทร์',
     phone: '083-441-2299',
     status: 'approved',
@@ -182,8 +182,8 @@ export const INITIAL_MERCHANTS: Merchant[] = [
     address: '99 หมู่ 2 ต.บางแม่นาง อ.บางใหญ่ จ.นนทบุรี',
     lat: 13.8761,
     lng: 100.4120,
-    distId: 104,
-    provId: 1,
+    distId: 1203,
+    provId: 12,
     ownerName: 'นางมาลี ชุมชนรักษ์',
     phone: '081-772-3344',
     status: 'pending', // Pending approval!
@@ -259,8 +259,8 @@ export const INITIAL_DISTRICT_STAMPS: DistrictStamp[] = [
   {
     stampId: 1,
     stampName: 'ตราของดีเมืองนนท์ (ทุเรียนก้านยาว)',
-    distId: 101,
-    provId: 1,
+    distId: 1201,
+    provId: 12,
     distName: 'เมืองนนทบุรี',
     provName: 'นนทบุรี',
     iconName: 'Crown',
@@ -272,8 +272,8 @@ export const INITIAL_DISTRICT_STAMPS: DistrictStamp[] = [
   {
     stampId: 2,
     stampName: 'ตรามนต์เสน่ห์เกาะเกร็ด (เครื่องปั้นดินเผา)',
-    distId: 102,
-    provId: 1,
+    distId: 1206,
+    provId: 12,
     distName: 'ปากเกร็ด (เกาะเกร็ด)',
     provName: 'นนทบุรี',
     iconName: 'Sparkles',
@@ -285,8 +285,8 @@ export const INITIAL_DISTRICT_STAMPS: DistrictStamp[] = [
   {
     stampId: 3,
     stampName: 'ตราพระนครมงคล (เสาชิงช้า)',
-    distId: 201,
-    provId: 2,
+    distId: 1001,
+    provId: 10,
     distName: 'พระนคร',
     provName: 'กรุงเทพมหานคร',
     iconName: 'Landmark',
@@ -298,8 +298,8 @@ export const INITIAL_DISTRICT_STAMPS: DistrictStamp[] = [
   {
     stampId: 4,
     stampName: 'ตราเวียงพิงค์แม่ริม (ศิลปาชีพล้านนา)',
-    distId: 302,
-    provId: 3,
+    distId: 5007,
+    provId: 50,
     distName: 'แม่ริม',
     provName: 'เชียงใหม่',
     iconName: 'Flower2',
@@ -317,7 +317,7 @@ export const INITIAL_MISSIONS: Mission[] = [
     description: 'อุดหนุนเครื่องดื่มหรืออาหารจากร้านกาแฟโบราณลุงเปี๊ยก ครบ 150 บาท รับฟรีแสตมป์ดิจิทัลของดีเมืองนนท์ทันที! จำกัด 10 สิทธิ์แรกเท่านั้น',
     targetMerchantId: 1,
     targetMerchantName: 'ร้านกาแฟโบราณลุงเปี๊ยก (ท่าน้ำนนท์)',
-    targetDistId: 101,
+    targetDistId: 1201,
     minSpend: 150,
     maxRecipients: 10,
     currentRecipients: 6, // 4 slots left!
@@ -334,7 +334,7 @@ export const INITIAL_MISSIONS: Mission[] = [
     description: 'เลือกซื้อสินค้าหัตถกรรม OTOP หรือเครื่องปั้นดินเผาที่ร้านค้าเกาะเกร็ด ครบ 200 บาท รับแสตมป์มนต์เสน่ห์เกาะเกร็ด สะสมแลกส่วนลดสินค้าชุมชน',
     targetMerchantId: 3,
     targetMerchantName: 'เครื่องปั้นดินเผาบ้านมอญ เกาะเกร็ด OTOP',
-    targetDistId: 102,
+    targetDistId: 1206,
     minSpend: 200,
     maxRecipients: 25,
     currentRecipients: 12,
@@ -455,7 +455,7 @@ export const INITIAL_TRANSACTIONS: SalesTransaction[] = [
     userPaidAmount: 100, // 40%
     govSubsidizedAmount: 150, // 60%
     txTimestamp: '2026-10-14 08:30:15',
-    distId: 101,
+    distId: 1201,
     status: 'completed',
     note: 'ชำระค่ากาแฟดริปโบราณและขนมปังสังขยาชุดพิเศษ',
     earnedStampId: 1
@@ -470,7 +470,7 @@ export const INITIAL_TRANSACTIONS: SalesTransaction[] = [
     userPaidAmount: 80, // 40%
     govSubsidizedAmount: 120, // 60%
     txTimestamp: '2026-10-13 14:15:20',
-    distId: 101,
+    distId: 1201,
     status: 'completed',
     note: 'ชำระค่ากาแฟและของว่าง (ได้สิทธิ 60/40 และแสตมป์)',
     earnedStampId: 1
@@ -485,7 +485,7 @@ export const INITIAL_TRANSACTIONS: SalesTransaction[] = [
     userPaidAmount: 72,
     govSubsidizedAmount: 108,
     txTimestamp: '2026-10-12 11:20:45',
-    distId: 101,
+    distId: 1201,
     status: 'completed',
     note: 'ชาไทยเย็น 2 แก้วและไข่ลวก 2 ฟอง',
     earnedStampId: 1
@@ -500,7 +500,7 @@ export const INITIAL_TRANSACTIONS: SalesTransaction[] = [
     userPaidAmount: 128,
     govSubsidizedAmount: 192,
     txTimestamp: '2026-10-10 15:05:12',
-    distId: 101,
+    distId: 1201,
     status: 'completed',
     note: 'ชุดกาแฟโบราณของฝากเมืองนนท์ 2 กล่อง',
     earnedStampId: 1
@@ -515,7 +515,7 @@ export const INITIAL_TRANSACTIONS: SalesTransaction[] = [
     userPaidAmount: 60,
     govSubsidizedAmount: 90,
     txTimestamp: '2026-10-08 09:40:00',
-    distId: 101,
+    distId: 1201,
     status: 'completed',
     note: 'โอเลี้ยงยกล้อ และปาท่องโก๋'
   },
@@ -529,7 +529,7 @@ export const INITIAL_TRANSACTIONS: SalesTransaction[] = [
     userPaidAmount: 160,
     govSubsidizedAmount: 240,
     txTimestamp: '2026-10-05 13:25:33',
-    distId: 101,
+    distId: 1201,
     status: 'completed',
     note: 'สั่งเครื่องดื่มสำหรับประชุมกลุ่มวิสาหกิจ'
   },
@@ -543,7 +543,7 @@ export const INITIAL_TRANSACTIONS: SalesTransaction[] = [
     userPaidAmount: 64,
     govSubsidizedAmount: 96,
     txTimestamp: '2026-10-03 16:10:18',
-    distId: 101,
+    distId: 1201,
     status: 'completed',
     note: 'กาแฟเย็นและขนมปังเนยสด'
   },
@@ -557,7 +557,7 @@ export const INITIAL_TRANSACTIONS: SalesTransaction[] = [
     userPaidAmount: 88,
     govSubsidizedAmount: 132,
     txTimestamp: '2026-10-01 10:15:00',
-    distId: 101,
+    distId: 1201,
     status: 'completed',
     note: 'ชำระค่าเครื่องดื่มรอบเช้า'
   },
@@ -573,7 +573,7 @@ export const INITIAL_TRANSACTIONS: SalesTransaction[] = [
     userPaidAmount: 64,
     govSubsidizedAmount: 96,
     txTimestamp: '2026-10-11 11:20:05',
-    distId: 102,
+    distId: 1206,
     status: 'completed',
     note: 'ซื้อทองหยอด ฝอยทอง',
     earnedStampId: 2
@@ -588,7 +588,7 @@ export const INITIAL_TRANSACTIONS: SalesTransaction[] = [
     userPaidAmount: 200,
     govSubsidizedAmount: 300,
     txTimestamp: '2026-10-09 15:10:44',
-    distId: 101,
+    distId: 1201,
     status: 'completed',
     note: 'ซื้อผลไม้แปรรูปชุมชน'
   },
@@ -602,7 +602,7 @@ export const INITIAL_TRANSACTIONS: SalesTransaction[] = [
     userPaidAmount: 84,
     govSubsidizedAmount: 126,
     txTimestamp: '2026-10-07 12:30:00',
-    distId: 302,
+    distId: 5007,
     status: 'completed',
     note: 'ข้าวซอยไก่พิเศษ 2 ชาม',
     earnedStampId: 4
@@ -617,7 +617,7 @@ export const INITIAL_TRANSACTIONS: SalesTransaction[] = [
     userPaidAmount: 140,
     govSubsidizedAmount: 210,
     txTimestamp: '2026-10-04 14:00:00',
-    distId: 102,
+    distId: 1206,
     status: 'completed',
     note: 'แจกันดินเผาแกะสลักมอญ',
     earnedStampId: 2
@@ -634,7 +634,7 @@ export const INITIAL_TRANSACTIONS: SalesTransaction[] = [
     userPaidAmount: 80,
     govSubsidizedAmount: 120,
     txTimestamp: '2026-09-28 14:30:00',
-    distId: 101,
+    distId: 1201,
     status: 'completed',
     note: 'ชำระค่าเครื่องดื่มและขนม'
   },
@@ -648,7 +648,7 @@ export const INITIAL_TRANSACTIONS: SalesTransaction[] = [
     userPaidAmount: 140,
     govSubsidizedAmount: 210,
     txTimestamp: '2026-09-25 15:45:10',
-    distId: 101,
+    distId: 1201,
     status: 'completed',
     note: 'ชุดกาแฟและขนมปังปิ้ง'
   },
@@ -662,7 +662,7 @@ export const INITIAL_TRANSACTIONS: SalesTransaction[] = [
     userPaidAmount: 72,
     govSubsidizedAmount: 108,
     txTimestamp: '2026-09-21 11:10:00',
-    distId: 101,
+    distId: 1201,
     status: 'completed',
     note: 'กาแฟร้อน 2 แก้ว'
   },
@@ -676,7 +676,7 @@ export const INITIAL_TRANSACTIONS: SalesTransaction[] = [
     userPaidAmount: 180,
     govSubsidizedAmount: 270,
     txTimestamp: '2026-09-18 13:50:00',
-    distId: 101,
+    distId: 1201,
     status: 'completed',
     note: 'เครื่องดื่มและเบเกอรี่ชุมชน'
   },
@@ -690,7 +690,7 @@ export const INITIAL_TRANSACTIONS: SalesTransaction[] = [
     userPaidAmount: 112,
     govSubsidizedAmount: 168,
     txTimestamp: '2026-09-14 09:30:15',
-    distId: 101,
+    distId: 1201,
     status: 'completed',
     note: 'เครื่องดื่มเช้า'
   },
@@ -704,7 +704,7 @@ export const INITIAL_TRANSACTIONS: SalesTransaction[] = [
     userPaidAmount: 60,
     govSubsidizedAmount: 90,
     txTimestamp: '2026-09-10 16:20:00',
-    distId: 101,
+    distId: 1201,
     status: 'completed',
     note: 'ชาดำเย็นและขนมปัง'
   },
@@ -718,7 +718,7 @@ export const INITIAL_TRANSACTIONS: SalesTransaction[] = [
     userPaidAmount: 128,
     govSubsidizedAmount: 192,
     txTimestamp: '2026-09-05 14:10:00',
-    distId: 101,
+    distId: 1201,
     status: 'completed',
     note: 'ชุดกาแฟโบราณ'
   },
@@ -732,7 +732,7 @@ export const INITIAL_TRANSACTIONS: SalesTransaction[] = [
     userPaidAmount: 88,
     govSubsidizedAmount: 132,
     txTimestamp: '2026-09-02 10:45:00',
-    distId: 101,
+    distId: 1201,
     status: 'completed',
     note: 'กาแฟเย็นและขนม'
   },
@@ -748,7 +748,7 @@ export const INITIAL_TRANSACTIONS: SalesTransaction[] = [
     userPaidAmount: 104,
     govSubsidizedAmount: 156,
     txTimestamp: '2026-08-28 15:20:00',
-    distId: 101,
+    distId: 1201,
     status: 'completed',
     note: 'เครื่องดื่มรอบบ่าย'
   },
@@ -762,7 +762,7 @@ export const INITIAL_TRANSACTIONS: SalesTransaction[] = [
     userPaidAmount: 120,
     govSubsidizedAmount: 180,
     txTimestamp: '2026-08-22 13:40:00',
-    distId: 101,
+    distId: 1201,
     status: 'completed',
     note: 'เครื่องดื่มและขนมปังปิ้งเนยนม'
   },
@@ -776,7 +776,7 @@ export const INITIAL_TRANSACTIONS: SalesTransaction[] = [
     userPaidAmount: 168,
     govSubsidizedAmount: 252,
     txTimestamp: '2026-08-16 11:15:00',
-    distId: 101,
+    distId: 1201,
     status: 'completed',
     note: 'ชุดกาแฟดริปโบราณ'
   },
@@ -790,7 +790,7 @@ export const INITIAL_TRANSACTIONS: SalesTransaction[] = [
     userPaidAmount: 76,
     govSubsidizedAmount: 114,
     txTimestamp: '2026-08-10 14:50:00',
-    distId: 101,
+    distId: 1201,
     status: 'completed',
     note: 'กาแฟเย็นและไข่กระทะ'
   },
@@ -804,7 +804,7 @@ export const INITIAL_TRANSACTIONS: SalesTransaction[] = [
     userPaidAmount: 152,
     govSubsidizedAmount: 228,
     txTimestamp: '2026-08-04 10:30:00',
-    distId: 101,
+    distId: 1201,
     status: 'completed',
     note: 'ชำระค่าเครื่องดื่มและของฝาก'
   }

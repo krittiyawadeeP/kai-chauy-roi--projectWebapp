@@ -284,22 +284,22 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
           >
             ยอดขายวันนี้ ({merchantTransactions.length})
           </button>
-          <button
+          {/* <button
             onClick={() => setActiveTab('ai')}
             className={`flex-1 py-2 rounded-xl transition-all cursor-pointer ${
               activeTab === 'ai' ? 'bg-white text-[#115e59] shadow-xs' : 'hover:text-teal-900'
             }`}
           >
             วิเคราะห์ AI
-          </button>
-          <button
+          </button> */}
+          {/* <button
             onClick={() => setActiveTab('info')}
             className={`flex-1 py-2 rounded-xl transition-all cursor-pointer ${
               activeTab === 'info' ? 'bg-white text-[#115e59] shadow-xs' : 'hover:text-teal-900'
             }`}
           >
             ตั้งค่าร้าน & พิกัด
-          </button>
+          </button> */}
         </div>
       </div>
 

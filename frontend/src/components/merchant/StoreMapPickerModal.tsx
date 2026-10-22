@@ -2,13 +2,30 @@ import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import { useApp } from '../../context/AppContext';
 import { Icon } from '../common/Icon';
-import { ApiError, authStorage } from '../../services/api';
+import { ApiDistrict, ApiProvince, geoService } from '../../services/geoService';
 
 interface StoreMapPickerModalProps {
   isOpen: boolean;
   onClose: () => void;
   mchId?: number;
 }
+
+// Fallback dictionary mapping legacy mock IDs to real DOPA IDs in MySQL table `districts`
+const DUMMY_TO_REAL_DISTRICT: Record<number, { provId: number; distId: number }> = {
+  101: { provId: 12, distId: 1201 }, // เมืองนนทบุรี
+  102: { provId: 12, distId: 1206 }, // ปากเกร็ด
+  103: { provId: 12, distId: 1202 }, // บางกรวย
+  104: { provId: 12, distId: 1203 }, // บางใหญ่
+  201: { provId: 10, distId: 1001 }, // พระนคร
+  202: { provId: 10, distId: 1002 }, // ดุสิต
+  203: { provId: 10, distId: 1013 }, // สัมพันธวงศ์
+  301: { provId: 50, distId: 5001 }, // เมืองเชียงใหม่
+  302: { provId: 50, distId: 5007 }, // แม่ริม
+  303: { provId: 50, distId: 5013 }, // สันกำแพง
+  401: { provId: 14, distId: 1401 }, // พระนครศรีอยุธยา
+  1: { provId: 10, distId: 1007 },   // Pathum Wan
+  2: { provId: 50, distId: 5001 },   // Mueang Chiang Mai
+};
 
 export const StoreMapPickerModal: React.FC<StoreMapPickerModalProps> = ({
   isOpen,
@@ -22,24 +39,248 @@ export const StoreMapPickerModal: React.FC<StoreMapPickerModalProps> = ({
   const [lat, setLat] = useState<number>(targetShop?.lat || 13.8475);
   const [lng, setLng] = useState<number>(targetShop?.lng || 100.4932);
   const [addressInput, setAddressInput] = useState<string>(targetShop?.address || '');
-  const [savedSuccess, setSavedSuccess] = useState(false);
+
+  // Geographic state (Stores real IDs from MySQL database: Prov_ID e.g. 12, Dist_ID e.g. 1201)
+  const [provinces, setProvinces] = useState<ApiProvince[]>([]);
+  const [districts, setDistricts] = useState<ApiDistrict[]>([]);
+  const [provinceId, setProvinceId] = useState<number>(() => {
+    const rawDistId = targetShop?.distId;
+    if (rawDistId && DUMMY_TO_REAL_DISTRICT[rawDistId]) {
+      return DUMMY_TO_REAL_DISTRICT[rawDistId].provId;
+    }
+    if (targetShop?.provId === 1) return 12;
+    if (targetShop?.provId === 2) return 10;
+    if (targetShop?.provId === 3) return 50;
+    if (targetShop?.provId === 4) return 14;
+    return targetShop?.provId || 12;
+  });
+
+  const [districtId, setDistrictId] = useState<number>(() => {
+    const rawDistId = targetShop?.distId;
+    if (rawDistId && DUMMY_TO_REAL_DISTRICT[rawDistId]) {
+      return DUMMY_TO_REAL_DISTRICT[rawDistId].distId;
+    }
+    return targetShop?.distId || 1201;
+  });
+
+  const [loadingLocations, setLoadingLocations] = useState(false);
+  const [isGeocoding, setIsGeocoding] = useState(false);
   const [gpsLoading, setGpsLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [savedSuccess, setSavedSuccess] = useState(false);
   const [saveError, setSaveError] = useState('');
 
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markerRef = useRef<L.Marker | null>(null);
 
-  // Sync initial coords and address when opened
+  // 1. Initial Load: Fetch Provinces from DB
+  useEffect(() => {
+    if (!isOpen) return;
+
+    let isMounted = true;
+    setLoadingLocations(true);
+
+    geoService.getProvinces()
+      .then(provs => {
+        if (!isMounted) return;
+        setProvinces(provs);
+
+        // Sanitize initial provId
+        let targetProvId = targetShop?.provId || 12;
+        if (targetShop?.distId && DUMMY_TO_REAL_DISTRICT[targetShop.distId]) {
+          targetProvId = DUMMY_TO_REAL_DISTRICT[targetShop.distId].provId;
+        } else if (targetProvId === 1) {
+          targetProvId = 12;
+        }
+
+        const validProv = provs.find(p => p.Prov_ID === targetProvId) || provs[0];
+        if (validProv) {
+          setProvinceId(validProv.Prov_ID);
+        }
+      })
+      .catch(err => {
+        console.warn('Failed to load provinces from DB:', err);
+      })
+      .finally(() => {
+        if (isMounted) setLoadingLocations(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, targetShop?.provId, targetShop?.distId]);
+
+  // 2. Load Districts from DB when provinceId changes
+  useEffect(() => {
+    if (!isOpen || !provinceId) return;
+
+    let isMounted = true;
+    setLoadingLocations(true);
+
+    geoService.getDistricts(provinceId)
+      .then(dists => {
+        if (!isMounted) return;
+        setDistricts(dists);
+
+        // If districtId already belongs to this province, retain it
+        const currentMatches = dists.find(d => d.Dist_ID === districtId);
+        if (currentMatches) {
+          return;
+        }
+
+        // Check if targetShop had a mapped districtId
+        let targetDist = targetShop?.distId || 0;
+        if (targetDist && DUMMY_TO_REAL_DISTRICT[targetDist]) {
+          targetDist = DUMMY_TO_REAL_DISTRICT[targetDist].distId;
+        }
+
+        const matchTarget = dists.find(d => d.Dist_ID === targetDist);
+        if (matchTarget) {
+          setDistrictId(matchTarget.Dist_ID);
+          return;
+        }
+
+        // Try matching district name in shop address (e.g. "ปากเกร็ด" or "เมืองนนทบุรี")
+        const matchByAddr = dists.find(d => targetShop?.address && targetShop.address.includes(d.Dist_Name));
+        if (matchByAddr) {
+          setDistrictId(matchByAddr.Dist_ID);
+          return;
+        }
+
+        // Fallback to first district in this province
+        if (dists.length > 0) {
+          setDistrictId(dists[0].Dist_ID);
+        }
+      })
+      .catch(err => {
+        console.warn('Failed to load districts from DB:', err);
+      })
+      .finally(() => {
+        if (isMounted) setLoadingLocations(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isOpen, provinceId]);
+
+  // Sync initial coords and address when modal opens
   useEffect(() => {
     if (isOpen && targetShop) {
       setLat(targetShop.lat || 13.8475);
       setLng(targetShop.lng || 100.4932);
       setAddressInput(targetShop.address || '');
       setSavedSuccess(false);
+      setSaveError('');
     }
   }, [isOpen, targetShop]);
+
+  // Reverse Geocode: From Pin (Lat, Lng) -> Auto Select Real Province & District from DB
+  const reverseGeocodePin = async (targetLat: number, targetLng: number) => {
+    setIsGeocoding(true);
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${targetLat}&lon=${targetLng}&accept-language=th`,
+        { headers: { 'User-Agent': 'ThaiChuayThaiWebapp/1.0' } }
+      );
+      if (!res.ok) return;
+
+      const data = await res.json();
+      const addr = data.address || {};
+
+      const rawDist = addr.city_district || addr.district || addr.county || addr.town || addr.municipality || addr.suburb || '';
+      const rawProv = addr.province || addr.state || '';
+
+      const cleanDist = rawDist.replace(/อำเภอ|เขต/g, '').trim();
+      const cleanProv = rawProv.replace(/จังหวัด/g, '').trim();
+
+      // Find matched Province in loaded DB provinces
+      const matchedProv = provinces.find(p => {
+        const pName = p.Prov_Name.replace(/จังหวัด/g, '').trim();
+        return pName.includes(cleanProv) || cleanProv.includes(pName);
+      });
+
+      if (matchedProv) {
+        setProvinceId(matchedProv.Prov_ID);
+
+        // Fetch districts for this matched province directly from DB
+        const dists = await geoService.getDistricts(matchedProv.Prov_ID);
+        setDistricts(dists);
+
+        const matchedDist = dists.find(d => {
+          const dName = d.Dist_Name.replace(/อำเภอ|เขต/g, '').trim();
+          return dName.includes(cleanDist) || cleanDist.includes(dName);
+        });
+
+        if (matchedDist) {
+          setDistrictId(matchedDist.Dist_ID);
+        } else if (dists.length > 0) {
+          setDistrictId(dists[0].Dist_ID);
+        }
+      }
+
+      // Auto update address display
+      if (data.display_name && (!addressInput || addressInput.startsWith('12/4') || addressInput.startsWith('55'))) {
+        setAddressInput(data.display_name.split(',').slice(0, 3).join(', '));
+      }
+    } catch (err) {
+      console.warn('Reverse geocoding error:', err);
+    } finally {
+      setIsGeocoding(false);
+    }
+  };
+
+  // Forward Geocode & Auto-pan: From Dropdown -> Map Auto-Pan
+  const panToDistrict = async (provName: string, distName: string) => {
+    if (!mapInstanceRef.current || !markerRef.current) return;
+    setIsGeocoding(true);
+
+    try {
+      const query = encodeURIComponent(`อำเภอ${distName} จังหวัด${provName} ประเทศไทย`);
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${query}&limit=1&accept-language=th`,
+        { headers: { 'User-Agent': 'ThaiChuayThaiWebapp/1.0' } }
+      );
+
+      if (res.ok) {
+        const results = await res.json();
+        if (results && results.length > 0) {
+          const newLat = parseFloat(Number(results[0].lat).toFixed(6));
+          const newLng = parseFloat(Number(results[0].lon).toFixed(6));
+
+          setLat(newLat);
+          setLng(newLng);
+
+          mapInstanceRef.current.flyTo([newLat, newLng], 14, { duration: 1.2 });
+          markerRef.current.setLatLng([newLat, newLng]);
+          return;
+        }
+      }
+
+      // Fallback: search by province only
+      const provQuery = encodeURIComponent(`จังหวัด${provName} ประเทศไทย`);
+      const provRes = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${provQuery}&limit=1&accept-language=th`,
+        { headers: { 'User-Agent': 'ThaiChuayThaiWebapp/1.0' } }
+      );
+      if (provRes.ok) {
+        const provResults = await provRes.json();
+        if (provResults && provResults.length > 0) {
+          const pLat = parseFloat(Number(provResults[0].lat).toFixed(6));
+          const pLng = parseFloat(Number(provResults[0].lon).toFixed(6));
+          setLat(pLat);
+          setLng(pLng);
+          mapInstanceRef.current.flyTo([pLat, pLng], 13, { duration: 1.2 });
+          markerRef.current.setLatLng([pLat, pLng]);
+        }
+      }
+    } catch (err) {
+      console.warn('Forward pan error:', err);
+    } finally {
+      setIsGeocoding(false);
+    }
+  };
 
   // Initialize or update Leaflet Map
   useEffect(() => {
@@ -84,21 +325,26 @@ export const StoreMapPickerModal: React.FC<StoreMapPickerModalProps> = ({
 
       marker.on('dragend', () => {
         const position = marker.getLatLng();
-        setLat(Number(position.lat.toFixed(6)));
-        setLng(Number(position.lng.toFixed(6)));
+        const newLat = Number(position.lat.toFixed(6));
+        const newLng = Number(position.lng.toFixed(6));
+        setLat(newLat);
+        setLng(newLng);
+        reverseGeocodePin(newLat, newLng);
       });
 
       map.on('click', (e: L.LeafletMouseEvent) => {
         const { lat: clickLat, lng: clickLng } = e.latlng;
-        marker.setLatLng([clickLat, clickLng]);
-        setLat(Number(clickLat.toFixed(6)));
-        setLng(Number(clickLng.toFixed(6)));
+        const newLat = Number(clickLat.toFixed(6));
+        const newLng = Number(clickLng.toFixed(6));
+        marker.setLatLng([newLat, newLng]);
+        setLat(newLat);
+        setLng(newLng);
+        reverseGeocodePin(newLat, newLng);
       });
 
       mapInstanceRef.current = map;
       markerRef.current = marker;
 
-      // Small delay to trigger map resize recalculation
       setTimeout(() => {
         map.invalidateSize();
       }, 250);
@@ -123,6 +369,7 @@ export const StoreMapPickerModal: React.FC<StoreMapPickerModalProps> = ({
 
   if (!isOpen || !targetShop) return null;
 
+  // Handle GPS Button
   const handleUseCurrentGPS = () => {
     if (navigator.geolocation) {
       setGpsLoading(true);
@@ -133,54 +380,96 @@ export const StoreMapPickerModal: React.FC<StoreMapPickerModalProps> = ({
           setLat(newLat);
           setLng(newLng);
           if (mapInstanceRef.current && markerRef.current) {
-            mapInstanceRef.current.setView([newLat, newLng], 16);
+            mapInstanceRef.current.flyTo([newLat, newLng], 16);
             markerRef.current.setLatLng([newLat, newLng]);
           }
+          reverseGeocodePin(newLat, newLng);
           setGpsLoading(false);
         },
         () => {
           setGpsLoading(false);
-          // Fallback location
-          const fallbackLat = 13.8475;
-          const fallbackLng = 100.4932;
-          setLat(fallbackLat);
-          setLng(fallbackLng);
-          if (mapInstanceRef.current && markerRef.current) {
-            mapInstanceRef.current.setView([fallbackLat, fallbackLng], 15);
-            markerRef.current.setLatLng([fallbackLat, fallbackLng]);
-          }
         },
-        { enableHighAccuracy: true, timeout: 5000 }
+        { enableHighAccuracy: true, timeout: 6000 }
       );
     }
   };
 
-  const setPresetLocation = (targetLat: number, targetLng: number, presetAddress: string) => {
+  // Quick Preset Locations with Real DOPA District IDs
+  const setPresetLocation = (targetLat: number, targetLng: number, presetAddress: string, targetProvId: number, targetDistId: number) => {
     setLat(targetLat);
     setLng(targetLng);
     setAddressInput(presetAddress);
+    setProvinceId(targetProvId);
+
+    geoService.getDistricts(targetProvId).then(dists => {
+      setDistricts(dists);
+      setDistrictId(targetDistId);
+    });
+
     if (mapInstanceRef.current && markerRef.current) {
-      mapInstanceRef.current.setView([targetLat, targetLng], 15);
+      mapInstanceRef.current.flyTo([targetLat, targetLng], 15);
       markerRef.current.setLatLng([targetLat, targetLng]);
     }
   };
 
+  // Handle Dropdown Change: Province
+  const handleProvinceChange = (newProvId: number) => {
+    setProvinceId(newProvId);
+
+    const prov = provinces.find(p => p.Prov_ID === newProvId);
+    if (prov) {
+      geoService.getDistricts(newProvId).then(dists => {
+        setDistricts(dists);
+        if (dists.length > 0) {
+          const firstDist = dists[0];
+          setDistrictId(firstDist.Dist_ID);
+          panToDistrict(prov.Prov_Name, firstDist.Dist_Name);
+        }
+      });
+    }
+  };
+
+  // Handle Dropdown Change: District
+  const handleDistrictChange = (newDistId: number) => {
+    setDistrictId(newDistId);
+    const prov = provinces.find(p => p.Prov_ID === provinceId);
+    const dist = districts.find(d => d.Dist_ID === newDistId);
+    if (prov && dist) {
+      panToDistrict(prov.Prov_Name, dist.Dist_Name);
+    }
+  };
+
+  // Handle Save Pin (Always update DB with real Dist_ID from MySQL)
   const handleSavePin = async () => {
     setSaving(true);
     setSaveError('');
+
+    // Ensure districtId is a valid positive integer matching table `districts`
+    let validDistId = districtId;
+    if (!validDistId || validDistId < 1000) {
+      if (districts.length > 0) {
+        validDistId = districts[0].Dist_ID;
+      }
+    }
+
     try {
-      await updateMerchantLocation(targetShop.mchId, lat, lng, addressInput);
+      await updateMerchantLocation(targetShop.mchId, lat, lng, addressInput, validDistId);
       setSavedSuccess(true);
       setTimeout(() => {
         setSavedSuccess(false);
         onClose();
-      }, 1200);
+      }, 900);
     } catch (error) {
-      setSaveError(error instanceof ApiError && error.status === 401 ? 'กรุณาเข้าสู่ระบบก่อนบันทึกพิกัด' : error instanceof Error ? error.message : 'บันทึกพิกัดไม่สำเร็จ');
+      console.warn('Backend update failed:', error);
+      setSaveError('บันทึกพิกัดไม่สำเร็จ');
     } finally {
       setSaving(false);
     }
   };
+
+  const selectedProvName = provinces.find(p => p.Prov_ID === provinceId)?.Prov_Name || '';
+  const selectedDistObj = districts.find(d => d.Dist_ID === districtId);
+  const selectedDistName = selectedDistObj?.Dist_Name || '';
 
   return (
     <div
@@ -188,7 +477,7 @@ export const StoreMapPickerModal: React.FC<StoreMapPickerModalProps> = ({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-[420px] rounded-[28px] bg-white p-5 shadow-2xl overflow-hidden flex flex-col max-h-[92vh]"
+        className="w-full max-w-[450px] rounded-[28px] bg-white p-5 shadow-2xl overflow-hidden flex flex-col max-h-[94vh]"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -204,63 +493,124 @@ export const StoreMapPickerModal: React.FC<StoreMapPickerModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="grid size-8 place-items-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500"
+            className="grid size-8 place-items-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 cursor-pointer"
           >
             <Icon name="x" className="size-4" />
           </button>
         </div>
 
-        {/* Quick GPS & Preset location chips */}
-        <div className="py-2.5 flex items-center gap-1.5 overflow-x-auto text-[10px] font-bold">
+        {/* Quick Presets with Real DOPA District IDs */}
+        <div className="py-2 flex items-center gap-1.5 overflow-x-auto text-[10px] font-bold">
           <button
-            onClick={handleUseCurrentGPS}
-            disabled={gpsLoading}
-            className="px-2.5 py-1.5 rounded-lg bg-[#115e59] text-white flex items-center gap-1 shrink-0 hover:bg-teal-800 transition-colors"
+            onClick={() => setPresetLocation(13.8475, 100.4932, '12/4 ถ.ประชาราษฎร์ ต.สวนใหญ่ อ.เมือง จ.นนทบุรี', 12, 1201)}
+            className="px-2.5 py-1 rounded-lg bg-teal-50 text-[#115e59] border border-teal-200 hover:bg-teal-100 shrink-0 cursor-pointer"
           >
-            <span className="size-2 rounded-full bg-emerald-300 animate-ping" />
-            <span>{gpsLoading ? 'กำลังดึงพิกัด...' : '📍 พิกัดปัจจุบัน (GPS)'}</span>
+            ท่าน้ำนนท์ (1201)
           </button>
           <button
-            onClick={() => setPresetLocation(13.8475, 100.4932, '12/4 ถ.ประชาราษฎร์ ต.สวนใหญ่ อ.เมือง จ.นนทบุรี')}
-            className="px-2.5 py-1.5 rounded-lg bg-teal-50 text-[#115e59] border border-teal-200 hover:bg-teal-100 shrink-0"
+            onClick={() => setPresetLocation(13.9123, 100.4908, '55 หมู่ 1 ต.เกาะเกร็ด อ.ปากเกร็ด จ.นนทบุรี', 12, 1206)}
+            className="px-2.5 py-1 rounded-lg bg-teal-50 text-[#115e59] border border-teal-200 hover:bg-teal-100 shrink-0 cursor-pointer"
           >
-            ท่าน้ำนนท์
+            เกาะเกร็ด (1206)
           </button>
           <button
-            onClick={() => setPresetLocation(13.9123, 100.4908, '55 หมู่ 1 ต.เกาะเกร็ด อ.ปากเกร็ด จ.นนทบุรี')}
-            className="px-2.5 py-1.5 rounded-lg bg-teal-50 text-[#115e59] border border-teal-200 hover:bg-teal-100 shrink-0"
+            onClick={() => setPresetLocation(13.7516, 100.5015, '88 ถ.ดินสอ แขวงเสาชิงช้า เขตพระนคร กรุงเทพฯ', 10, 1001)}
+            className="px-2.5 py-1 rounded-lg bg-teal-50 text-[#115e59] border border-teal-200 hover:bg-teal-100 shrink-0 cursor-pointer"
           >
-            เกาะเกร็ด
+            เสาชิงช้า/พระนคร (1001)
           </button>
           <button
-            onClick={() => setPresetLocation(13.7516, 100.5015, '88 ถ.ดินสอ แขวงเสาชิงช้า เขตพระนคร กรุงเทพฯ')}
-            className="px-2.5 py-1.5 rounded-lg bg-teal-50 text-[#115e59] border border-teal-200 hover:bg-teal-100 shrink-0"
+            onClick={() => setPresetLocation(18.7903, 98.9972, '14 ถ.วิชยานนท์ ต.ช้างม่อย อ.เมือง จ.เชียงใหม่', 50, 5001)}
+            className="px-2.5 py-1 rounded-lg bg-teal-50 text-[#115e59] border border-teal-200 hover:bg-teal-100 shrink-0 cursor-pointer"
           >
-            เสาชิงช้า/พระนคร
-          </button>
-          <button
-            onClick={() => setPresetLocation(18.7903, 98.9972, '14 ถ.วิชยานนท์ ต.ช้างม่อย อ.เมือง จ.เชียงใหม่')}
-            className="px-2.5 py-1.5 rounded-lg bg-teal-50 text-[#115e59] border border-teal-200 hover:bg-teal-100 shrink-0"
-          >
-            กาดหลวง/เชียงใหม่
+            กาดหลวง (5001)
           </button>
         </div>
 
+        {/* 2-Way Dropdown: จังหวัด & อำเภอ with Auto-Pan */}
+        <div className="pt-1 pb-1 space-y-1.5">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-slate-700 flex items-center gap-1">
+              <span>📍 เขตพื้นที่ร้านค้า (2 ทิศทาง)</span>
+            </span>
+            {isGeocoding ? (
+              <span className="text-[10px] text-teal-600 font-medium flex items-center gap-1 animate-pulse">
+                <span className="size-1.5 rounded-full bg-teal-500" />
+                กำลังค้นหาพิกัด...
+              </span>
+            ) : (
+              <span className="text-[10px] text-slate-400">เลือกพื้นที่ หรือ ขยับหมุด</span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 mb-0.5">จังหวัด</label>
+              <select
+                value={provinceId}
+                disabled={loadingLocations || provinces.length === 0}
+                onChange={e => handleProvinceChange(Number(e.target.value))}
+                className="w-full rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-xs font-medium focus:ring-1 focus:ring-[#115e59] focus:outline-none disabled:bg-slate-100"
+              >
+                {provinces.map(p => (
+                  <option key={p.Prov_ID} value={p.Prov_ID}>
+                    {p.Prov_Name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-bold text-slate-500 mb-0.5">อำเภอ/เขต (Dist_ID)</label>
+              <select
+                value={districtId}
+                disabled={loadingLocations || districts.length === 0}
+                onChange={e => handleDistrictChange(Number(e.target.value))}
+                className="w-full rounded-xl border border-slate-200 bg-white px-2 py-1.5 text-xs font-medium focus:ring-1 focus:ring-[#115e59] focus:outline-none disabled:bg-slate-100 font-mono"
+              >
+                {districts.map(d => (
+                  <option key={d.Dist_ID} value={d.Dist_ID}>
+                    {d.Dist_Name} ({d.Dist_ID})
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* GPS Quick Action */}
+        <div className="py-1 flex items-center justify-between text-[11px]">
+          <button
+            onClick={handleUseCurrentGPS}
+            disabled={gpsLoading}
+            className="px-2.5 py-1 rounded-lg bg-[#115e59] text-white flex items-center gap-1 hover:bg-teal-800 transition-colors cursor-pointer text-[10px] font-bold"
+          >
+            <span className="size-1.5 rounded-full bg-emerald-300 animate-ping" />
+            <span>{gpsLoading ? 'กำลังดึง GPS...' : '📍 ใช้พิกัดปัจจุบัน (GPS)'}</span>
+          </button>
+
+          {selectedDistName && selectedProvName && (
+            <span className="text-[10px] font-semibold text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md border border-teal-200 truncate max-w-[240px]">
+              อ.{selectedDistName} จ.{selectedProvName} (Dist_ID: {districtId})
+            </span>
+          )}
+        </div>
+
         {/* Map Container */}
-        <div className="relative w-full h-[280px] rounded-2xl overflow-hidden border border-slate-200 shadow-inner my-1">
+        <div className="relative w-full h-[240px] rounded-2xl overflow-hidden border border-slate-200 shadow-inner my-1">
           <div ref={mapContainerRef} className="w-full h-full z-10" />
 
           {/* Hint Overlay */}
-          <div className="absolute top-2 left-2 right-2 z-20 pointer-events-none">
+          <div className="absolute top-2 left-2 right-2 z-20 pointer-events-none flex justify-between items-center">
             <span className="inline-block bg-slate-900/80 text-white text-[10px] px-2.5 py-1 rounded-full backdrop-blur-xs font-medium">
-              💡 แตะบนแผนที่ หรือลากหมุดเพื่อระบุตำแหน่งหน้าร้านจริง
+              💡 ลากหมุด หรือแตะบนแผนที่เพื่อระบุหน้าร้าน
             </span>
           </div>
         </div>
 
         {/* Coordinates Details & Address Input */}
         <div className="pt-2 text-xs space-y-2 overflow-y-auto">
-          <div className="grid grid-cols-2 gap-2 bg-[#f0fdfa] p-2.5 rounded-xl border border-teal-100 text-[11px]">
+          <div className="grid grid-cols-2 gap-2 bg-[#f0fdfa] p-2 rounded-xl border border-teal-100 text-[11px]">
             <div>
               <span className="text-slate-400 block text-[10px]">ละติจูด (Latitude)</span>
               <input
@@ -301,7 +651,7 @@ export const StoreMapPickerModal: React.FC<StoreMapPickerModalProps> = ({
             </div>
           </div>
 
-          <div>
+          {/* <div>
             <label className="block text-[10px] font-bold text-slate-500 mb-0.5">
               ที่อยู่ / จุดสังเกตหน้าร้าน
             </label>
@@ -312,20 +662,23 @@ export const StoreMapPickerModal: React.FC<StoreMapPickerModalProps> = ({
               placeholder="เช่น 12/4 ถ.ประชาราษฎร์ ใกล้ท่าน้ำนนท์"
               className="w-full px-2.5 py-1.5 border border-slate-200 rounded-xl text-[11px] focus:outline-none focus:ring-1 focus:ring-[#115e59]"
             />
-          </div>
+          </div> */}
 
           {savedSuccess && (
-            <p className="text-center text-xs font-bold text-emerald-700 bg-emerald-50 py-2 rounded-xl border border-emerald-200">
-              ✓ บันทึกพิกัดและที่ตั้งร้านค้าเรียบร้อยแล้ว!
+            <p className="text-center text-xs font-bold text-emerald-700 bg-emerald-50 py-1.5 rounded-xl border border-emerald-200 animate-fade-in">
+              ✓ บันทึกพิกัดและอำเภอ (Dist_ID: {districtId}) เรียบร้อยแล้ว!
             </p>
           )}
-          {saveError && <p role="alert" className="text-center text-xs text-rose-700 bg-rose-50 py-2 rounded-xl">{saveError}</p>}
-          {authStorage.getToken() && <p className="text-[10px] text-slate-500">บันทึกพิกัดได้ ส่วนที่อยู่ข้อความยังไม่รองรับใน API</p>}
+          {saveError && (
+            <p role="alert" className="text-center text-xs text-rose-700 bg-rose-50 py-1.5 rounded-xl">
+              {saveError}
+            </p>
+          )}
 
           <div className="flex gap-2 pt-1">
             <button
               onClick={onClose}
-              className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold"
+              className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold cursor-pointer"
             >
               ยกเลิก
             </button>

@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import type { NextFunction, Request, Response } from "express";
 
-import { badRequest, sendJson } from "./http";
+import { sendJson } from "./http";
 import { prisma } from "./prisma";
 
 type Session = {
@@ -67,21 +67,21 @@ export async function requireMerchant(
   res: Response,
   next: NextFunction,
 ) {
-  requireAuth(req, res, async () => {
-    if (!req.user) {
-      return badRequest(res, "Missing authenticated user");
-    }
+  // Authenticate synchronously first. `requireAuth` invokes its callback
+  // directly, so passing an async callback here would leave its rejection
+  // outside Express's middleware chain.
+  requireAuth(req, res, () => undefined);
+  if (!req.user) return;
 
-    const merchant = await prisma.merchants.findFirst({
-      where: {
-        User_ID: req.user.userId,
-      },
-    });
-
-    if (!merchant) {
-      return sendJson(res, { message: "Merchant profile required" }, 403);
-    }
-
-    next();
+  const merchant = await prisma.merchants.findFirst({
+    where: {
+      User_ID: req.user.userId,
+    },
   });
+
+  if (!merchant) {
+    return sendJson(res, { message: "Merchant profile required" }, 403);
+  }
+
+  next();
 }

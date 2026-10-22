@@ -5,10 +5,10 @@ import { SalesTransaction } from '../../types';
 
 interface RevenueBreakdownCardProps {
   className?: string;
-  initialPeriod?: 'today' | '7days' | 'month' | 'all';
+  initialPeriod?: 'today' | 'yesterday' | '7days' | 'month' | 'all';
 }
 
-type PeriodType = 'today' | '7days' | 'month' | 'all';
+type PeriodType = 'today' | 'yesterday' | '7days' | 'month' | 'all';
 
 export const RevenueBreakdownCard: React.FC<RevenueBreakdownCardProps> = ({
   className = '',
@@ -76,6 +76,11 @@ export const RevenueBreakdownCard: React.FC<RevenueBreakdownCardProps> = ({
       if (selectedPeriod === 'today') {
         return txDate.toDateString() === referenceDate.toDateString();
       }
+      if (selectedPeriod === 'yesterday') {
+        const yesterday = new Date(referenceDate);
+        yesterday.setDate(yesterday.getDate() - 1);
+        return txDate.toDateString() === yesterday.toDateString();
+      }
       if (selectedPeriod === '7days') {
         return diffDays >= 0 && diffDays <= 7;
       }
@@ -108,10 +113,17 @@ export const RevenueBreakdownCard: React.FC<RevenueBreakdownCardProps> = ({
   const currentMonthLabel = availableMonths.find(m => m.key === selectedMonth)?.label || 'ประจำเดือน';
   const periodLabelMap: Record<PeriodType, string> = {
     today: 'วันนี้',
+    yesterday: 'เมื่อวาน',
     '7days': '7 วันย้อนหลัง',
     month: selectedMonth === 'all' ? 'ทุกเดือน' : `ประจำเดือน ${currentMonthLabel}`,
     all: 'ยอดรวมสะสมทุกช่วงเวลา'
   };
+  const statementDate = new Intl.DateTimeFormat('th-TH', {
+    dateStyle: 'long'
+  }).format(new Date());
+  const statementRows = [...filteredTransactions].sort(
+    (a, b) => new Date(a.txTimestamp.replace(' ', 'T')).getTime() - new Date(b.txTimestamp.replace(' ', 'T')).getTime()
+  );
 
   // Search filtered bills
   const searchedTransactions = useMemo(() => {
@@ -158,7 +170,7 @@ export const RevenueBreakdownCard: React.FC<RevenueBreakdownCardProps> = ({
             onClick={() => {
               window.print();
             }}
-            className="p-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-500 hover:text-slate-800 border border-slate-200 text-[11px] font-medium transition-colors flex items-center gap-1"
+            className="print:hidden p-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 text-slate-500 hover:text-slate-800 border border-slate-200 text-[11px] font-medium transition-colors flex items-center gap-1"
             title="พิมพ์ / ส่งออกสรุปรายงาน"
           >
             <span>🖨️</span>
@@ -191,6 +203,16 @@ export const RevenueBreakdownCard: React.FC<RevenueBreakdownCardProps> = ({
               }`}
             >
               วันนี้
+            </button>
+            <button
+              onClick={() => setSelectedPeriod('yesterday')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-all cursor-pointer ${
+                selectedPeriod === 'yesterday'
+                  ? 'bg-[#115e59] text-white shadow-sm shadow-teal-900/20'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              }`}
+            >
+              เมื่อวาน
             </button>
             <button
               onClick={() => setSelectedPeriod('7days')}
@@ -393,6 +415,60 @@ export const RevenueBreakdownCard: React.FC<RevenueBreakdownCardProps> = ({
           </div>
         </div>
       </div>
+
+      <section className="merchant-statement hidden print:block" aria-label="Bank statement">
+        <header className="statement-header">
+          <div>
+            <p className="statement-eyebrow">MERCHANT ACCOUNT STATEMENT</p>
+            <h1>รายการเดินบัญชีร้านค้า</h1>
+            <p>สรุปรายการรับชำระและเงินสนับสนุนตามช่วงเวลาที่เลือก</p>
+          </div>
+          <div className="statement-meta">
+            <span>วันที่จัดทำรายงาน</span><strong>{statementDate}</strong>
+            <span>ช่วงเวลารายงาน</span><strong>{periodLabelMap[selectedPeriod]}</strong>
+          </div>
+        </header>
+
+        <div className="statement-account">
+          <div><span>ชื่อบัญชีร้านค้า</span><strong>{currentMerchant?.shopName || '—'}</strong></div>
+          <div><span>เลขพร้อมเพย์</span><strong>{currentMerchant?.promptpayId || '—'}</strong></div>
+          <div><span>จำนวนรายการ</span><strong>{statementRows.length.toLocaleString('th-TH')} รายการ</strong></div>
+        </div>
+
+        <table className="statement-table">
+          <thead>
+            <tr>
+              <th>วันและเวลา</th><th>เลขที่รายการ</th><th>รายละเอียด</th>
+              <th>ลูกค้าชำระ</th><th>เงินสนับสนุน</th><th>ยอดรวม</th>
+            </tr>
+          </thead>
+          <tbody>
+            {statementRows.map(tx => (
+              <tr key={tx.txId}>
+                <td>{tx.txTimestamp}</td>
+                <td>#{tx.txId}</td>
+                <td>รับชำระจาก {tx.userName}</td>
+                <td>{tx.userPaidAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}</td>
+                <td>{tx.govSubsidizedAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}</td>
+                <td>{tx.totalAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}</td>
+              </tr>
+            ))}
+            {statementRows.length === 0 && (
+              <tr><td colSpan={6} className="statement-empty">ไม่มีรายการในช่วงเวลาที่เลือก</td></tr>
+            )}
+          </tbody>
+          <tfoot>
+            <tr>
+              <th colSpan={3}>รวม {kpiData.totalBills.toLocaleString('th-TH')} รายการ</th>
+              <th>{kpiData.customerPaid40.toLocaleString('th-TH', { minimumFractionDigits: 2 })}</th>
+              <th>{kpiData.governmentSubsidy60.toLocaleString('th-TH', { minimumFractionDigits: 2 })}</th>
+              <th>{kpiData.totalRevenue.toLocaleString('th-TH', { minimumFractionDigits: 2 })}</th>
+            </tr>
+          </tfoot>
+        </table>
+
+        <footer className="statement-footer">เอกสารสรุปรายการจากระบบร้านค้า • ยอดเงินแสดงเป็นบาท</footer>
+      </section>
 
       {/* ======================================================== */}
       {/* 🧾 รายการบิลในช่วงเวลาที่เลือก (TRANSACTION BILLS LOG)     */}

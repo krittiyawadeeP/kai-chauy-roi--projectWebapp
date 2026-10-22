@@ -82,6 +82,10 @@ export const merchantService = {
     return api.patch('/merchants/me', data);
   },
 
+  updateLocation: (mchId: number, data: { Lat: number; Lng: number; Dist_ID?: number }) => {
+    return api.patch<ApiMerchant>(`/merchants/${mchId}`, data);
+  },
+
   register: (data: { Shop_Name: string; Category: string; Lat?: number; Lng?: number; Dist_ID: number }) =>
     api.post<ApiMerchant>('/merchants', data),
 };

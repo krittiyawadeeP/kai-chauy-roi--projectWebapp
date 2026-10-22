@@ -1,7 +1,7 @@
 import { Router } from "express";
 
 import { createSession, requireAuth, requireMerchant, type AuthRequest } from "../lib/auth";
-import { badRequest, notFound, sendJson } from "../lib/http";
+import { badRequest, notFound, sendJson, toNumber } from "../lib/http";
 import { prisma } from "../lib/prisma";
 
 export const merchantRoutes = Router();
@@ -141,15 +141,61 @@ merchantRoutes.patch("/me", requireMerchant, async (req: AuthRequest, res) => {
       Mch_ID: merchant.Mch_ID,
     },
     data: {
-      Shop_Name,
-      Category,
-      Lat,
-      Lng,
-      Dist_ID,
+      Shop_Name: Shop_Name !== undefined ? String(Shop_Name).trim() : undefined,
+      Category: Category !== undefined ? (Category ? String(Category).trim() : null) : undefined,
+      Lat: Lat !== undefined ? Lat : undefined,
+      Lng: Lng !== undefined ? Lng : undefined,
+      Dist_ID: Dist_ID !== undefined ? Number(Dist_ID) : undefined,
+    },
+    include: {
+      districts: {
+        include: {
+          provinces: true,
+        },
+      },
     },
   });
 
   sendJson(res, updatedMerchant);
+});
+
+merchantRoutes.patch("/:mchId", async (req, res) => {
+  const mchId = toNumber(req.params.mchId);
+  if (!mchId) return badRequest(res, "Invalid mchId");
+
+  const { Shop_Name, Category, Lat, Lng, Dist_ID } = req.body;
+
+  if (Shop_Name !== undefined && !String(Shop_Name).trim()) return badRequest(res, "Shop_Name cannot be empty");
+  if (Lat !== undefined && (typeof Lat !== "number" || Lat < -90 || Lat > 90)) return badRequest(res, "Lat must be between -90 and 90");
+  if (Lng !== undefined && (typeof Lng !== "number" || Lng < -180 || Lng > 180)) return badRequest(res, "Lng must be between -180 and 180");
+  if (Dist_ID !== undefined && (!Number.isInteger(Number(Dist_ID)) || Number(Dist_ID) <= 0)) return badRequest(res, "Dist_ID must be a positive integer");
+
+  try {
+    const updatedMerchant = await prisma.merchants.update({
+      where: {
+        Mch_ID: mchId,
+      },
+      data: {
+        Shop_Name: Shop_Name !== undefined ? String(Shop_Name).trim() : undefined,
+        Category: Category !== undefined ? (Category ? String(Category).trim() : null) : undefined,
+        Lat: Lat !== undefined ? Lat : undefined,
+        Lng: Lng !== undefined ? Lng : undefined,
+        Dist_ID: Dist_ID !== undefined ? Number(Dist_ID) : undefined,
+      },
+      include: {
+        districts: {
+          include: {
+            provinces: true,
+          },
+        },
+      },
+    });
+
+    sendJson(res, updatedMerchant);
+  } catch (error) {
+    console.error("Failed to update merchant by id:", error);
+    return notFound(res, "Merchant not found");
+  }
 });
 
 merchantRoutes.post("/me/sales", requireMerchant, async (req: AuthRequest, res) => {
