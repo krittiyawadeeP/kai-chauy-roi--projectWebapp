@@ -66,7 +66,7 @@ export const swaggerSpec = swaggerJSDoc({
           required: ["Shop_Name", "Dist_ID"],
           properties: {
             Shop_Name: { type: "string", example: "ร้านตัวอย่าง" },
-            Name: { type: "string", example: "เจ้าของร้าน" },
+            Owner_Name: { type: "string", example: "เจ้าของร้าน" },
             Category: { type: "string", enum: ["อาหารและเครื่องดื่ม", "ของใช้ทั่วไป", "หัตถกรรม/ของฝาก", "บริการชุมชน", "ผลไม้/เกษตรแปรรูป", "เสื้อผ้าและเครื่องแต่งกาย", "สุขภาพและความงาม", "บ้านและเครื่องใช้"] },
               Lat: { type: "number", minimum: -90, maximum: 90, example: 13.7563 },
               Lng: { type: "number", minimum: -180, maximum: 180, example: 100.5018 },
@@ -84,7 +84,7 @@ export const swaggerSpec = swaggerJSDoc({
             Pin: { type: "string", pattern: "^[0-9]{6}$", writeOnly: true },
             Province_ID: { type: "integer", example: 1 },
             Shop_Name: { type: "string", example: "ร้านตัวอย่าง" },
-            Name: { type: "string", example: "เจ้าของร้าน" },
+            Owner_Name: { type: "string", example: "เจ้าของร้าน" },
             Category: { type: "string", enum: ["อาหารและเครื่องดื่ม", "ของใช้ทั่วไป", "หัตถกรรม/ของฝาก", "บริการชุมชน", "ผลไม้/เกษตรแปรรูป", "เสื้อผ้าและเครื่องแต่งกาย", "สุขภาพและความงาม", "บ้านและเครื่องใช้"] },
             Dist_ID: { type: "integer", example: 1 },
           },

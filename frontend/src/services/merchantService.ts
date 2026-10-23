@@ -17,13 +17,13 @@ export interface ApiMerchant {
   Mch_ID: number;
   User_ID: number;
   Shop_Name: string;
-  Name?: string | null;
+  Owner_Name?: string | null;
   Category: string | null;
   Lat: number | string | null;
   Lng: number | string | null;
   Dist_ID: number;
   districts?: { Dist_Name: string; Prov_ID: number; provinces?: { Prov_Name: string } };
-  users?: { Phone?: string; Role?: string };
+  users?: { Name?: string | null; Phone?: string; Role?: string };
   wallet?: { Balance: number | string } | null;
 }
 
@@ -42,7 +42,7 @@ export function mapApiMerchant(data: ApiMerchant): Merchant {
     lng: coordinates?.[1] ?? null,
     distId: data.Dist_ID,
     provId: data.districts?.Prov_ID ?? 0,
-    ownerName: data.Name ?? data.users?.Phone ?? 'เจ้าของร้าน',
+    ownerName: data.Owner_Name ?? data.users?.Name ?? 'ยังไม่ระบุชื่อเจ้าของร้าน',
     phone: data.users?.Phone ?? '',
     status: 'approved',
     registeredAt: '',
@@ -77,7 +77,7 @@ export interface MerchantRegistrationPayload {
   Pin?: string;
   Province_ID: number;
   Shop_Name: string;
-  Name?: string;
+  Owner_Name?: string;
   Category: string;
   Dist_ID: number;
   Lat?: number;
@@ -120,10 +120,10 @@ export const merchantService = {
     return api.get<T>('/merchants/me/sales');
   },
 
-  updateProfile: (data: { Shop_Name?: string; Name?: string; Category?: string; Lat?: number; Lng?: number; Dist_ID?: number }) => {
+  updateProfile: (data: { Shop_Name?: string; Owner_Name?: string; Category?: string; Lat?: number; Lng?: number; Dist_ID?: number }) => {
     return api.patch('/merchants/me', data);
   },
 
-  register: (data: { Shop_Name: string; Name?: string; Category: string; Lat?: number; Lng?: number; Dist_ID: number }) =>
+  register: (data: { Shop_Name: string; Owner_Name?: string; Category: string; Lat?: number; Lng?: number; Dist_ID: number }) =>
     api.post<ApiMerchant>('/merchants', data),
 };

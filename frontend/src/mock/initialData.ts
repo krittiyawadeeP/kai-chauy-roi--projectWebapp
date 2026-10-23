@@ -443,7 +443,40 @@ export const INITIAL_REWARDS: Reward[] = [
   }
 ];
 
-export const INITIAL_TRANSACTIONS: SalesTransaction[] = [
+// Two weeks of sample sales for the five approved shops, with distinct quiet periods.
+const RECENT_SAMPLE_TRANSACTIONS: SalesTransaction[] = Array.from({ length: 14 }, (_, day) => {
+  const date = `2026-10-${String(day + 9).padStart(2, '0')}`;
+  const weekend = [0, 6].includes(new Date(`${date}T12:00:00`).getDay());
+  return INITIAL_MERCHANTS.filter(merchant => merchant.status === 'approved').flatMap(merchant => {
+    const amountsByMerchant: Record<number, number[]> = {
+      1: [240, 280, 90], // Coffee shop: quiet afternoons
+      2: weekend ? [230, 380, 210] : [150, 230, 100], // Sweets: stronger weekends
+      3: weekend ? [280, 450, 270] : [130, 240, 80], // Pottery: stronger weekends
+      4: [390, 510, 420], // Fruit shop: steady throughout the day
+      5: [170, 330, 85], // Noodles: quiet after lunch
+    };
+    return ['09:15:00', '12:30:00', '15:20:00'].map((time, slot) => {
+      const totalAmount = amountsByMerchant[merchant.mchId][slot] + ((day * 17 + merchant.mchId * 11) % 5) * 10;
+      return {
+        txId: 990000 + day * 100 + merchant.mchId * 10 + slot,
+        userId: INITIAL_USERS[0].userId,
+        userName: INITIAL_USERS[0].name,
+        merchantId: merchant.mchId,
+        merchantName: merchant.shopName,
+        totalAmount,
+        userPaidAmount: totalAmount * 0.4,
+        govSubsidizedAmount: totalAmount * 0.6,
+        txTimestamp: `${date} ${time}`,
+        distId: merchant.distId,
+        status: 'completed' as const,
+        note: 'ข้อมูลการขายจำลองสำหรับทดสอบการวิเคราะห์ย้อนหลัง',
+      };
+    });
+  });
+}).flat();
+
+export const INITIAL_TRANSACTIONS: SalesTransaction[] = ([
+  ...RECENT_SAMPLE_TRANSACTIONS,
   // --- ตุลาคม 2569 (Current Month - October 2026) ---
   {
     txId: 981248,
@@ -808,7 +841,7 @@ export const INITIAL_TRANSACTIONS: SalesTransaction[] = [
     status: 'completed',
     note: 'ชำระค่าเครื่องดื่มและของฝาก'
   }
-];
+] satisfies SalesTransaction[]).sort((a, b) => b.txTimestamp.localeCompare(a.txTimestamp));
 
 export const INITIAL_WALLET: Wallet = {
   walletId: 101,

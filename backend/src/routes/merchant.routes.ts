@@ -10,7 +10,7 @@ import { getCurrentPolicy } from '../policy/policy';
 export const merchantRoutes = Router();
 
 merchantRoutes.post("/register", async (req, res) => {
-  const { Citizen_ID, Phone, Password, Province_ID, Shop_Name, Name, User_Name, Pin, Category, Dist_ID, Lat, Lng } = req.body;
+  const { Citizen_ID, Phone, Password, Province_ID, Shop_Name, Owner_Name, User_Name, Pin, Category, Dist_ID, Lat, Lng } = req.body;
   if (!Citizen_ID || !Phone || !Password || !Shop_Name || !Province_ID || !Dist_ID) {
     return badRequest(res, "Citizen_ID, Phone, Password, Province_ID, Shop_Name, and Dist_ID are required");
   }
@@ -19,7 +19,7 @@ merchantRoutes.post("/register", async (req, res) => {
   if (String(Password).length < 6) return badRequest(res, "Password must be at least 6 characters");
   if (Pin !== undefined && !validPin(Pin)) return badRequest(res, "Pin must contain exactly 6 digits");
   if (User_Name !== undefined && (typeof User_Name !== "string" || !User_Name.trim() || User_Name.length > 200)) return badRequest(res, "User_Name must be 1-200 characters");
-  if (Name !== undefined && (typeof Name !== "string" || !Name.trim() || Name.length > 200)) return badRequest(res, "Name must be 1-200 characters");
+  if (Owner_Name !== undefined && (typeof Owner_Name !== "string" || !Owner_Name.trim() || Owner_Name.length > 200)) return badRequest(res, "Owner_Name must be 1-200 characters");
   const category = merchantCategory(Category);
   if (Category !== undefined && category === undefined) return badRequest(res, "Invalid merchant Category");
   const provinceId = Number(Province_ID);
@@ -61,7 +61,7 @@ merchantRoutes.post("/register", async (req, res) => {
         data: {
           User_ID: user.User_ID,
           Shop_Name: String(Shop_Name).trim(),
-          Name: Name?.trim(),
+          Owner_Name: Owner_Name?.trim(),
           Category: category,
           Dist_ID: districtId,
           Lat,
@@ -84,7 +84,7 @@ merchantRoutes.post("/register", async (req, res) => {
 });
 
 merchantRoutes.post("/", requireAuth, async (req: AuthRequest, res) => {
-  const { Shop_Name, Name, Category, Lat, Lng, Dist_ID } = req.body;
+  const { Shop_Name, Owner_Name, Category, Lat, Lng, Dist_ID } = req.body;
 
   if (!Shop_Name || !Dist_ID) {
     return badRequest(res, "Shop_Name and Dist_ID are required");
@@ -93,7 +93,7 @@ merchantRoutes.post("/", requireAuth, async (req: AuthRequest, res) => {
   if (!Number.isInteger(Number(Dist_ID)) || Number(Dist_ID) <= 0) {
     return badRequest(res, "Dist_ID must be a positive integer");
   }
-  if (Name !== undefined && (typeof Name !== "string" || !Name.trim() || Name.length > 200)) return badRequest(res, "Name must be 1-200 characters");
+  if (Owner_Name !== undefined && (typeof Owner_Name !== "string" || !Owner_Name.trim() || Owner_Name.length > 200)) return badRequest(res, "Owner_Name must be 1-200 characters");
   const category = merchantCategory(Category);
   if (Category !== undefined && category === undefined) return badRequest(res, "Invalid merchant Category");
 
@@ -107,7 +107,7 @@ merchantRoutes.post("/", requireAuth, async (req: AuthRequest, res) => {
     data: {
       User_ID: req.user!.userId,
       Shop_Name,
-      Name: Name?.trim(),
+      Owner_Name: Owner_Name?.trim(),
       Category: category,
       Lat,
       Lng,
@@ -152,10 +152,10 @@ merchantRoutes.patch("/me", requireMerchant, async (req: AuthRequest, res) => {
     return notFound(res, "Merchant not found");
   }
 
-  const { Shop_Name, Name, Category, Lat, Lng, Dist_ID } = req.body;
+  const { Shop_Name, Owner_Name, Category, Lat, Lng, Dist_ID } = req.body;
 
   if (Shop_Name !== undefined && !String(Shop_Name).trim()) return badRequest(res, "Shop_Name cannot be empty");
-  if (Name !== undefined && (typeof Name !== "string" || !Name.trim() || Name.length > 200)) return badRequest(res, "Name must be 1-200 characters");
+  if (Owner_Name !== undefined && (typeof Owner_Name !== "string" || !Owner_Name.trim() || Owner_Name.length > 200)) return badRequest(res, "Owner_Name must be 1-200 characters");
   const category = merchantCategory(Category);
   if (Category !== undefined && category === undefined) return badRequest(res, "Invalid merchant Category");
   if (Lat !== undefined && (typeof Lat !== "number" || Lat < -90 || Lat > 90)) return badRequest(res, "Lat must be between -90 and 90");
@@ -168,7 +168,7 @@ merchantRoutes.patch("/me", requireMerchant, async (req: AuthRequest, res) => {
     },
     data: {
       Shop_Name,
-      Name: Name?.trim(),
+      Owner_Name: Owner_Name?.trim(),
       Category: category,
       Lat,
       Lng,

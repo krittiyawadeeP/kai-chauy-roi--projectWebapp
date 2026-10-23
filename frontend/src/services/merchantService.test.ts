@@ -38,6 +38,12 @@ test('actual database coordinates keep their latitude/longitude order, including
   assert.equal(getCoordinates(13, NaN), null);
 });
 
+test('merchant owner name comes from the renamed column before the linked user', () => {
+  assert.equal(mapApiMerchant({ ...shop, Owner_Name: 'Shop owner', users: { Name: 'Account holder', Phone: '0800000000' } }).ownerName, 'Shop owner');
+  assert.equal(mapApiMerchant({ ...shop, users: { Name: 'Account holder', Phone: '0800000000' } }).ownerName, 'Account holder');
+  assert.equal(mapApiMerchant({ ...shop, users: { Phone: '0800000000' } }).ownerName, 'ยังไม่ระบุชื่อเจ้าของร้าน');
+});
+
 test('mock districts reference provinces by the same IDs used by the database', () => {
   const provinceIds = new Set(INITIAL_PROVINCES.map(province => province.provId));
   for (const district of INITIAL_DISTRICTS) {

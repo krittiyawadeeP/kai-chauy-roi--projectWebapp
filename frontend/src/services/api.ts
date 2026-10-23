@@ -4,6 +4,7 @@
  */
 
 const TOKEN_KEY = 'kai_chuay_token';
+export const AUTH_EXPIRED_EVENT = 'kai_chuay_auth_expired';
 
 export const authStorage = {
   getToken: (): string | null => {
@@ -57,6 +58,10 @@ async function request<T = unknown>(
       (isJson && typeof data === 'object' && data !== null && 'message' in data)
         ? (data as { message: string }).message
         : `Request failed with status ${response.status}`;
+    if (response.status === 401 && errorMessage === 'Invalid or expired token' && token && authStorage.getToken() === token) {
+      authStorage.removeToken();
+      window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
+    }
     throw new ApiError(response.status, errorMessage, data);
   }
 

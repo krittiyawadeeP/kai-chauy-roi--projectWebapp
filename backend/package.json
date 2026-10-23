@@ -7,7 +7,8 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc --noEmit",
     "prisma:generate": "prisma generate",
-    "seed:nakhon-pathom": "tsx prisma/seed-nakhon-pathom.ts"
+    "seed:nakhon-pathom": "tsx prisma/seed-nakhon-pathom.ts",
+    "seed:sales": "tsx prisma/seed-sales.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",

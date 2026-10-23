@@ -123,7 +123,7 @@ erDiagram
 | `Mch_ID` | `INT` | PK, Auto Inc | รหัสประจำร้านค้า |
 | `User_ID` | `INT` | FK -> `users(User_ID)` | ผู้ใช้ที่เป็นเจ้าของร้านค้า |
 | `Shop_Name` | `VARCHAR(200)` | Not Null | ชื่อร้านค้า |
-| `Name` | `VARCHAR(200)` | Nullable | ชื่อเจ้าของหรือผู้ติดต่อร้าน |
+| `Owner_Name` | `VARCHAR(200)` | Nullable | ชื่อเจ้าของหรือผู้ติดต่อร้าน |
 | `Category` | `ENUM` | Nullable | อาหารและเครื่องดื่ม, ของใช้ทั่วไป, หัตถกรรม/ของฝาก, บริการชุมชน, ผลไม้/เกษตรแปรรูป, เสื้อผ้าและเครื่องแต่งกาย, สุขภาพและความงาม, บ้านและเครื่องใช้ |
 | `Lat` | `DECIMAL(10,7)` | Nullable | พิกัดละติจูดของร้าน |
 | `Lng` | `DECIMAL(10,7)` | Nullable | พิกัดลองจิจูดของร้าน |
@@ -158,6 +158,22 @@ erDiagram
 | `Boost_Recommended` | `BOOLEAN` | Default `false` | แนะนำให้กระตุ้นยอดขายหรือไม่ (`true` หาก Ratio < 0.8) |
 | `Analyzed_At` | `DATETIME` | Not Null | วันเวลาที่ทำการประมวลผลวิเคราะห์ |
 
+#### ตาราง `daily_mission_analyses` (ผลวิเคราะห์ภารกิจรายจังหวัด)
+หนึ่งแถวต่อจังหวัดต่อวันที่วิเคราะห์ งานประมวลผลรันทุกวันเวลา 00:00 น. ตามเวลาไทย โดยใช้บิลของวันที่เพิ่งจบ
+
+| คอลัมน์ | ชนิดข้อมูล | เงื่อนไข | คำอธิบาย |
+| :--- | :--- | :---: | :--- |
+| `Analysis_ID` | `INT` | PK, Auto Inc | รหัสผลวิเคราะห์ |
+| `Analysis_Date` | `DATE` | Unique ร่วมกับ `Province_ID` | วันที่ของบิลตามเวลาไทย |
+| `Province_ID` | `INT` | FK -> `provinces(Prov_ID)` | จังหวัด |
+| `Merchant_ID` | `INT` | Nullable | รหัสร้านที่สุ่มได้ |
+| `Shop_Name` | `VARCHAR(200)` | Nullable | ชื่อร้านขณะวิเคราะห์ |
+| `Status` | `VARCHAR(30)` | Not Null | `PENDING`, `READY`, `NO_MERCHANT`, `INSUFFICIENT_DATA`, `ERROR` |
+| `Message` | `VARCHAR(255)` | Nullable | เหตุผลเมื่อยังไม่มีคำแนะนำ |
+| `Summary` | `JSON` | Nullable | สรุปบิลและช่วงเวลาขาย |
+| `Suggestion` | `JSON` | Nullable | คำแนะนำภารกิจจาก Ollama |
+| `Updated_At` | `DATETIME` | Not Null | เวลาแก้ไขล่าสุด |
+
 #### 9) ตาราง `missions` (ภารกิจส่งเสริมการขาย)
 | คอลัมน์ | ชนิดข้อมูล | เงื่อนไข | คำอธิบาย |
 | :--- | :--- | :---: | :--- |
@@ -169,6 +185,7 @@ erDiagram
 | `Start_DateTime` | `DATETIME` | Not Null | วันเวลาเริ่มต้นภารกิจ |
 | `End_DateTime` | `DATETIME` | Not Null | วันเวลาสิ้นสุดภารกิจ |
 | `Status` | `VARCHAR(30)` | Not Null | สถานะภารกิจ (`ACTIVE`, `COMPLETED`, `EXPIRED`) |
+| `Daily_Analysis_ID` | `INT` | Unique, FK -> `daily_mission_analyses(Analysis_ID)`, Nullable | ผลวิเคราะห์ที่สร้างภารกิจนี้อัตโนมัติ (50 สิทธิ์) |
 
 ---
 

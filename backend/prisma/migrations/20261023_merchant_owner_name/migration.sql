@@ -1,0 +1,1 @@
+ALTER TABLE `merchants` CHANGE COLUMN `Name` `Owner_Name` VARCHAR(200) NULL;

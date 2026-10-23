@@ -45,7 +45,7 @@ CREATE TABLE `merchants` (
     `Mch_ID` INTEGER NOT NULL AUTO_INCREMENT,
     `User_ID` INTEGER NOT NULL,
     `Shop_Name` VARCHAR(200) NOT NULL,
-    `Name` VARCHAR(200) NULL,
+    `Owner_Name` VARCHAR(200) NULL,
     `Category` ENUM('อาหารและเครื่องดื่ม','ของใช้ทั่วไป','หัตถกรรม/ของฝาก','บริการชุมชน','ผลไม้/เกษตรแปรรูป','เสื้อผ้าและเครื่องแต่งกาย','สุขภาพและความงาม','บ้านและเครื่องใช้') NULL,
     `Lat` DECIMAL(10, 7) NULL,
     `Lng` DECIMAL(10, 7) NULL,
@@ -59,6 +59,7 @@ CREATE TABLE `merchants` (
 -- CreateTable
 CREATE TABLE `missions` (
     `Mission_ID` INTEGER NOT NULL AUTO_INCREMENT,
+    `Daily_Analysis_ID` INTEGER NULL,
     `Mission_Name` VARCHAR(200) NOT NULL,
     `Description` TEXT NULL,
     `Target_Merchant_ID` INTEGER NOT NULL,
@@ -68,6 +69,7 @@ CREATE TABLE `missions` (
     `Status` VARCHAR(30) NOT NULL,
 
     INDEX `fk_mission_merchant`(`Target_Merchant_ID`),
+    UNIQUE INDEX `uq_mission_daily_analysis`(`Daily_Analysis_ID`),
     PRIMARY KEY (`Mission_ID`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
@@ -77,6 +79,24 @@ CREATE TABLE `provinces` (
     `Prov_Name` VARCHAR(100) NOT NULL,
 
     PRIMARY KEY (`Prov_ID`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `daily_mission_analyses` (
+    `Analysis_ID` INTEGER NOT NULL AUTO_INCREMENT,
+    `Analysis_Date` DATE NOT NULL,
+    `Province_ID` INTEGER NOT NULL,
+    `Merchant_ID` INTEGER NULL,
+    `Shop_Name` VARCHAR(200) NULL,
+    `Status` VARCHAR(30) NOT NULL,
+    `Message` VARCHAR(255) NULL,
+    `Summary` JSON NULL,
+    `Suggestion` JSON NULL,
+    `Updated_At` DATETIME(0) NOT NULL,
+
+    UNIQUE INDEX `uq_daily_mission_date_province`(`Analysis_Date`, `Province_ID`),
+    INDEX `fk_daily_mission_province`(`Province_ID`),
+    PRIMARY KEY (`Analysis_ID`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
@@ -200,6 +220,9 @@ CREATE TABLE `user_grants` (
 ALTER TABLE `ai_sales_analysis` ADD CONSTRAINT `fk_ai_analysis_merchant` FOREIGN KEY (`Merchant_ID`) REFERENCES `merchants`(`Mch_ID`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE `daily_mission_analyses` ADD CONSTRAINT `fk_daily_mission_province` FOREIGN KEY (`Province_ID`) REFERENCES `provinces`(`Prov_ID`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE `district_stamps` ADD CONSTRAINT `fk_stamp_district` FOREIGN KEY (`District_ID`) REFERENCES `districts`(`Dist_ID`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -213,6 +236,9 @@ ALTER TABLE `merchants` ADD CONSTRAINT `fk_merchant_user` FOREIGN KEY (`User_ID`
 
 -- AddForeignKey
 ALTER TABLE `missions` ADD CONSTRAINT `fk_mission_merchant` FOREIGN KEY (`Target_Merchant_ID`) REFERENCES `merchants`(`Mch_ID`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `missions` ADD CONSTRAINT `fk_mission_daily_analysis` FOREIGN KEY (`Daily_Analysis_ID`) REFERENCES `daily_mission_analyses`(`Analysis_ID`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `sales_transactions` ADD CONSTRAINT `fk_transaction_district` FOREIGN KEY (`District_ID`) REFERENCES `districts`(`Dist_ID`) ON DELETE RESTRICT ON UPDATE CASCADE;

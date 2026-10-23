@@ -150,8 +150,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length >= INITIAL_TRANSACTIONS.length) {
-          return parsed;
+        if (Array.isArray(parsed)) {
+          // Keep existing sales while adding new demo transactions to an older demo session.
+          if (!parsed.some((tx: SalesTransaction) => tx.txId === 981248)) return parsed;
+          const existingIds = new Set(parsed.map((tx: SalesTransaction) => tx.txId));
+          return [...parsed, ...INITIAL_TRANSACTIONS.filter(tx => !existingIds.has(tx.txId))]
+            .sort((a, b) => b.txTimestamp.localeCompare(a.txTimestamp));
         }
       } catch (e) {
         // use initial
@@ -349,7 +353,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (mchId === currentMerchant?.mchId && authStorage.getToken()) {
       await merchantService.updateProfile({
         ...(data.shopName !== undefined ? { Shop_Name: data.shopName } : {}),
-        ...(data.ownerName !== undefined ? { Name: data.ownerName } : {}),
+        ...(data.ownerName !== undefined ? { Owner_Name: data.ownerName } : {}),
         ...(data.category !== undefined ? { Category: data.category } : {}),
         ...(data.distId !== undefined ? { Dist_ID: data.distId } : {}),
       });

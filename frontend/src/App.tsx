@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { RoleSwitcherBar, BottomNav } from './components/layout';
 import { CitizenMobilePage } from './pages/citizen/CitizenMobilePage';
@@ -31,6 +31,10 @@ const AppContent: React.FC = () => {
   const [globalAuthOpen, setGlobalAuthOpen] = useState(false);
   const [globalProfileOpen, setGlobalProfileOpen] = useState(false);
   const [globalMapOpen, setGlobalMapOpen] = useState(false);
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('view') === 'admin') setRole('admin');
+  }, [setRole]);
 
   const handleRoleSelect = (selected: 'ประชาชน' | 'ร้านค้า' | 'ภาครัฐ') => {
     setActiveNav('หน้าหลัก');

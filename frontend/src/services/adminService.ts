@@ -40,6 +40,54 @@ export interface GrantRecord {
   users: { Citizen_ID: string; Phone: string };
 }
 
+export interface SalesMissionAnalysis {
+  merchantId: number;
+  shopName: string;
+  periodStart: string;
+  periodEnd: string;
+  summary: {
+    transactionCount: number;
+    daysWithSales: number;
+    observedOpeningTime: string | null;
+    observedClosingTime: string | null;
+    slots: { dayType: string; startHour: number; endHour: number; daysWithSales: number; transactionCount: number; totalRevenue: number; averageRevenueOnDaysWithSales: number }[];
+  };
+  suggestion: { dayType: 'weekday' | 'weekend'; startHour: number; endHour: number; reason: string; missionName: string; description: string };
+}
+
+export interface DailySalesMissionAnalysis extends SalesMissionAnalysis {
+  provinceId: number;
+  provinceName: string;
+  analysisDate: string;
+}
+
+export interface DailyMissionRow {
+  provinceId: number;
+  provinceName: string;
+  merchantId: number | null;
+  shopName: string | null;
+  status: 'PENDING' | 'NO_MERCHANT' | 'INSUFFICIENT_DATA' | 'READY' | 'ERROR';
+  message: string | null;
+  summary: SalesMissionAnalysis['summary'] | null;
+  suggestion: SalesMissionAnalysis['suggestion'] | null;
+  mission: { id: number; start: string; end: string; quota: number; status: string } | null;
+  updatedAt: string;
+}
+
+export interface DailyMissionReport { analysisDate: string; rows: DailyMissionRow[] }
+
+export interface AdminMissionRecord {
+  Mission_ID: number;
+  Mission_Name: string;
+  Description: string | null;
+  Max_Recipients: number;
+  Start_DateTime: string;
+  End_DateTime: string;
+  Status: string;
+  merchants: { Shop_Name: string };
+  user_stamps: unknown[];
+}
+
 export interface PolicyRecord {
   Policy_ID: number | null;
   Gov_Pay_Ratio: string;
@@ -51,6 +99,11 @@ export interface PolicyRecord {
 }
 
 export const adminService = {
+  getMerchants: () => api.get<{ Mch_ID: number; Shop_Name: string; Category: string | null; districts?: { Dist_Name: string; Prov_ID: number; provinces?: { Prov_Name: string } } }[]>('/admin/merchants'),
+  suggestSalesMission: (merchantId: number) => api.post<SalesMissionAnalysis>(`/admin/merchants/${merchantId}/mission-suggestion`),
+  suggestDailySalesMission: (provinceId: number) => api.post<DailySalesMissionAnalysis>(`/admin/provinces/${provinceId}/daily-mission-suggestion`),
+  getDailyMissionAnalyses: () => api.get<DailyMissionReport>('/admin/daily-mission-analyses'),
+  getMissions: () => api.get<AdminMissionRecord[]>('/admin/missions'),
   getGeographicDashboard: async (signal?: AbortSignal) => {
     const data = await api.get<GeographicDashboardData>('/admin/dashboard/geography', { signal });
     if (!Array.isArray(data.districts)) throw new Error('Backend ยังไม่ส่งข้อมูลอำเภอ/เขต กรุณารีสตาร์ต backend แล้วโหลดข้อมูลใหม่');
@@ -80,9 +133,11 @@ export const adminService = {
   createMission: (missionData: {
     Target_Merchant_ID: number;
     Mission_Name: string;
-    Min_Spend?: number;
-    Quota_Limit?: number;
-    Dist_Stamp_ID?: number;
+    Description: string;
+    Max_Recipients: number;
+    Start_DateTime: string;
+    End_DateTime: string;
+    Status: 'ACTIVE';
   }) => api.post('/admin/missions', missionData),
 
   createReward: (rewardData: {

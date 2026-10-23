@@ -73,7 +73,7 @@ export const MerchantRegistrationModal: React.FC<MerchantRegistrationModalProps>
       setSubmitting(true);
       setSubmitError('');
       try {
-        await merchantService.register({ Shop_Name: shopName, Name: ownerName, Category: category, Dist_ID: distId });
+        await merchantService.register({ Shop_Name: shopName, Owner_Name: ownerName, Category: category, Dist_ID: distId });
         await refreshMerchantData();
         setSubmitted(true);
         setTimeout(() => { setActiveTab('status'); setSubmitted(false); }, 1500);

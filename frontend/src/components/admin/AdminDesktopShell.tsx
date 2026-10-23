@@ -4,7 +4,7 @@ import { AdminLoginPage } from './AdminLoginPage';
 import { AdminPortalView } from './AdminPortalView';
 import { GeographicDashboard } from './GeographicDashboard';
 import { GlobalPolicyPanel } from './GlobalPolicyPanel';
-import { authStorage, api } from '../../services/api';
+import { AUTH_EXPIRED_EVENT, authStorage, api } from '../../services/api';
 import { authService } from '../../services/authService';
 import { useApp } from '../../context/AppContext';
 import './admin.css';
@@ -22,8 +22,14 @@ export const AdminDesktopShell: React.FC = () => {
   const { setRole } = useApp();
   const [loggedIn, setLoggedIn] = useState(false);
   const [checking, setChecking] = useState(true);
-  const [tab, setTab] = useState<AdminTab>('dashboard');
+  const [tab, setTab] = useState<AdminTab>(() => new URLSearchParams(window.location.search).get('tab') === 'ai' ? 'ai' : 'dashboard');
   const [adminName, setAdminName] = useState('เจ้าหน้าที่ผู้ดูแลระบบ');
+  const [sessionExpired, setSessionExpired] = useState(false);
+  useEffect(() => {
+    const onExpired = () => { setSessionExpired(true); setLoggedIn(false); };
+    window.addEventListener(AUTH_EXPIRED_EVENT, onExpired);
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, onExpired);
+  }, []);
   useEffect(() => {
     let active = true;
     if (!authStorage.getToken()) { setChecking(false); return; }
@@ -36,10 +42,10 @@ export const AdminDesktopShell: React.FC = () => {
   }, []);
   const logout = async () => {
     try { await api.post('/logout'); } catch { /* An expired server session is already unusable. */ }
-    authStorage.removeToken(); setLoggedIn(false);
+    authStorage.removeToken(); setSessionExpired(false); setLoggedIn(false);
   };
   if (checking) return <div className="admin-workspace grid min-h-screen place-items-center bg-slate-100 text-sm text-slate-600" role="status">กำลังตรวจสอบสิทธิ์การใช้งาน…</div>;
-  if (!loggedIn) return <AdminLoginPage onLoginSuccess={() => setLoggedIn(true)} />;
+  if (!loggedIn) return <AdminLoginPage notice={sessionExpired ? 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบอีกครั้ง' : undefined} onLoginSuccess={() => { setSessionExpired(false); setLoggedIn(true); }} />;
   return <div className="admin-workspace min-h-screen bg-[#f2f4f7] text-slate-700">
     <div className="h-1 bg-[#b69a59]" />
     <header className="flex min-h-20 items-center justify-between gap-4 border-b border-[#2c4c68] bg-[#16354f] px-5 py-4 text-white lg:px-8">

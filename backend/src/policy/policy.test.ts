@@ -63,11 +63,13 @@ test('feature routes keep their URLs and admin guards; merchant sales use the gl
         assert.equal((await request(path, token)).status, token ? 403 : 401, path);
       }
       assert.equal((await request('/admin/grants', token, { Citizen_ID: 'test' })).status, token ? 403 : 401);
+      assert.equal((await request('/admin/provinces/73/daily-mission-suggestion', token, {})).status, token ? 403 : 401);
     }
     const publicPolicy = await request('/policy', '');
     assert.equal(publicPolicy.status, 200);
     assert.deepEqual(await publicPolicy.json(), { Gov_Pay_Ratio: 0.4, User_Pay_Ratio: 0.6, Grant_Amount: 1000 });
     for (const path of ['/admin/policy', '/admin/policy/history', '/admin/grants']) assert.equal((await request(path, admin)).status, 200, path);
+    assert.equal((await request('/admin/provinces/invalid/daily-mission-suggestion', admin, {})).status, 400);
     const dashboard = await request('/admin/dashboard', admin);
     assert.equal(dashboard.status, 200);
     assert.equal((await dashboard.json() as any).transactions.totalRevenue, 200);

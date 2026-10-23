@@ -167,7 +167,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           Password: mchRegisterPassword,
           Province_ID: mchPinLocation.provinceId,
           Shop_Name: mchShopName,
-          Name: mchOwnerName,
+          Owner_Name: mchOwnerName,
           User_Name: mchOwnerName,
           Category: mchCategory,
           Dist_ID: mchPinLocation.districtId,

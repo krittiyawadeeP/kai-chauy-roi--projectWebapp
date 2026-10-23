@@ -60,7 +60,7 @@ model merchants {
   Mch_ID             Int                  @id @default(autoincrement())
   User_ID            Int
   Shop_Name          String               @db.VarChar(200)
-  Name               String?              @db.VarChar(200)
+  Owner_Name         String?              @db.VarChar(200)
   Category           MerchantCategory?
   Lat                Decimal?             @db.Decimal(10, 7)
   Lng                Decimal?             @db.Decimal(10, 7)
@@ -79,6 +79,7 @@ model merchants {
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model missions {
   Mission_ID         Int           @id @default(autoincrement())
+  Daily_Analysis_ID  Int?          @unique(map: "uq_mission_daily_analysis")
   Mission_Name       String        @db.VarChar(200)
   Description        String?       @db.Text
   Target_Merchant_ID Int
@@ -87,6 +88,7 @@ model missions {
   End_DateTime       DateTime      @db.DateTime(0)
   Status             String        @db.VarChar(30)
   merchants          merchants     @relation(fields: [Target_Merchant_ID], references: [Mch_ID], map: "fk_mission_merchant")
+  daily_mission_analysis daily_mission_analyses? @relation(fields: [Daily_Analysis_ID], references: [Analysis_ID], onDelete: SetNull, map: "fk_mission_daily_analysis")
   user_stamps        user_stamps[]
 
   @@index([Target_Merchant_ID], map: "fk_mission_merchant")
@@ -97,6 +99,25 @@ model provinces {
   Prov_Name String      @db.VarChar(100)
   districts districts[]
   users     users[]
+  daily_mission_analyses daily_mission_analyses[]
+}
+
+model daily_mission_analyses {
+  Analysis_ID   Int      @id @default(autoincrement())
+  Analysis_Date DateTime @db.Date
+  Province_ID   Int
+  Merchant_ID   Int?
+  Shop_Name     String?  @db.VarChar(200)
+  Status        String   @db.VarChar(30)
+  Message       String?  @db.VarChar(255)
+  Summary       Json?
+  Suggestion    Json?
+  Updated_At    DateTime @updatedAt @db.DateTime(0)
+  provinces     provinces @relation(fields: [Province_ID], references: [Prov_ID], onDelete: Cascade, map: "fk_daily_mission_province")
+  mission       missions?
+
+  @@unique([Analysis_Date, Province_ID], map: "uq_daily_mission_date_province")
+  @@index([Province_ID], map: "fk_daily_mission_province")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
