@@ -45,4 +45,21 @@ export const citizenService = {
   getGrant: (userId: number) => {
     return api.get(`/user/${userId}/grant`);
   },
+
+  topupWallet: (amount: number) => {
+    return api.post<{ message: string; wallet: { walletId: number; userId: number; balance: number; updatedAt: string } }>('/user/topup', { amount });
+  },
+
+  pay: (data: { Merchant_ID: number; Total_Amount: number; District_ID?: number }) => {
+    return api.post<{
+      transaction: any;
+      wallet: { walletId: number; userId: number; balance: number; updatedAt: string };
+      grant: { grantId: number; userId: number; totalGrantAmount: number; remainingAmount: number };
+      awardedStamp?: any;
+    }>('/user/pay', data);
+  },
+
+  getMyTransactions: () => {
+    return api.get<any[]>('/user/me/transactions');
+  },
 };

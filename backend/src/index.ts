@@ -18,6 +18,7 @@ app.get("/", (_req, res) => {
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.use("/api", apiRouter);
 
-app.listen(3001, () => {
-  console.log("Backend running at http://localhost:3001");
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`Backend running at http://localhost:${PORT} (reloaded)`);
 });
