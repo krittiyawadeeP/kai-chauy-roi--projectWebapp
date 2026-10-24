@@ -11,6 +11,8 @@ import { badRequest, notFound, sendJson, toNumber } from "../lib/http";
 import { prisma } from "../lib/prisma";
 import { hashPin, validPin } from "../lib/pin";
 import { getCurrentPolicy } from '../policy/policy';
+import { awardMissionStamp } from '../lib/mission-stamp';
+import { collectedDistrictCount, requiredDistrictStamps } from '../lib/otop-reward';
 
 export const citizenRoutes = Router();
 
@@ -273,32 +275,17 @@ citizenRoutes.get("/missions/:missionId", async (req, res) => {
 
 citizenRoutes.post("/missions/:missionId/complete", requireAuth, async (req: AuthRequest, res) => {
   const missionId = toNumber(req.params.missionId);
-  const { Stamp_ID, Qualifying_Amount } = req.body;
+  const transactionId = toNumber(req.body.Tx_ID);
 
-  if (!missionId) {
-    return badRequest(res, "Invalid missionId");
+  if (!missionId || !Number.isSafeInteger(missionId) || missionId < 1 ||
+      !transactionId || !Number.isSafeInteger(transactionId) || transactionId < 1) {
+    return badRequest(res, "Valid missionId and Tx_ID are required");
   }
-
-  if (!Stamp_ID) {
-    return badRequest(res, "Stamp_ID is required");
-  }
-
-  const userStamp = await prisma.user_stamps.create({
-    data: {
-      User_ID: req.user!.userId,
-      Stamp_ID,
-      Mission_ID: missionId,
-      Earn_Source: "MISSION",
-      Qualifying_Amount,
-      Earned_At: new Date(),
-    },
-    include: {
-      district_stamps: true,
-      missions: true,
-    },
-  });
-
-  sendJson(res, userStamp, 201);
+  const sale = await prisma.sales_transactions.findUnique({ where: { Tx_ID: BigInt(transactionId) } });
+  if (!sale || sale.User_ID !== req.user!.userId) return notFound(res, 'Qualifying sale not found');
+  const result = await prisma.$transaction(tx => awardMissionStamp(tx, missionId, sale), { isolationLevel: 'ReadCommitted' });
+  if (!result) return badRequest(res, 'Sale does not meet the mission conditions or all places are taken');
+  sendJson(res, result.stamp, result.created ? 201 : 200);
 });
 
 citizenRoutes.get("/users/me/stamps", requireAuth, async (req: AuthRequest, res) => {
@@ -351,6 +338,7 @@ citizenRoutes.get("/rewards", async (_req, res) => {
         in: ["ACTIVE", "active", "AVAILABLE", "available"],
       },
     },
+    include: { provinces: true },
   });
 
   sendJson(res, rewards);
@@ -358,10 +346,35 @@ citizenRoutes.get("/rewards", async (_req, res) => {
 
 citizenRoutes.post("/stamp-redemptions", requireAuth, async (req: AuthRequest, res) => {
   const { Reward_ID, Stamp_ID, Quantity } = req.body;
+  const rewardId = Number(Reward_ID);
+  if (!Number.isInteger(rewardId) || rewardId < 1) return badRequest(res, 'Valid Reward_ID is required');
+  const reward = await prisma.rewards.findUnique({ where: { Reward_ID: rewardId } });
+  if (!reward || !['ACTIVE', 'active', 'AVAILABLE', 'available'].includes(reward.Status)) return notFound(res, 'Active reward not found');
 
-  if (!Reward_ID || !Stamp_ID || !Quantity) {
-    return badRequest(res, "Reward_ID, Stamp_ID, and Quantity are required");
+  if (reward.Reward_Type === 'OTOP_PRODUCT' && reward.Province_ID) {
+    const userId = req.user!.userId;
+    const result = await prisma.$transaction(async tx => {
+      await tx.$queryRaw`SELECT User_ID FROM users WHERE User_ID = ${userId} FOR UPDATE`;
+      if (await tx.stamp_redemptions.findFirst({ where: { User_ID: userId, Reward_ID: rewardId, Status: { in: ['REQUESTED', 'COMPLETED'] } } })) return { error: 'This reward has already been claimed' };
+      const districtCount = await tx.districts.count({ where: { Prov_ID: reward.Province_ID! } });
+      const stamps = await tx.user_stamps.findMany({
+        where: { User_ID: userId },
+        include: { district_stamps: { include: { districts: true } } },
+      });
+      const eligible = stamps.filter(stamp => stamp.district_stamps.districts.Prov_ID === reward.Province_ID);
+      if (!districtCount || collectedDistrictCount(stamps, reward.Province_ID!) < requiredDistrictStamps(districtCount)) {
+        return { error: `At least ${requiredDistrictStamps(districtCount)} different district stamps are required` };
+      }
+      return { redemption: await tx.stamp_redemptions.create({
+        data: { User_ID: userId, Reward_ID: rewardId, Stamp_ID: eligible[0].Stamp_ID, Quantity: 1, Status: 'REQUESTED', Redeemed_At: new Date() },
+        include: { rewards: true, district_stamps: true },
+      }) };
+    }, { isolationLevel: 'ReadCommitted' });
+    if (result.error) return badRequest(res, result.error);
+    return sendJson(res, result.redemption, 201);
   }
+
+  if (!Stamp_ID || !Quantity) return badRequest(res, 'Stamp_ID and Quantity are required');
 
   const redemption = await prisma.stamp_redemptions.create({
     data: {

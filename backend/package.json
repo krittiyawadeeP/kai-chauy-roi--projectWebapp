@@ -8,7 +8,9 @@
     "build": "tsc --noEmit",
     "prisma:generate": "prisma generate",
     "seed:nakhon-pathom": "tsx prisma/seed-nakhon-pathom.ts",
-    "seed:sales": "tsx prisma/seed-sales.ts"
+    "seed:sales": "tsx prisma/seed-sales.ts",
+    "seed:otop-rewards": "tsx prisma/seed-otop-rewards.ts",
+    "images:otop-rewards": "tsx prisma/add-otop-images.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",

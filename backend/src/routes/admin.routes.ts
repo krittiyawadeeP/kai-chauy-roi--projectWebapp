@@ -8,6 +8,7 @@ import { grantRoutes } from "../grants/grants.routes";
 import { policyRoutes } from "../policy/policy.routes";
 import { bangkokDate, eligibleMissionSlots, suggestMission, summarizeSales } from "../lib/sales-mission";
 import { completedBangkokDay } from "../lib/daily-mission-job";
+import { requiredDistrictStamps } from '../lib/otop-reward';
 
 export const adminRoutes = Router();
 
@@ -48,12 +49,25 @@ adminRoutes.get("/merchants", async (_req, res) => {
 
 adminRoutes.get('/daily-mission-analyses', async (_req, res) => {
   const { analysisDate } = completedBangkokDay();
-  const rows = await prisma.daily_mission_analyses.findMany({
+  const include = { provinces: { select: { Prov_Name: true } }, mission: { select: { Mission_ID: true, Mission_Name: true, Description: true, Start_DateTime: true, End_DateTime: true, Max_Recipients: true, Status: true } } } as const;
+  const currentRows = await prisma.daily_mission_analyses.findMany({
     where: { Analysis_Date: analysisDate },
-    include: { provinces: { select: { Prov_Name: true } }, mission: { select: { Mission_ID: true, Start_DateTime: true, End_DateTime: true, Max_Recipients: true, Status: true } } },
+    include,
     orderBy: { Province_ID: 'asc' },
   });
+  const previousReady = await prisma.daily_mission_analyses.findMany({
+    where: { Status: 'READY', Analysis_Date: { lt: analysisDate }, mission: { isNot: null } },
+    include,
+    orderBy: { Analysis_Date: 'desc' },
+    distinct: ['Province_ID'],
+  });
+  const byProvince = new Map(currentRows.map(row => [row.Province_ID, row]));
+  for (const row of previousReady) {
+    if (byProvince.get(row.Province_ID)?.Status !== 'READY') byProvince.set(row.Province_ID, row);
+  }
+  const rows = [...byProvince.values()].sort((a, b) => a.Province_ID - b.Province_ID);
   sendJson(res, { analysisDate: analysisDate.toISOString().slice(0, 10), rows: rows.map(row => ({
+    analyzedDate: row.Analysis_Date.toISOString().slice(0, 10),
     provinceId: row.Province_ID,
     provinceName: row.provinces.Prov_Name,
     merchantId: row.Merchant_ID,
@@ -62,7 +76,7 @@ adminRoutes.get('/daily-mission-analyses', async (_req, res) => {
     message: row.Message,
     summary: row.Summary,
     suggestion: row.Suggestion,
-    mission: row.mission ? { id: row.mission.Mission_ID, start: row.mission.Start_DateTime, end: row.mission.End_DateTime, quota: row.mission.Max_Recipients, status: row.mission.Status } : null,
+    mission: row.mission ? { id: row.mission.Mission_ID, name: row.mission.Mission_Name, description: row.mission.Description, start: row.mission.Start_DateTime, end: row.mission.End_DateTime, quota: row.mission.Max_Recipients, status: row.mission.Status } : null,
     updatedAt: row.Updated_At,
   })) });
 });
@@ -227,7 +241,7 @@ adminRoutes.get("/missions/:missionId", async (req, res) => {
 adminRoutes.patch("/missions/:missionId", async (req, res) => {
   const missionId = toNumber(req.params.missionId);
 
-  if (!missionId) {
+  if (!missionId || !Number.isInteger(missionId) || missionId < 1) {
     return badRequest(res, "Invalid missionId");
   }
 
@@ -241,17 +255,37 @@ adminRoutes.patch("/missions/:missionId", async (req, res) => {
     Status,
   } = req.body;
 
+  const current = await prisma.missions.findUnique({ where: { Mission_ID: missionId } });
+  if (!current) return notFound(res, 'Mission not found');
+  const start = Start_DateTime === undefined ? current.Start_DateTime : new Date(Start_DateTime);
+  const end = End_DateTime === undefined ? current.End_DateTime : new Date(End_DateTime);
+  if ((Mission_Name !== undefined && (typeof Mission_Name !== 'string' || !Mission_Name.trim() || Mission_Name.length > 200)) ||
+      (Description !== undefined && typeof Description !== 'string') ||
+      (Max_Recipients !== undefined && (!Number.isInteger(Max_Recipients) || Max_Recipients < 1)) ||
+      (Target_Merchant_ID !== undefined && (!Number.isInteger(Target_Merchant_ID) || Target_Merchant_ID < 1)) ||
+      (Status !== undefined && (typeof Status !== 'string' || !Status.trim() || Status.length > 30)) ||
+      !Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end <= start) {
+    return badRequest(res, 'Invalid mission details');
+  }
+  if (Max_Recipients !== undefined) {
+    const recipients = await prisma.user_stamps.count({ where: { Mission_ID: missionId } });
+    if (Max_Recipients < recipients) return badRequest(res, 'Recipient limit cannot be lower than the number already issued');
+  }
+  if (Target_Merchant_ID !== undefined && !await prisma.merchants.findUnique({ where: { Mch_ID: Target_Merchant_ID }, select: { Mch_ID: true } })) {
+    return notFound(res, 'Merchant not found');
+  }
+
   const mission = await prisma.missions.update({
     where: {
       Mission_ID: missionId,
     },
     data: {
-      Mission_Name,
+      Mission_Name: Mission_Name === undefined ? undefined : Mission_Name.trim(),
       Description,
       Target_Merchant_ID,
       Max_Recipients,
-      Start_DateTime: Start_DateTime ? new Date(Start_DateTime) : undefined,
-      End_DateTime: End_DateTime ? new Date(End_DateTime) : undefined,
+      Start_DateTime: Start_DateTime === undefined ? undefined : start,
+      End_DateTime: End_DateTime === undefined ? undefined : end,
       Status,
     },
   });
@@ -298,47 +332,67 @@ adminRoutes.patch("/stamps/:stampId", async (req, res) => {
   sendJson(res, stamp);
 });
 
-adminRoutes.post("/rewards", async (req, res) => {
-  const { Reward_Name, Reward_Type, Description, Required_Stamp_Count, Status } = req.body;
-
-  if (!Reward_Name || Required_Stamp_Count === undefined) {
-    return badRequest(res, "Reward_Name and Required_Stamp_Count are required");
-  }
-
-  const reward = await prisma.rewards.create({
-    data: {
-      Reward_Name,
-      Reward_Type,
-      Description,
-      Required_Stamp_Count,
-      Status: Status ?? "ACTIVE",
-    },
-  });
-
-  sendJson(res, reward, 201);
+adminRoutes.get('/rewards', async (_req, res) => {
+  const rewards = await prisma.rewards.findMany({ include: { provinces: true }, orderBy: { Reward_ID: 'desc' } });
+  sendJson(res, rewards);
 });
 
-adminRoutes.patch("/rewards/:rewardId", async (req, res) => {
-  const rewardId = toNumber(req.params.rewardId);
-
-  if (!rewardId) {
-    return badRequest(res, "Invalid rewardId");
-  }
-
-  const { Reward_Name, Reward_Type, Description, Required_Stamp_Count, Status } = req.body;
-
-  const reward = await prisma.rewards.update({
-    where: {
-      Reward_ID: rewardId,
-    },
-    data: {
-      Reward_Name,
-      Reward_Type,
-      Description,
-      Required_Stamp_Count,
-      Status,
-    },
+adminRoutes.get('/rewards/provinces', async (_req, res) => {
+  const provinces = await prisma.provinces.findMany({
+    select: { Prov_ID: true, Prov_Name: true, _count: { select: { districts: true } } },
+    orderBy: { Prov_Name: 'asc' },
   });
+  sendJson(res, provinces.map(province => ({
+    id: province.Prov_ID, name: province.Prov_Name, districtCount: province._count.districts,
+    requiredStampCount: requiredDistrictStamps(province._count.districts),
+  })));
+});
 
-  sendJson(res, reward);
+function validWebUrl(value: unknown) {
+  if (value == null || value === '') return true;
+  if (typeof value !== 'string' || value.length > 2048) return false;
+  try { return ['https:', 'http:'].includes(new URL(value).protocol); } catch { return false; }
+}
+
+async function rewardInput(body: Record<string, unknown>, current?: { Reward_Name: string; Reward_Type: string | null; Province_ID: number | null; Source_URL: string | null; Required_Stamp_Count: number; Status: string }) {
+  const type = body.Reward_Type === undefined ? current?.Reward_Type : body.Reward_Type;
+  const name = body.Reward_Name === undefined ? current?.Reward_Name : body.Reward_Name;
+  const provinceId = body.Province_ID === undefined ? current?.Province_ID : Number(body.Province_ID);
+  const sourceUrl = body.Source_URL === undefined ? current?.Source_URL : body.Source_URL;
+  if (typeof name !== 'string' || !name.trim() || name.length > 200 ||
+      !validWebUrl(body.Image_URL) || !validWebUrl(sourceUrl) ||
+      (type === 'OTOP_PRODUCT' && (!Number.isInteger(provinceId) || !provinceId))) return null;
+  const districtCount = type === 'OTOP_PRODUCT' ? await prisma.districts.count({ where: { Prov_ID: provinceId! } }) : 0;
+  if (type === 'OTOP_PRODUCT' && !districtCount) return null;
+  const required = type === 'OTOP_PRODUCT' ? requiredDistrictStamps(districtCount) : (body.Required_Stamp_Count ?? current?.Required_Stamp_Count);
+  if (!Number.isInteger(Number(required)) || Number(required) < 1) return null;
+  return {
+    Reward_Name: name.trim(), Reward_Type: type as string | null | undefined,
+    Description: body.Description as string | null | undefined,
+    Required_Stamp_Count: Number(required), Status: (body.Status ?? current?.Status ?? 'ACTIVE') as string,
+    Province_ID: type === 'OTOP_PRODUCT' ? provinceId : null,
+    Image_URL: (body.Image_URL || null) as string | null,
+    Source_URL: (sourceUrl || null) as string | null,
+  };
+}
+
+adminRoutes.post('/rewards', async (req, res) => {
+  const data = await rewardInput(req.body);
+  if (!data) return badRequest(res, 'Invalid reward, province or image/source URL');
+  sendJson(res, await prisma.rewards.create({ data: { ...data, Reward_Type: data.Reward_Type ?? null } }), 201);
+});
+
+adminRoutes.patch('/rewards/:rewardId', async (req, res) => {
+  const rewardId = toNumber(req.params.rewardId);
+  if (!rewardId || !Number.isInteger(rewardId)) return badRequest(res, 'Invalid rewardId');
+  const current = await prisma.rewards.findUnique({ where: { Reward_ID: rewardId } });
+  if (!current) return notFound(res, 'Reward not found');
+  const data = await rewardInput(req.body, current);
+  if (!data) return badRequest(res, 'Invalid reward, province or image/source URL');
+  sendJson(res, await prisma.rewards.update({ where: { Reward_ID: rewardId }, data: {
+    ...data,
+    Description: req.body.Description === undefined ? undefined : data.Description,
+    Status: req.body.Status === undefined ? undefined : data.Status,
+    Image_URL: req.body.Image_URL === undefined ? undefined : data.Image_URL,
+  } }));
 });

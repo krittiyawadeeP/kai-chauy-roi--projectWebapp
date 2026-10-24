@@ -18,7 +18,7 @@ export const citizenService = {
     return api.get(`/missions/${missionId}`);
   },
 
-  completeMission: (missionId: number, data: { Stamp_ID: number; Qualifying_Amount: number }) => {
+  completeMission: (missionId: number, data: { Tx_ID: number }) => {
     return api.post(`/missions/${missionId}/complete`, data);
   },
 

@@ -6,6 +6,7 @@ import { prisma } from "../lib/prisma";
 import { merchantCategory } from "../lib/merchant-category";
 import { hashPin, validPin } from "../lib/pin";
 import { getCurrentPolicy } from '../policy/policy';
+import { awardMissionStamp } from '../lib/mission-stamp';
 
 export const merchantRoutes = Router();
 
@@ -263,8 +264,18 @@ merchantRoutes.post("/me/sales", requireMerchant, async (req: AuthRequest, res) 
       data: { Balance: { increment: totalAmount } },
     });
 
-    return sale;
+    const mission = await tx.missions.findFirst({
+      where: {
+        Target_Merchant_ID: merchant.Mch_ID,
+        Status: { in: ['ACTIVE', 'active', 'OPEN', 'open'] },
+        Start_DateTime: { lte: sale.Tx_Timestamp }, End_DateTime: { gte: sale.Tx_Timestamp },
+      },
+      orderBy: { Mission_ID: 'asc' },
+      select: { Mission_ID: true },
     });
+    const missionStamp = mission ? await awardMissionStamp(tx, mission.Mission_ID, sale) : null;
+    return { ...sale, earnedStamp: missionStamp?.created ? missionStamp.stamp : null };
+    }, { isolationLevel: 'ReadCommitted' });
 
     sendJson(res, transaction, 201);
   } catch (error) {

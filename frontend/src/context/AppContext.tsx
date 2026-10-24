@@ -570,7 +570,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let matchingMissionId: number | undefined = undefined;
 
     // Check if there is an active mission for this merchant
-    const activeMission = missions.find(
+    const shopStamp = districtStamps.find(s => s.distId === targetShop.distId);
+    const activeMission = shopStamp && missions.find(
       ms =>
         ms.status === 'active' &&
         (ms.targetMerchantId === merchantId || ms.targetDistId === targetShop.distId) &&
@@ -581,7 +582,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (activeMission) {
       matchingMissionId = activeMission.missionId;
-      awardedStamp = districtStamps.find(s => s.stampId === activeMission.rewardStampId);
+      awardedStamp = shopStamp;
 
       // Increment mission recipients
       setMissions(prev =>
@@ -598,10 +599,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       );
     } else if (totalAmount >= 150) {
       // General rule: Spend >= 150 THB gets a district stamp based on merchant location
-      awardedStamp =
-        districtStamps.find(s => s.distId === targetShop.distId) ||
-        districtStamps.find(s => s.provId === targetShop.provId) ||
-        districtStamps[0];
+      awardedStamp = shopStamp;
     }
 
     if (awardedStamp) {

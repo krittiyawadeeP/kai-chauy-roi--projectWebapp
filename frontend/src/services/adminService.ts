@@ -62,6 +62,7 @@ export interface DailySalesMissionAnalysis extends SalesMissionAnalysis {
 }
 
 export interface DailyMissionRow {
+  analyzedDate: string;
   provinceId: number;
   provinceName: string;
   merchantId: number | null;
@@ -70,7 +71,7 @@ export interface DailyMissionRow {
   message: string | null;
   summary: SalesMissionAnalysis['summary'] | null;
   suggestion: SalesMissionAnalysis['suggestion'] | null;
-  mission: { id: number; start: string; end: string; quota: number; status: string } | null;
+  mission: { id: number; name: string; description: string | null; start: string; end: string; quota: number; status: string } | null;
   updatedAt: string;
 }
 
@@ -98,12 +99,27 @@ export interface PolicyRecord {
   users?: { Citizen_ID: string };
 }
 
+export interface RewardProvince { id: number; name: string; districtCount: number; requiredStampCount: number }
+export interface AdminRewardRecord {
+  Reward_ID: number; Reward_Name: string; Description: string | null; Reward_Type: string | null;
+  Province_ID: number | null; Required_Stamp_Count: number; Image_URL: string | null;
+  Source_URL: string | null; Status: string; provinces: { Prov_Name: string } | null;
+}
+export interface OtopRewardInput {
+  Reward_Name: string; Description: string; Province_ID: number; Image_URL: string;
+  Source_URL: string; Reward_Type: 'OTOP_PRODUCT'; Status: string;
+}
+
 export const adminService = {
   getMerchants: () => api.get<{ Mch_ID: number; Shop_Name: string; Category: string | null; districts?: { Dist_Name: string; Prov_ID: number; provinces?: { Prov_Name: string } } }[]>('/admin/merchants'),
   suggestSalesMission: (merchantId: number) => api.post<SalesMissionAnalysis>(`/admin/merchants/${merchantId}/mission-suggestion`),
   suggestDailySalesMission: (provinceId: number) => api.post<DailySalesMissionAnalysis>(`/admin/provinces/${provinceId}/daily-mission-suggestion`),
   getDailyMissionAnalyses: () => api.get<DailyMissionReport>('/admin/daily-mission-analyses'),
   getMissions: () => api.get<AdminMissionRecord[]>('/admin/missions'),
+  getRewards: () => api.get<AdminRewardRecord[]>('/admin/rewards'),
+  getRewardProvinces: () => api.get<RewardProvince[]>('/admin/rewards/provinces'),
+  createOtopReward: (data: OtopRewardInput) => api.post<AdminRewardRecord>('/admin/rewards', data),
+  updateOtopReward: (id: number, data: OtopRewardInput) => api.patch<AdminRewardRecord>(`/admin/rewards/${id}`, data),
   getGeographicDashboard: async (signal?: AbortSignal) => {
     const data = await api.get<GeographicDashboardData>('/admin/dashboard/geography', { signal });
     if (!Array.isArray(data.districts)) throw new Error('Backend ยังไม่ส่งข้อมูลอำเภอ/เขต กรุณารีสตาร์ต backend แล้วโหลดข้อมูลใหม่');
@@ -139,6 +155,10 @@ export const adminService = {
     End_DateTime: string;
     Status: 'ACTIVE';
   }) => api.post('/admin/missions', missionData),
+  updateMission: (missionId: number, data: {
+    Mission_Name: string; Description: string; Max_Recipients: number;
+    Start_DateTime: string; End_DateTime: string; Status: string;
+  }) => api.patch(`/admin/missions/${missionId}`, data),
 
   createReward: (rewardData: {
     Dist_ID: number;

@@ -100,6 +100,7 @@ model provinces {
   districts districts[]
   users     users[]
   daily_mission_analyses daily_mission_analyses[]
+  rewards  rewards[]
 }
 
 model daily_mission_analyses {
@@ -128,7 +129,13 @@ model rewards {
   Description          String?             @db.Text
   Required_Stamp_Count Int
   Status               String              @db.VarChar(30)
+  Province_ID          Int?
+  Image_URL            String?             @db.VarChar(2048)
+  Source_URL           String?             @db.VarChar(2048)
+  provinces            provinces?          @relation(fields: [Province_ID], references: [Prov_ID], map: "fk_reward_province")
   stamp_redemptions    stamp_redemptions[]
+
+  @@index([Province_ID], map: "fk_reward_province")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.

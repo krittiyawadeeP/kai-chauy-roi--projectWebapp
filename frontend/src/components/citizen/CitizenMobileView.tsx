@@ -14,6 +14,7 @@ export const CitizenMobileView: React.FC = () => {
     currentUser,
     wallet,
     userGrant,
+    merchants,
     missions,
     districtStamps,
     userStamps,
@@ -371,7 +372,8 @@ export const CitizenMobileView: React.FC = () => {
 
           <div className="space-y-3">
             {missions.map(ms => {
-              const stamp = districtStamps.find(s => s.stampId === ms.rewardStampId);
+              const merchant = merchants.find(shop => shop.mchId === ms.targetMerchantId);
+              const stamp = districtStamps.find(s => s.distId === (merchant?.distId ?? ms.targetDistId));
               const progress = Math.min(100, (ms.currentRecipients / ms.maxRecipients) * 100);
               return (
                 <div

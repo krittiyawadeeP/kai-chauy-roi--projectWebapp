@@ -79,9 +79,9 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     : null;
 
   const previewStamp = matchingMission
-    ? districtStamps.find(s => s.stampId === matchingMission.rewardStampId)
+    ? districtStamps.find(s => s.distId === selectedMerchant?.distId)
     : amount >= 150 && selectedMerchant
-    ? districtStamps.find(s => s.distId === selectedMerchant.distId) || districtStamps[0]
+    ? districtStamps.find(s => s.distId === selectedMerchant.distId)
     : null;
 
   const handleConfirmPay = () => {
