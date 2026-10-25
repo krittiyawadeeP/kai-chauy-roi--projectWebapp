@@ -22,7 +22,8 @@ export type IconName =
   | 'search'
   | 'share'
   | 'history'
-  | 'repeat';
+  | 'repeat'
+  | 'grid';
 
 interface IconProps {
   name: IconName;
@@ -158,6 +159,14 @@ export const Icon: React.FC<IconProps> = ({ name, className = 'size-5' }) => {
         <path d="M3 11v-1a4 4 0 0 1 4-4h14" />
         <path d="m7 22-4-4 4-4" />
         <path d="M21 13v1a4 4 0 0 1-4 4H3" />
+      </>
+    ),
+    grid: (
+      <>
+        <rect x="3" y="3" width="7" height="7" rx="1.5" />
+        <rect x="14" y="3" width="7" height="7" rx="1.5" />
+        <rect x="14" y="14" width="7" height="7" rx="1.5" />
+        <rect x="3" y="14" width="7" height="7" rx="1.5" />
       </>
     )
   };
