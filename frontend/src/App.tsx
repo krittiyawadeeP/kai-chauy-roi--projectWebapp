@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { BottomNav } from './components/layout';
 import { CitizenMobilePage } from './pages/citizen/CitizenMobilePage';
@@ -19,16 +19,28 @@ import { MyVouchersModal } from './components/citizen/MyVouchersModal';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 
 const AppContent: React.FC = () => {
-  const { isAuthenticated, redemptions } = useApp();
+  const { isAuthenticated, redemptions, setRole } = useApp();
 
   const [activeNav, setActiveNav] = useState('หน้าหลัก');
   const [globalScannerOpen, setGlobalScannerOpen] = useState(false);
   const [globalStatusOpen, setGlobalStatusOpen] = useState(false);
   const [globalProfileOpen, setGlobalProfileOpen] = useState(false);
+  const [globalMapOpen, setGlobalMapOpen] = useState(false);
   const [globalVouchersOpen, setGlobalVouchersOpen] = useState(false);
   const [globalQrOpen, setGlobalQrOpen] = useState(false);
   const [globalStatementOpen, setGlobalStatementOpen] = useState(false);
   const [globalShopMapId, setGlobalShopMapId] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('view') === 'admin') setRole('admin');
+  }, [setRole]);
+
+  const handleRoleSelect = (selected: 'ประชาชน' | 'ร้านค้า' | 'ภาครัฐ') => {
+    setActiveNav('หน้าหลัก');
+    if (selected === 'ประชาชน') setRole('citizen');
+    else if (selected === 'ร้านค้า') setRole('merchant');
+    else setRole('admin');
+  };
 
   const handleNavClick = (label: string) => {
     setActiveNav(label);
