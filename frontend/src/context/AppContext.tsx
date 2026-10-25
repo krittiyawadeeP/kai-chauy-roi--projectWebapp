@@ -103,11 +103,20 @@ const DUMMY_TO_REAL_DISTRICT: Record<number, { provId: number; distId: number }>
 };
 
 
-function mapApiSale(data: ApiSale): SalesTransaction {
+function mapApiSale(data: ApiSale, usersList?: User[]): SalesTransaction {
+  const customerName = data.users?.Name?.trim();
+  const matchedUser = usersList?.find(u => u.userId === data.User_ID);
+  const fallbackName = matchedUser?.name?.trim();
+  const phone = data.users?.Phone?.trim();
+
+  // If customer has a real Name, show the Name! Otherwise phone or user ID
+  const userName = customerName || fallbackName || phone || `ผู้ใช้ ${data.User_ID}`;
+
   return {
     txId: Number(data.Tx_ID),
     userId: data.User_ID,
-    userName: data.users?.Phone ?? `ผู้ใช้ ${data.User_ID}`,
+    userName,
+    userPhone: phone,
     merchantId: data.Merchant_ID,
     merchantName: '',
     totalAmount: Number(data.Total_Amount),
@@ -174,7 +183,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const mappedMerchant = mapApiMerchant(profile);
     setCurrentMerchant(mappedMerchant);
     setMerchants(previous => [mappedMerchant, ...previous.filter(item => item.mchId !== mappedMerchant.mchId)]);
-    setTransactions(sales.map(mapApiSale));
+    setTransactions(sales.map(s => mapApiSale(s, users)));
   }, []);
 
   const [missions, setMissions] = useState<Mission[]>(() => {

@@ -181,16 +181,7 @@ export const MerchantProfileSettingsModal: React.FC<MerchantProfileSettingsModal
                 type="text"
                 value={ownerName}
                 onChange={e => setOwnerName(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-xl"
-              />
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold text-slate-600 mb-1">กระเป๋ารับเงินร้านค้า</label>
-              <input
-                type="text"
-                value={currentMerchant.walletBalance === undefined ? 'ยังไม่มีข้อมูลยอดเงิน' : `฿ ${currentMerchant.walletBalance.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`}
-                readOnly
-                className="w-full px-3 py-2 border border-slate-200 rounded-xl font-mono"
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs"
               />
             </div>
             <div>
@@ -198,7 +189,7 @@ export const MerchantProfileSettingsModal: React.FC<MerchantProfileSettingsModal
               <select
                 value={category}
                 onChange={e => setCategory(e.target.value as any)}
-                className="w-full px-2.5 py-2 border border-slate-200 rounded-xl bg-white"
+                className="w-full px-2.5 py-2 border border-slate-200 rounded-xl bg-white text-xs"
               >
                 <option value="อาหารและเครื่องดื่ม">อาหารและเครื่องดื่ม</option>
                 <option value="ของใช้ทั่วไป">ของใช้ทั่วไป</option>

@@ -422,8 +422,11 @@ export const MerchantWalletView: React.FC<MerchantWalletViewProps> = ({
                       💰
                     </span>
                     <div>
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="text-xs font-bold text-slate-800">{tx.userName}</span>
+                        {tx.userPhone && tx.userPhone !== tx.userName && (
+                          <span className="text-[9px] text-slate-400 font-mono">({tx.userPhone})</span>
+                        )}
                         <span className="text-[9px] bg-emerald-50 text-emerald-700 px-1.5 py-0.2 rounded font-mono font-bold">
                           สำเร็จ
                         </span>
@@ -633,7 +636,12 @@ export const MerchantWalletView: React.FC<MerchantWalletViewProps> = ({
               </div>
               <div className="flex justify-between text-slate-500">
                 <span>ลูกค้าผู้ชำระ:</span>
-                <strong className="text-slate-800">{selectedTxForDetail.userName}</strong>
+                <div className="text-right">
+                  <strong className="text-slate-800 block">{selectedTxForDetail.userName}</strong>
+                  {selectedTxForDetail.userPhone && selectedTxForDetail.userPhone !== selectedTxForDetail.userName && (
+                    <span className="text-slate-400 font-mono text-[10px] block">เบอร์โทร: {selectedTxForDetail.userPhone}</span>
+                  )}
+                </div>
               </div>
               <div className="flex justify-between text-slate-500">
                 <span>ลูกค้าจ่าย (60%):</span>

@@ -11,6 +11,46 @@ import { MerchantWalletView } from './MerchantWalletView';
 import { authStorage } from '../../services/api';
 import { ApiError } from '../../services/api';
 
+export const isToday = (dateStr?: string | Date | null): boolean => {
+  if (!dateStr) return false;
+  const now = new Date();
+
+  if (typeof dateStr === 'string') {
+    const ymdMatch = dateStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (ymdMatch) {
+      const year = parseInt(ymdMatch[1], 10);
+      const month = parseInt(ymdMatch[2], 10) - 1;
+      const day = parseInt(ymdMatch[3], 10);
+
+      if (dateStr.includes('Z') || (dateStr.includes('T') && dateStr.length > 19)) {
+        const d = new Date(dateStr);
+        if (!isNaN(d.getTime())) {
+          return (
+            d.getFullYear() === now.getFullYear() &&
+            d.getMonth() === now.getMonth() &&
+            d.getDate() === now.getDate()
+          );
+        }
+      }
+
+      return (
+        year === now.getFullYear() &&
+        month === now.getMonth() &&
+        day === now.getDate()
+      );
+    }
+  }
+
+  const d = new Date(dateStr);
+  return (
+    !isNaN(d.getTime()) &&
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate()
+  );
+};
+
+
 interface MerchantMobileViewProps {
   initialTab?: 'sales' | 'wallet' | 'ai' | 'info';
   onOpenRevenuePage?: () => void;
@@ -50,13 +90,28 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
       .finally(() => setLoadingMerchantData(false));
   }, [refreshMerchantData]);
 
-  const merchantTransactions = transactions.filter(t => t.merchantId === currentMerchant?.mchId);
-  const totalSalesToday = merchantTransactions.reduce((acc, t) => acc + t.totalAmount, 0) +
-    (!authStorage.getToken() ? (currentMerchant?.currentDailySales || 0) : 0);
-  const govSubsidyReceivable = merchantTransactions.reduce(
-    (acc, t) => acc + t.govSubsidizedAmount,
-    0
-  );
+  const [salesViewMode, setSalesViewMode] = useState<'today' | 'all'>('today');
+
+  const merchantTransactions = React.useMemo(() => {
+    return transactions.filter(t => t.merchantId === currentMerchant?.mchId);
+  }, [transactions, currentMerchant?.mchId]);
+
+  // Filter ONLY transactions for TODAY
+  const todayTransactions = React.useMemo(() => {
+    return merchantTransactions.filter(t => isToday(t.txTimestamp));
+  }, [merchantTransactions]);
+
+  const totalSalesToday = React.useMemo(() => {
+    return todayTransactions.reduce((acc, t) => acc + t.totalAmount, 0);
+  }, [todayTransactions]);
+
+  const userPaidToday = React.useMemo(() => {
+    return todayTransactions.reduce((acc, t) => acc + t.userPaidAmount, 0);
+  }, [todayTransactions]);
+
+  const govSubsidyToday = React.useMemo(() => {
+    return todayTransactions.reduce((acc, t) => acc + t.govSubsidizedAmount, 0);
+  }, [todayTransactions]);
 
   const myAiAnalysis = aiAnalysis.find(a => a.merchantId === currentMerchant?.mchId);
   const activeMission = missions.find(
@@ -174,9 +229,15 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
         <div className="relative rounded-[22px] bg-white p-5 shadow-[0_12px_35px_rgba(17,94,89,.14)] border border-teal-100/80">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-xs font-medium text-slate-500">ยอดขายรวมวันนี้</p>
-              <p className="mt-1 text-[30px] font-bold tracking-tight text-[#134e4a]">
-                ฿ {totalSalesToday.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+              <div className="flex items-center gap-1.5">
+                <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+                <p className="text-xs font-medium text-slate-500">ยอดขายรวมวันนี้</p>
+                <span className="text-[10px] bg-teal-50 text-teal-800 px-1.5 py-0.2 rounded font-mono font-medium">
+                  {new Date().toLocaleDateString('th-TH', { dateStyle: 'short' })}
+                </span>
+              </div>
+              <p className="mt-1 text-[30px] font-bold tracking-tight text-[#134e4a] font-mono">
+                ฿ {totalSalesToday.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </p>
             </div>
             <span className="rounded-full bg-teal-50 px-3 py-1.5 text-xs font-bold text-[#115e59] border border-teal-200">
@@ -207,15 +268,15 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
 
           <div className="mt-3 grid grid-cols-2 gap-3 pt-3 border-t border-slate-100 text-xs">
             <div className="bg-[#f0fdfa] p-3 rounded-xl border border-teal-100">
-              <span className="text-[10px] text-teal-800 block">ลูกค้าจ่ายผ่าน QR </span>
-              <span className="text-sm font-bold text-[#0f766e]">
-                ฿ {merchantTransactions.reduce((acc, tx) => acc + tx.userPaidAmount, 0).toLocaleString()}
+              <span className="text-[10px] text-teal-800 block">ลูกค้าจ่ายผ่าน QR วันนี้</span>
+              <span className="text-sm font-bold text-[#0f766e] font-mono">
+                ฿ {userPaidToday.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
               </span>
             </div>
             <div className="bg-[#f0fdf4] p-3 rounded-xl border border-emerald-100">
-              <span className="text-[10px] text-emerald-800 block">รัฐช่วยจ่าย </span>
-              <span className="text-sm font-bold text-emerald-700">
-                ฿ {govSubsidyReceivable.toLocaleString()}
+              <span className="text-[10px] text-emerald-800 block">รัฐช่วยจ่ายวันนี้</span>
+              <span className="text-sm font-bold text-emerald-700 font-mono">
+                ฿ {govSubsidyToday.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
               </span>
             </div>
           </div>
@@ -225,7 +286,7 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
             <span className="text-slate-500 font-medium">
               บิลขายวันนี้:&nbsp;
               <strong className="text-slate-800 font-mono">
-                {merchantTransactions.length} บิล
+                {todayTransactions.length} บิล
               </strong>
             </span>
             <button
@@ -339,27 +400,61 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
 
       {/* TAB 1: SALES LIST FOR TODAY + REVENUE BREAKDOWN KPIS AT THE BOTTOM */}
       {activeTab === 'sales' && (
-        <section className="px-4 pt-4 space-y-4">
-          {/* Top section: Today's sales transaction list (Original Version) */}
+        <section className="px-4 pt-4 space-y-3.5">
+          {/* Sub-filter: วันนี้ vs ทั้งหมด */}
+          <div className="flex items-center justify-between text-xs">
+            <span className="font-bold text-slate-700">
+              {salesViewMode === 'today'
+                ? `รายการขายวันนี้ (${todayTransactions.length} บิล)`
+                : `ประวัติการขายทั้งหมด (${merchantTransactions.length} บิล)`}
+            </span>
+            <div className="flex bg-slate-100 p-0.5 rounded-lg text-[11px]">
+              <button
+                onClick={() => setSalesViewMode('today')}
+                className={`px-2.5 py-1 rounded-md font-bold transition-all ${
+                  salesViewMode === 'today' ? 'bg-white text-teal-900 shadow-xs' : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                เฉพาะวันนี้ (${todayTransactions.length})
+              </button>
+              <button
+                onClick={() => setSalesViewMode('all')}
+                className={`px-2.5 py-1 rounded-md font-bold transition-all ${
+                  salesViewMode === 'all' ? 'bg-white text-teal-900 shadow-xs' : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                ทั้งหมด (${merchantTransactions.length})
+              </button>
+            </div>
+          </div>
+
+          {/* Transaction List */}
           <div className="space-y-2.5">
-            {merchantTransactions.length > 0 ? (
-              merchantTransactions.map(tx => (
+            {(salesViewMode === 'today' ? todayTransactions : merchantTransactions).length > 0 ? (
+              (salesViewMode === 'today' ? todayTransactions : merchantTransactions).map(tx => (
                 <div
                   key={tx.txId}
                   className="rounded-[20px] bg-white p-3.5 border border-teal-50 shadow-sm flex items-center justify-between"
                 >
                   <div>
-                    <p className="font-bold text-xs text-slate-800">{tx.userName}</p>
-                    <p className="text-[10px] text-slate-400">{tx.txTimestamp}</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="font-bold text-xs text-slate-800">{tx.userName}</p>
+                      {tx.userPhone && tx.userPhone !== tx.userName && (
+                        <span className="text-[9px] text-slate-400 font-mono">({tx.userPhone})</span>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-slate-400 font-mono">{tx.txTimestamp}</p>
                     <span className="text-[10px] text-teal-700 font-medium">
-                      รัฐช่วยจ่าย: ฿{tx.govSubsidizedAmount}
+                      รัฐช่วยจ่าย: ฿{tx.govSubsidizedAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
                     </span>
                   </div>
                   <div className="text-right">
-                    <span className="font-extrabold text-sm text-[#134e4a] block">
-                      +฿ {tx.totalAmount.toLocaleString()}
+                    <span className="font-extrabold text-sm text-[#134e4a] font-mono block">
+                      +฿ {tx.totalAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
                     </span>
-                    <span className="text-[10px] text-[#0f766e]">ลูกค้าจ่าย ฿{tx.userPaidAmount}</span>
+                    <span className="text-[10px] text-[#0f766e]">
+                      ลูกค้าจ่าย ฿{tx.userPaidAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                    </span>
                   </div>
                 </div>
               ))
@@ -368,21 +463,29 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
                 <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-teal-50 text-[#115e59] mb-2">
                   <Icon name="qr" className="size-6" />
                 </span>
-                <p className="text-xs text-slate-500">ยังไม่มีรายการชำระในวันนี้</p>
-                <button
-                  onClick={() => setQrModalOpen(true)}
-                  className="mt-3 px-4 py-2 bg-[#115e59] hover:bg-[#0f766e] text-white rounded-xl text-xs font-bold transition-colors shadow-sm"
-                >
-                  สร้าง QR Code รับเงิน
-                </button>
+                <p className="text-xs font-bold text-slate-700">ยังไม่มีรายการชำระในวันนี้</p>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  เมื่อลูกค้าสแกน QR จ่ายเงิน ยอดขายของวันนี้จะปรากฏที่นี่ทันที
+                </p>
+                <div className="mt-3 flex justify-center gap-2">
+                  <button
+                    onClick={() => setQrModalOpen(true)}
+                    className="px-4 py-2 bg-[#115e59] hover:bg-[#0f766e] text-white rounded-xl text-xs font-bold transition-colors shadow-sm cursor-pointer"
+                  >
+                    สร้าง QR Code รับเงิน
+                  </button>
+                  {merchantTransactions.length > 0 && (
+                    <button
+                      onClick={() => setSalesViewMode('all')}
+                      className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                    >
+                      ดูรายการย้อนหลัง ({merchantTransactions.length})
+                    </button>
+                  )}
+                </div>
               </div>
             )}
           </div>
-
-          {/* Bottom section: Card สรุปยอด ฿ KPI (อยู่ล่างสุด) */}
-          {/* <div className="pt-2 border-t border-dashed border-teal-200/80">
-            <RevenueBreakdownCard />
-          </div> */}
         </section>
       )}
 
@@ -490,10 +593,6 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
             </div>
 
             <div className="p-3 bg-[#f0fdfa] rounded-xl text-xs space-y-1.5 border border-teal-100">
-              <div className="flex justify-between text-slate-600">
-                <span>ยอดกระเป๋าร้านค้า:</span>
-                <strong className="text-[#115e59] font-mono">฿ {currentMerchant.walletBalance?.toLocaleString('th-TH', { minimumFractionDigits: 2 }) ?? '—'}</strong>
-              </div>
               <div className="flex justify-between text-slate-600">
                 <span>เบอร์โทรศัพท์ติดต่อ:</span>
                 <strong className="text-slate-800">{currentMerchant.phone}</strong>

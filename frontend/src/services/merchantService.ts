@@ -81,7 +81,7 @@ export interface ApiSale {
   Tx_Timestamp: string;
   District_ID: number;
   Status: string;
-  users?: { Phone?: string; Citizen_ID?: string };
+  users?: { Name?: string | null; Phone?: string; Citizen_ID?: string };
 }
 
 export interface MerchantRegistrationPayload {

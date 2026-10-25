@@ -515,10 +515,15 @@ export const RevenueBreakdownCard: React.FC<RevenueBreakdownCardProps> = ({
                 className="rounded-2xl p-3 bg-slate-50 hover:bg-teal-50/50 border border-slate-200/80 hover:border-teal-300 transition-all cursor-pointer flex items-center justify-between"
               >
                 <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-bold text-xs text-slate-800 truncate">
                       {tx.userName}
                     </span>
+                    {tx.userPhone && tx.userPhone !== tx.userName && (
+                      <span className="text-[9px] text-slate-400 font-mono">
+                        ({tx.userPhone})
+                      </span>
+                    )}
                     <span className="text-[9px] bg-slate-200 text-slate-700 px-1.5 py-0.2 rounded font-mono">
                       #{tx.txId}
                     </span>
@@ -582,7 +587,14 @@ export const RevenueBreakdownCard: React.FC<RevenueBreakdownCardProps> = ({
               </div>
               <div className="flex justify-between text-slate-600">
                 <span>ผู้ชำระเงิน (ประชาชน):</span>
-                <strong className="text-slate-800">{selectedTxForReceipt.userName}</strong>
+                <div className="text-right">
+                  <strong className="text-slate-800 block">{selectedTxForReceipt.userName}</strong>
+                  {selectedTxForReceipt.userPhone && selectedTxForReceipt.userPhone !== selectedTxForReceipt.userName && (
+                    <span className="text-slate-400 font-mono text-[10px] block">
+                      เบอร์โทร: {selectedTxForReceipt.userPhone}
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="flex justify-between text-slate-600">
                 <span>วันเวลาที่ชำระ:</span>

@@ -54,6 +54,7 @@ export interface SalesTransaction {
   txId: number;
   userId: number;
   userName: string;
+  userPhone?: string;
   merchantId: number;
   merchantName: string;
   totalAmount: number;
