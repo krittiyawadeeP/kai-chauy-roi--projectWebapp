@@ -7,17 +7,20 @@ import { MerchantProfileSettingsModal } from './MerchantProfileSettingsModal';
 import { StoreMapPickerModal } from './StoreMapPickerModal';
 import { AuthModal } from '../auth/AuthModal';
 import { RevenueBreakdownCard } from './RevenueBreakdownCard';
+import { MerchantWalletView } from './MerchantWalletView';
 import { authStorage } from '../../services/api';
 import { ApiError } from '../../services/api';
 
 interface MerchantMobileViewProps {
-  initialTab?: 'sales' | 'ai' | 'info';
+  initialTab?: 'sales' | 'wallet' | 'ai' | 'info';
   onOpenRevenuePage?: () => void;
+  onOpenWalletPage?: () => void;
 }
 
 export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
   initialTab = 'sales',
-  onOpenRevenuePage
+  onOpenRevenuePage,
+  onOpenWalletPage
 }) => {
   const {
     merchants,
@@ -34,7 +37,7 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
   const [profileSettingsOpen, setProfileSettingsOpen] = useState(false);
   const [mapPickerOpen, setMapPickerOpen] = useState(false);
   const [authModalOpen, setAuthModalOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'sales' | 'ai' | 'info'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'sales' | 'wallet' | 'ai' | 'info'>(initialTab);
   const [loadingMerchantData, setLoadingMerchantData] = useState(false);
   const [merchantDataError, setMerchantDataError] = useState('');
 
@@ -69,6 +72,16 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
       onClick: () => setQrModalOpen(true)
     },
     {
+      icon: 'wallet' as IconName,
+      label: 'ถุงเงินร้านค้า',
+      detail: 'ยอดเงิน & ถอนเงิน',
+      color: 'green',
+      onClick: () => {
+        if (onOpenWalletPage) onOpenWalletPage();
+        else setActiveTab('wallet');
+      }
+    },
+    {
       icon: 'shop' as IconName,
       label: 'ปักหมุด GPS',
       detail: 'แผนที่พิกัดร้าน',
@@ -77,7 +90,7 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
     },
     {
       icon: 'user' as IconName,
-      label: 'ตั้งค่าโปรไฟล์',
+      label: 'ตั้งค่าร้านค้า',
       detail: 'แก้ไขข้อมูลร้าน',
       color: 'violet',
       onClick: () => setProfileSettingsOpen(true)
@@ -171,10 +184,25 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
             </span>
           </div>
 
-          {authStorage.getToken() && currentMerchant?.walletBalance !== undefined && (
-            <p className="mt-3 border-t border-teal-100 pt-3 text-sm font-semibold text-[#115e59]">
-              ยอดเงินในกระเป๋าร้านค้า: ฿ {currentMerchant.walletBalance.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
-            </p>
+          {(currentMerchant?.walletBalance !== undefined || currentMerchant?.wallet) && (
+            <div className="mt-3 border-t border-teal-100 pt-3 flex items-center justify-between">
+              <div>
+                <span className="text-[10px] text-slate-500 block">ยอดเงินในกระเป๋าถุงเงินร้านค้า:</span>
+                <span className="text-sm font-bold text-[#115e59] font-mono">
+                  ฿ {(currentMerchant?.walletBalance ?? Number(currentMerchant?.wallet?.balance ?? 0)).toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+              <button
+                onClick={() => {
+                  if (onOpenWalletPage) onOpenWalletPage();
+                  else setActiveTab('wallet');
+                }}
+                className="text-[11px] font-bold text-[#115e59] hover:text-teal-700 bg-teal-50 hover:bg-teal-100 px-2.5 py-1 rounded-lg transition-colors cursor-pointer flex items-center gap-1 border border-teal-200/60"
+              >
+                <span>👛 ถุงเงินร้านค้า</span>
+                <span>➔</span>
+              </button>
+            </div>
           )}
 
           <div className="mt-3 grid grid-cols-2 gap-3 pt-3 border-t border-slate-100 text-xs">
@@ -219,7 +247,7 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
 
       {/* Action Buttons */}
       <section className="mt-4 px-4">
-        <div className="grid grid-cols-3 gap-2.5">
+        <div className="grid grid-cols-4 gap-1.5">
           {actions.map(action => (
             <button
               key={action.label}
@@ -281,31 +309,31 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
 
       {/* Tab Switcher */}
       <div className="px-4 pt-5">
-        <div className="flex bg-[#e6fffa] p-1 rounded-2xl text-xs font-bold text-teal-950">
+        <div className="flex bg-[#e6fffa] p-1 rounded-2xl text-xs font-bold text-teal-950 gap-1">
           <button
             onClick={() => setActiveTab('sales')}
             className={`flex-1 py-2 rounded-xl transition-all cursor-pointer ${
               activeTab === 'sales' ? 'bg-white text-[#115e59] shadow-xs' : 'hover:text-teal-900'
             }`}
           >
-            ยอดขายวันนี้ ({merchantTransactions.length})
+            ยอดขาย ({merchantTransactions.length})
           </button>
           <button
-            // onClick={() => setActiveTab('ai')}
+            onClick={() => setActiveTab('wallet')}
+            className={`flex-1 py-2 rounded-xl transition-all cursor-pointer ${
+              activeTab === 'wallet' ? 'bg-white text-[#115e59] shadow-xs' : 'hover:text-teal-900'
+            }`}
+          >
+            ถุงเงินร้านค้า
+          </button>
+          <button
+            onClick={() => setActiveTab('ai')}
             className={`flex-1 py-2 rounded-xl transition-all cursor-pointer ${
               activeTab === 'ai' ? 'bg-white text-[#115e59] shadow-xs' : 'hover:text-teal-900'
             }`}
           >
-            ถุงเงิน
+            AI วิเคราะห์
           </button>
-          {/* <button
-            onClick={() => setActiveTab('info')}
-            className={`flex-1 py-2 rounded-xl transition-all cursor-pointer ${
-              activeTab === 'info' ? 'bg-white text-[#115e59] shadow-xs' : 'hover:text-teal-900'
-            }`}
-          >
-            ตั้งค่าร้าน & พิกัด
-          </button> */}
         </div>
       </div>
 
@@ -355,6 +383,15 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
           {/* <div className="pt-2 border-t border-dashed border-teal-200/80">
             <RevenueBreakdownCard />
           </div> */}
+        </section>
+      )}
+
+            {/* TAB: MERCHANT WALLET MODULE */}
+      {activeTab === 'wallet' && (
+        <section className="pt-2">
+          <MerchantWalletView
+            onOpenRevenue={onOpenRevenuePage}
+          />
         </section>
       )}
 

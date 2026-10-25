@@ -77,6 +77,7 @@ interface AppContextType {
   redeemReward: (rewardId: number) => { success: boolean; message: string; redemption?: StampRedemption };
   tradeStamp: (stampId: number, targetName: string) => { success: boolean; message: string };
   topupWallet: (amount: number) => void;
+  withdrawMerchantWallet: (amount: number, promptpayOrAccount?: string) => Promise<{ success: boolean; message: string; newBalance?: number }>;
   getMetrics: () => SocialImpactMetrics;
   resetAllData: () => void;
   triggerAIReanalysis: () => void;
@@ -754,6 +755,47 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
   };
 
+  const withdrawMerchantWallet = async (amount: number, promptpayOrAccount?: string): Promise<{ success: boolean; message: string; newBalance?: number }> => {
+    if (authStorage.getToken()) {
+      try {
+        const res = await merchantService.withdrawWallet(amount, promptpayOrAccount);
+        await refreshMerchantData();
+        return { success: true, message: res.message, newBalance: res.newBalance };
+      } catch (err) {
+        return {
+          success: false,
+          message: err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการถอนเงิน'
+        };
+      }
+    }
+
+    const balance = currentMerchant.walletBalance ?? (currentMerchant.wallet ? Number(currentMerchant.wallet.balance) : 0);
+    if (balance < amount) {
+      return { success: false, message: 'ยอดเงินในกระเป๋าไม่เพียงพอ' };
+    }
+
+    const newBalance = Math.round((balance - amount) * 100) / 100;
+    const updatedMch = {
+      ...currentMerchant,
+      walletBalance: newBalance,
+      wallet: {
+        walletId: currentMerchant.wallet?.walletId ?? (1000 + currentMerchant.mchId),
+        merchantId: currentMerchant.mchId,
+        balance: newBalance,
+        status: 'ACTIVE',
+        updatedAt: new Date().toISOString()
+      }
+    };
+    setCurrentMerchant(updatedMch);
+    setMerchants(prev => prev.map(m => m.mchId === updatedMch.mchId ? updatedMch : m));
+
+    return {
+      success: true,
+      message: 'ถอนเงินจำนวน ฿' + amount.toLocaleString('th-TH', { minimumFractionDigits: 2 }) + ' สำเร็จ เข้าบัญชี/พร้อมเพย์ ' + (promptpayOrAccount || currentMerchant.phone),
+      newBalance
+    };
+  };
+
   // Compute Social Impact Metrics as in Section 5.5
   const getMetrics = (): SocialImpactMetrics => {
     const totalTransactionVolume = transactions.reduce((acc, t) => acc + t.totalAmount, 0);
@@ -859,6 +901,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         redeemReward,
         tradeStamp,
         topupWallet,
+        withdrawMerchantWallet,
         getMetrics,
         resetAllData,
         triggerAIReanalysis

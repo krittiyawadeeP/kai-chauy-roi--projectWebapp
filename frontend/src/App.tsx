@@ -4,6 +4,7 @@ import { RoleSwitcherBar, BottomNav } from './components/layout';
 import { CitizenMobilePage } from './pages/citizen/CitizenMobilePage';
 import { MerchantMobilePage } from './pages/merchant/MerchantMobilePage';
 import { MerchantRevenuePage } from './pages/merchant/MerchantRevenuePage';
+import { MerchantWalletPage } from './pages/merchant/MerchantWalletPage';
 import { AdminDesktopShell } from './components/admin/AdminDesktopShell';
 
 // Modals
@@ -49,6 +50,8 @@ const AppContent: React.FC = () => {
       setGlobalScannerOpen(true);
     } else if (label === 'สร้าง QR') {
       setGlobalQrGenOpen(true);
+    } else if (label === 'ถุงเงิน' || label === 'กระเป๋าเงิน') {
+      // Navigates directly to dedicated Merchant Wallet page
     } else if (label === 'ยอดขาย') {
       // Navigates directly to dedicated full page
     } else if (label === 'สถานะ' || label === 'สิทธิ์ 60/40') {
@@ -91,6 +94,7 @@ const AppContent: React.FC = () => {
           onSelectRole={handleRoleSelect}
           onReset={resetAllData}
           onOpenAuth={() => setGlobalAuthOpen(true)}
+          onOpenWallet={() => setActiveNav('ถุงเงิน')}
           onOpenRevenue={() => setActiveNav('ยอดขาย')}
           onOpenProfile={() => setGlobalProfileOpen(true)}
           onOpenMap={() => setGlobalMapOpen(true)}
@@ -103,8 +107,16 @@ const AppContent: React.FC = () => {
           {role === 'merchant' && (
             activeNav === 'ยอดขาย' ? (
               <MerchantRevenuePage onBack={() => setActiveNav('หน้าหลัก')} />
+            ) : activeNav === 'ถุงเงิน' || activeNav === 'กระเป๋าเงิน' ? (
+              <MerchantWalletPage
+                onBack={() => setActiveNav('หน้าหลัก')}
+                onOpenRevenue={() => setActiveNav('ยอดขาย')}
+              />
             ) : (
-              <MerchantMobilePage onOpenRevenuePage={() => setActiveNav('ยอดขาย')} />
+              <MerchantMobilePage
+                onOpenRevenuePage={() => setActiveNav('ยอดขาย')}
+                onOpenWalletPage={() => setActiveNav('ถุงเงิน')}
+              />
             )
           )}
         </div>

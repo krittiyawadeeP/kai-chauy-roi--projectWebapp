@@ -19,9 +19,9 @@ export const BottomNav: React.FC<BottomNavProps> = ({ role, activeNav, onNavClic
   const navItems: [string, IconName][] = isMerchant
     ? [
         ['หน้าหลัก', 'home'],
-        ['ยอดขาย', 'wallet'],
+        ['ถุงเงิน', 'wallet'],
         ['สร้าง QR', 'qr'],
-        ['ตั้งค่าร้าน', 'shop'],
+        ['ยอดขาย', 'status'],
         ['เข้าสู่ระบบ', 'user'],
       ]
     : isAdmin

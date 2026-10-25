@@ -10,6 +10,7 @@ interface RoleSwitcherBarProps {
   onSelectRole: (selected: 'ประชาชน' | 'ร้านค้า' | 'ภาครัฐ') => void;
   onReset: () => void;
   onOpenAuth: () => void;
+  onOpenWallet?: () => void;
   onOpenRevenue?: () => void;
   onOpenProfile?: () => void;
   onOpenMap?: () => void;
@@ -24,6 +25,7 @@ export const RoleSwitcherBar: React.FC<RoleSwitcherBarProps> = ({
   onSelectRole,
   onReset,
   onOpenAuth,
+  onOpenWallet,
   onOpenRevenue,
   onOpenProfile,
   onOpenMap,
@@ -104,6 +106,15 @@ export const RoleSwitcherBar: React.FC<RoleSwitcherBarProps> = ({
         {/* Merchant-specific shortcuts */}
         {role === 'merchant' && (
           <>
+            {onOpenWallet && (
+              <button
+                onClick={onOpenWallet}
+                className="px-2.5 py-1 rounded-lg bg-emerald-500/30 hover:bg-emerald-500/45 text-emerald-100 border border-emerald-400/30 font-bold flex items-center gap-1 shrink-0 transition-colors cursor-pointer"
+              >
+                <span>👛</span>
+                <span>ถุงเงินร้านค้า</span>
+              </button>
+            )}
             {onOpenRevenue && (
               <button
                 onClick={onOpenRevenue}

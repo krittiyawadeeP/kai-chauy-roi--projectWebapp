@@ -44,6 +44,7 @@ export interface Merchant {
   dailyAvgSales: number;
   currentDailySales: number;
   walletBalance?: number;
+  wallet?: Wallet;
   isAiTarget: boolean;
   openingHours?: string;
   description?: string;
@@ -153,8 +154,10 @@ export interface StampRedemption {
 
 export interface Wallet {
   walletId: number;
-  userId: number;
+  userId?: number | null;
+  merchantId?: number | null;
   balance: number;
+  status?: string;
   updatedAt: string;
 }
 
