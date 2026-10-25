@@ -184,11 +184,15 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
                     className="w-full text-left p-2.5 rounded-xl border border-slate-100 hover:border-blue-200 hover:bg-[#f8faff] transition-all flex items-center justify-between group"
                   >
                     <div className="flex items-center gap-2.5">
-                      <img
-                        src={shop.imageUrl}
-                        alt={shop.shopName}
-                        className="size-9 rounded-lg object-cover border border-slate-100"
-                      />
+                      {shop.imageUrl ? (
+                        <img
+                          src={shop.imageUrl}
+                          alt={shop.shopName}
+                          className="size-9 rounded-lg object-cover border border-slate-100"
+                        />
+                      ) : (
+                        <div className="size-9 rounded-lg bg-teal-50 flex items-center justify-center text-xs">🏪</div>
+                      )}
                       <div>
                         <p className="text-xs font-bold text-slate-800 group-hover:text-[#1769ed]">
                           {shop.shopName}
@@ -208,11 +212,15 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
         {step === 'confirm' && selectedMerchant && (
           <div className="pt-4 space-y-3.5">
             <div className="flex items-center gap-3 p-3 rounded-2xl bg-[#f8faff] border border-blue-50">
-              <img
-                src={selectedMerchant.imageUrl}
-                alt={selectedMerchant.shopName}
-                className="size-12 rounded-xl object-cover border border-slate-100"
-              />
+              {selectedMerchant.imageUrl ? (
+                <img
+                  src={selectedMerchant.imageUrl}
+                  alt={selectedMerchant.shopName}
+                  className="size-12 rounded-xl object-cover border border-slate-100"
+                />
+              ) : (
+                <div className="size-12 rounded-xl bg-teal-50 flex items-center justify-center text-base">🏪</div>
+              )}
               <div className="min-w-0 flex-1">
                 <p className="font-bold text-xs text-slate-800 line-clamp-1">{selectedMerchant.shopName}</p>
                 <p className="text-[10px] text-slate-400">{selectedMerchant.category}</p>

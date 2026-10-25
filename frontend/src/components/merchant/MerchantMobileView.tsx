@@ -52,7 +52,7 @@ export const isToday = (dateStr?: string | Date | null): boolean => {
 
 
 interface MerchantMobileViewProps {
-  initialTab?: 'sales' | 'wallet' | 'ai' | 'info';
+  initialTab?: 'sales' | 'wallet' | 'info';
   onOpenRevenuePage?: () => void;
   onOpenWalletPage?: () => void;
 }
@@ -67,8 +67,6 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
     currentMerchant,
     setCurrentMerchant,
     transactions,
-    aiAnalysis,
-    missions,
     refreshMerchantData
   } = useApp();
 
@@ -77,7 +75,7 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
   const [profileSettingsOpen, setProfileSettingsOpen] = useState(false);
   const [mapPickerOpen, setMapPickerOpen] = useState(false);
   const [authModalOpen, setAuthModalOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'sales' | 'wallet' | 'ai' | 'info'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'sales' | 'wallet' | 'info'>(initialTab);
   const [loadingMerchantData, setLoadingMerchantData] = useState(false);
   const [merchantDataError, setMerchantDataError] = useState('');
 
@@ -113,11 +111,6 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
     return todayTransactions.reduce((acc, t) => acc + t.govSubsidizedAmount, 0);
   }, [todayTransactions]);
 
-  const myAiAnalysis = aiAnalysis.find(a => a.merchantId === currentMerchant?.mchId);
-  const activeMission = missions.find(
-    m => m.status === 'active' && m.targetMerchantId === currentMerchant?.mchId
-  );
-
   const actions = [
     {
       icon: 'qr' as IconName,
@@ -129,7 +122,8 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
     {
       icon: 'wallet' as IconName,
       label: 'ถุงเงินร้านค้า',
-      detail: 'ยอดเงิน & ถอนเงิน',
+      // detail: 'ยอดเงิน & ถอนเงิน',
+      detail: 'ยอดเงินคงเหลือ',
       color: 'green',
       onClick: () => {
         if (onOpenWalletPage) onOpenWalletPage();
@@ -214,7 +208,7 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
           >
             {merchants.map(m => (
               <option key={m.mchId} value={m.mchId}>
-                {m.shopName} {m.isAiTarget ? '⭐(AI Target)' : ''}
+                {m.shopName}
               </option>
             ))}
           </select>
@@ -245,7 +239,7 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
             </span>
           </div>
 
-          {(currentMerchant?.walletBalance !== undefined || currentMerchant?.wallet) && (
+          {/* {(currentMerchant?.walletBalance !== undefined || currentMerchant?.wallet) && (
             <div className="mt-3 border-t border-teal-100 pt-3 flex items-center justify-between">
               <div>
                 <span className="text-[10px] text-slate-500 block">ยอดเงินในกระเป๋าถุงเงินร้านค้า:</span>
@@ -264,7 +258,7 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
                 <span>➔</span>
               </button>
             </div>
-          )}
+          )} */}
 
           <div className="mt-3 grid grid-cols-2 gap-3 pt-3 border-t border-slate-100 text-xs">
             <div className="bg-[#f0fdfa] p-3 rounded-xl border border-teal-100">
@@ -333,41 +327,6 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
         </div>
       </section>
 
-      {/* AI Critical Alert Banner (if Target Shop) */}
-      {currentMerchant?.isAiTarget && (
-        <section className="px-4 pt-3">
-          <div className="rounded-[22px] bg-gradient-to-r from-amber-50 to-orange-50 p-4 border border-amber-200 shadow-sm">
-            <div className="flex items-start gap-2.5">
-              <span className="grid size-8 place-items-center rounded-xl bg-amber-500 text-white shrink-0 shadow-xs">
-                <Icon name="sparkle" className="size-4" />
-              </span>
-              <div>
-                <h4 className="text-xs font-bold text-amber-900">
-                  AI ตรวจพบยอดขายลดลงช่วงบ่าย (ได้รับการกระตุ้นพิเศษ)
-                </h4>
-                <p className="text-[11px] text-amber-800 mt-0.5 leading-snug">
-                  ภาครัฐได้ปล่อยภารกิจแจกแสตมป์ดิจิทัลเพื่อดึงดูดลูกค้าให้มาอุดหนุนร้านของท่าน!
-                </p>
-              </div>
-            </div>
-
-            {activeMission && (
-              <div className="mt-2.5 p-2.5 rounded-xl bg-white/80 border border-amber-200/60 text-xs">
-                <div className="flex justify-between items-center">
-                  <span className="font-bold text-amber-900">{activeMission.missionName}</span>
-                  <span className="text-[10px] font-bold text-teal-800 bg-teal-50 px-2 py-0.5 rounded-md">
-                    แสตมป์ x1
-                  </span>
-                </div>
-                <p className="text-[11px] text-teal-900 mt-0.5 font-medium">
-                  ความคืบหน้าผู้เข้าร่วม: {activeMission.currentRecipients}/{activeMission.maxRecipients} คน
-                </p>
-              </div>
-            )}
-          </div>
-        </section>
-      )}
-
       {/* Tab Switcher */}
       <div className="px-4 pt-5">
         <div className="flex bg-[#e6fffa] p-1 rounded-2xl text-xs font-bold text-teal-950 gap-1">
@@ -377,7 +336,7 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
               activeTab === 'sales' ? 'bg-white text-[#115e59] shadow-xs' : 'hover:text-teal-900'
             }`}
           >
-            ยอดขาย ({merchantTransactions.length})
+            ยอดขาย
           </button>
           <button
             onClick={() => setActiveTab('wallet')}
@@ -386,14 +345,6 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
             }`}
           >
             ถุงเงินร้านค้า
-          </button>
-          <button
-            onClick={() => setActiveTab('ai')}
-            className={`flex-1 py-2 rounded-xl transition-all cursor-pointer ${
-              activeTab === 'ai' ? 'bg-white text-[#115e59] shadow-xs' : 'hover:text-teal-900'
-            }`}
-          >
-            AI วิเคราะห์
           </button>
         </div>
       </div>
@@ -415,7 +366,7 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
                   salesViewMode === 'today' ? 'bg-white text-teal-900 shadow-xs' : 'text-slate-500 hover:text-slate-800'
                 }`}
               >
-                เฉพาะวันนี้ (${todayTransactions.length})
+                เฉพาะวันนี้
               </button>
               <button
                 onClick={() => setSalesViewMode('all')}
@@ -423,7 +374,7 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
                   salesViewMode === 'all' ? 'bg-white text-teal-900 shadow-xs' : 'text-slate-500 hover:text-slate-800'
                 }`}
               >
-                ทั้งหมด (${merchantTransactions.length})
+                ทั้งหมด 
               </button>
             </div>
           </div>
@@ -498,62 +449,6 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
         </section>
       )}
 
-      {/* TAB 2: AI SALES ANALYSIS */}
-      {activeTab === 'ai' && (
-        <section className="px-4 pt-4 space-y-3">
-          {myAiAnalysis ? (
-            <div className="rounded-[22px] bg-white p-4 border border-teal-100 shadow-sm space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-[#134e4a] flex items-center gap-1.5">
-                  <Icon name="sparkle" className="size-4 text-teal-600" />
-                  ระบบ AI Sales Analysis
-                </span>
-                <span
-                  className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${
-                    myAiAnalysis.salesStatus === 'critical_low'
-                      ? 'bg-rose-50 text-rose-700'
-                      : myAiAnalysis.salesStatus === 'low'
-                      ? 'bg-amber-50 text-amber-700'
-                      : 'bg-teal-50 text-teal-700 border border-teal-200'
-                  }`}
-                >
-                  {myAiAnalysis.salesStatus === 'critical_low' ? 'วิกฤต: ยอดตก > 50%' : 'ยอดขายปกติ'}
-                </span>
-              </div>
-
-              <div className="bg-[#f0fdfa] p-3 rounded-xl text-xs space-y-1.5 border border-teal-100">
-                <div className="flex justify-between text-slate-600">
-                  <span>ยอดขายเฉลี่ยต่อวัน:</span>
-                  <strong className="text-slate-800">฿ {myAiAnalysis.averageSales.toLocaleString()}</strong>
-                </div>
-                <div className="flex justify-between text-slate-600">
-                  <span>ยอดขายจริงช่วงนี้:</span>
-                  <strong className="text-rose-600">
-                    ฿ {myAiAnalysis.salesAmount.toLocaleString()} ({Math.round(myAiAnalysis.salesRatio * 100)}%)
-                  </strong>
-                </div>
-                <div className="flex justify-between text-slate-600">
-                  <span>ช่วงเวลาที่ควรเร่งกระตุ้น:</span>
-                  <strong className="text-amber-800">{myAiAnalysis.criticalHours}</strong>
-                </div>
-              </div>
-
-              <div className="p-3 bg-teal-50/80 rounded-xl text-xs text-[#042f2e] space-y-1 border border-teal-100">
-                <p className="font-bold">คำแนะนำจาก AI:</p>
-                <p className="text-[11px] text-teal-900">{myAiAnalysis.aiInsight}</p>
-                <p className="text-[11px] font-semibold text-[#0f766e] pt-1">
-                  มาตรการ: {myAiAnalysis.suggestedAction}
-                </p>
-              </div>
-            </div>
-          ) : (
-            <div className="rounded-[22px] bg-white p-6 text-center border border-teal-50">
-              <p className="text-xs text-slate-400">ระบบ AI กำลังวิเคราะห์ยอดขายเพิ่มเติม</p>
-            </div>
-          )}
-        </section>
-      )}
-
       {/* TAB 3: DEDICATED STORE PROFILE & PIN LOCATION PAGE */}
       {activeTab === 'info' && (
         <section className="px-4 pt-4 space-y-3.5">
@@ -573,11 +468,17 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
             </div>
 
             <div className="flex items-start gap-3">
-              <img
-                src={currentMerchant.imageUrl}
-                alt={currentMerchant.shopName}
-                className="size-20 rounded-2xl object-cover border border-slate-200 shrink-0 shadow-xs"
-              />
+              {currentMerchant.imageUrl ? (
+                <img
+                  src={currentMerchant.imageUrl}
+                  alt={currentMerchant.shopName}
+                  className="size-20 rounded-2xl object-cover border border-slate-200 shrink-0 shadow-xs"
+                />
+              ) : (
+                <div className="size-20 rounded-2xl bg-teal-50 border border-teal-200 shrink-0 shadow-xs flex items-center justify-center text-teal-700 text-2xl">
+                  🏪
+                </div>
+              )}
               <div className="min-w-0 flex-1 space-y-1">
                 <h3 className="font-bold text-sm text-slate-800">{currentMerchant.shopName}</h3>
                 <p className="text-[11px] font-semibold text-teal-700 bg-teal-50 inline-block px-2 py-0.5 rounded-md">

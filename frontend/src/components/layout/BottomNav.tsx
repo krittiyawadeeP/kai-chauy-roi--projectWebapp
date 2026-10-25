@@ -22,7 +22,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ role, activeNav, onNavClic
         ['ถุงเงิน', 'wallet'],
         ['สร้าง QR', 'qr'],
         ['ยอดขาย', 'status'],
-        ['เข้าสู่ระบบ', 'user'],
+        ['ออกจากระบบ', 'logout'],
       ]
     : isAdmin
     ? [

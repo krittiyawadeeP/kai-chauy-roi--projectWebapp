@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Icon } from '../common/Icon';
-import { QRGeneratorModal } from './QRGeneratorModal';
 import { merchantService, ApiMerchantWallet } from '../../services/merchantService';
 import { authStorage } from '../../services/api';
 import { SalesTransaction } from '../../types';
@@ -18,34 +17,20 @@ export const MerchantWalletView: React.FC<MerchantWalletViewProps> = ({
   const {
     currentMerchant,
     transactions,
-    refreshMerchantData,
-    withdrawMerchantWallet
+    refreshMerchantData
   } = useApp();
 
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
-  const [qrModalOpen, setQrModalOpen] = useState(false);
-  const [withdrawModalOpen, setWithdrawModalOpen] = useState(false);
-  const [withdrawAmount, setWithdrawAmount] = useState('');
-  const [withdrawDestination, setWithdrawDestination] = useState(currentMerchant?.phone || '');
-  const [withdrawSubmitting, setWithdrawSubmitting] = useState(false);
-  const [withdrawSuccess, setWithdrawSuccess] = useState<string | null>(null);
   const [selectedTxForDetail, setSelectedTxForDetail] = useState<SalesTransaction | null>(null);
 
-  // Tab filter for ledger: 'all' | 'inflow' | 'outflow'
-  const [ledgerFilter, setLedgerFilter] = useState<'all' | 'inflow' | 'outflow'>('all');
+  // Search filter for ledger
   const [searchTerm, setSearchTerm] = useState('');
 
   // Real wallet details from API
   const [apiWallet, setApiWallet] = useState<ApiMerchantWallet | null>(null);
-  const [apiSummary, setApiSummary] = useState<{
-    totalRevenue: number;
-    totalBills: number;
-    userPaidTotal: number;
-    govSubsidizedTotal: number;
-  } | null>(null);
 
   const fetchWalletData = async () => {
     if (!authStorage.getToken()) return;
@@ -54,7 +39,6 @@ export const MerchantWalletView: React.FC<MerchantWalletViewProps> = ({
       setErrorMsg('');
       const res = await merchantService.getWallet();
       setApiWallet(res.wallet);
-      setApiSummary(res.summary);
     } catch (err) {
       console.error('Failed to fetch merchant wallet:', err);
       setErrorMsg(err instanceof Error ? err.message : 'ไม่สามารถดึงข้อมูลกระเป๋าเงินได้');
@@ -96,11 +80,6 @@ export const MerchantWalletView: React.FC<MerchantWalletViewProps> = ({
     return transactions.filter(t => t.merchantId === currentMerchant?.mchId);
   }, [transactions, currentMerchant?.mchId]);
 
-  const totalRevenue = apiSummary?.totalRevenue ?? merchantSales.reduce((acc, t) => acc + t.totalAmount, 0);
-  const userPaidTotal = apiSummary?.userPaidTotal ?? merchantSales.reduce((acc, t) => acc + t.userPaidAmount, 0);
-  const govSubsidizedTotal = apiSummary?.govSubsidizedTotal ?? merchantSales.reduce((acc, t) => acc + t.govSubsidizedAmount, 0);
-  const totalBills = apiSummary?.totalBills ?? merchantSales.length;
-
   // Filtered transactions for the ledger
   const filteredLedger = useMemo(() => {
     let list = [...merchantSales];
@@ -114,40 +93,6 @@ export const MerchantWalletView: React.FC<MerchantWalletViewProps> = ({
     }
     return list;
   }, [merchantSales, searchTerm]);
-
-  // Handle Withdrawal Submit
-  const handleWithdrawSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const amountNum = parseFloat(withdrawAmount);
-    if (!amountNum || amountNum <= 0) {
-      alert('กรุณากรอกจำนวนเงินที่ต้องการถอนให้ถูกต้อง');
-      return;
-    }
-    if (amountNum > currentBalance) {
-      alert(`ยอดเงินในกระเป๋าไม่เพียงพอ (มีอยู่ ฿${currentBalance.toLocaleString('th-TH', { minimumFractionDigits: 2 })} บาท)`);
-      return;
-    }
-
-    try {
-      setWithdrawSubmitting(true);
-      const res = await withdrawMerchantWallet(amountNum, withdrawDestination);
-      if (res.success) {
-        setWithdrawSuccess(res.message);
-        setWithdrawAmount('');
-        await fetchWalletData();
-        setTimeout(() => {
-          setWithdrawSuccess(null);
-          setWithdrawModalOpen(false);
-        }, 2000);
-      } else {
-        alert(res.message);
-      }
-    } catch (err) {
-      alert(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการถอนเงิน');
-    } finally {
-      setWithdrawSubmitting(false);
-    }
-  };
 
   return (
     <div className="pb-28 animate-in fade-in duration-200">
@@ -252,11 +197,11 @@ export const MerchantWalletView: React.FC<MerchantWalletViewProps> = ({
             <div className="flex items-center justify-between">
               <p className="text-xs font-semibold text-slate-500 flex items-center gap-1.5">
                 <span>ยอดเงินในกระเป๋าถุงเงิน (คงเหลือสุทธิ)</span>
-                {authStorage.getToken() && (
+                {/* {authStorage.getToken() && (
                   <span className="text-[10px] bg-teal-100 text-teal-800 px-1.5 py-0.2 rounded font-medium">
                     จากฐานข้อมูล MySQL
                   </span>
-                )}
+                )} */}
               </p>
               <span className="text-[10px] text-slate-400">อัปเดต: {lastUpdated}</span>
             </div>
@@ -271,107 +216,20 @@ export const MerchantWalletView: React.FC<MerchantWalletViewProps> = ({
             </p>
           </div>
 
-          {/* Quick Action Buttons inside Card */}
-          <div className="mt-5 pt-4 border-t border-slate-100 grid grid-cols-3 gap-2">
-            <button
-              onClick={() => setWithdrawModalOpen(true)}
-              className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-gradient-to-b from-[#115e59] to-[#0f766e] text-white shadow-sm hover:brightness-105 active:scale-95 transition-all cursor-pointer"
-            >
-              <span className="text-base mb-0.5">💸</span>
-              <span className="text-xs font-bold">ถอนเงิน</span>
-              <span className="text-[9px] text-teal-200">เข้าพร้อมเพย์/บัญชี</span>
-            </button>
-
-            <button
-              onClick={() => setQrModalOpen(true)}
-              className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-teal-50 hover:bg-teal-100 text-[#115e59] border border-teal-200/80 active:scale-95 transition-all cursor-pointer"
-            >
-              <Icon name="qr" className="size-5 mb-0.5 text-[#115e59]" />
-              <span className="text-xs font-bold">สร้าง QR</span>
-              <span className="text-[9px] text-teal-700">รับเงินสิทธิ์ 60/40</span>
-            </button>
-
-            <button
-              onClick={() => {
-                if (onOpenRevenue) onOpenRevenue();
-              }}
-              className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 active:scale-95 transition-all cursor-pointer"
-            >
-              <span className="text-base mb-0.5">📊</span>
-              <span className="text-xs font-bold">ยอดขาย</span>
-              <span className="text-[9px] text-slate-500">ดูสถิติรายได้</span>
-            </button>
-          </div>
-        </div>
-
-        {/* 4-CARD REVENUE BREAKDOWN TILES */}
-        <div className="grid grid-cols-2 gap-2.5">
-          <div className="rounded-2xl bg-white p-3.5 border border-teal-100 shadow-xs">
-            <div className="flex items-center justify-between text-slate-500 mb-1">
-              <span className="text-[11px] font-medium">ยอดเงินเข้ารวม</span>
-              <span className="text-xs">💰</span>
+          {/* Quick Action Button - View Sales Breakdown */}
+          {/* {onOpenRevenue && (
+            <div className="mt-5 pt-4 border-t border-slate-100 flex items-center justify-between">
+              <span className="text-xs text-slate-500">ตรวจสอบรายละเอียดรายได้สะสม</span>
+              <button
+                type="button"
+                onClick={onOpenRevenue}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-50 hover:bg-teal-100 text-[#115e59] border border-teal-200 text-xs font-bold transition-all cursor-pointer shadow-2xs"
+              >
+                <span>📊 ดูสถิติยอดขาย</span>
+                <span>➔</span>
+              </button>
             </div>
-            <p className="text-base font-bold text-teal-900 font-mono">
-              ฿ {totalRevenue.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
-            </p>
-            <span className="text-[10px] text-slate-400 mt-0.5 block">ยอดขายสะสมทั้งหมด</span>
-          </div>
-
-          <div className="rounded-2xl bg-white p-3.5 border border-teal-100 shadow-xs">
-            <div className="flex items-center justify-between text-slate-500 mb-1">
-              <span className="text-[11px] font-medium">รัฐร่วมจ่าย 40%</span>
-              <span className="text-xs">🏛️</span>
-            </div>
-            <p className="text-base font-bold text-emerald-700 font-mono">
-              ฿ {govSubsidizedTotal.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
-            </p>
-            <span className="text-[10px] text-slate-400 mt-0.5 block">เงินอุดหนุนจากภาครัฐ</span>
-          </div>
-
-          <div className="rounded-2xl bg-white p-3.5 border border-teal-100 shadow-xs">
-            <div className="flex items-center justify-between text-slate-500 mb-1">
-              <span className="text-[11px] font-medium">ลูกค้าสแกนจ่าย 60%</span>
-              <span className="text-xs">👤</span>
-            </div>
-            <p className="text-base font-bold text-teal-700 font-mono">
-              ฿ {userPaidTotal.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
-            </p>
-            <span className="text-[10px] text-slate-400 mt-0.5 block">เงินจากกระเป๋าประชาชน</span>
-          </div>
-
-          <div className="rounded-2xl bg-white p-3.5 border border-teal-100 shadow-xs">
-            <div className="flex items-center justify-between text-slate-500 mb-1">
-              <span className="text-[11px] font-medium">รายการขายสำเร็จ</span>
-              <span className="text-xs">🧾</span>
-            </div>
-            <p className="text-base font-bold text-slate-800 font-mono">
-              {totalBills} <span className="text-xs font-normal text-slate-500">บิล</span>
-            </p>
-            <span className="text-[10px] text-slate-400 mt-0.5 block">เฉลี่ย ฿{totalBills > 0 ? Math.round(totalRevenue / totalBills).toLocaleString() : 0} / บิล</span>
-          </div>
-        </div>
-
-        {/* PAYOUT DESTINATION INFO BOX */}
-        <div className="rounded-2xl bg-gradient-to-r from-teal-50/80 to-emerald-50/80 p-4 border border-teal-200/70 text-xs shadow-xs">
-          <div className="flex items-start justify-between">
-            <div className="flex items-center gap-2">
-              <span className="grid size-8 place-items-center rounded-xl bg-[#115e59] text-white">
-                🏦
-              </span>
-              <div>
-                <h4 className="font-bold text-slate-800">บัญชีรับโอนเงิน / พร้อมเพย์</h4>
-                <p className="text-[11px] text-slate-600">
-                  พร้อมเพย์: <strong className="font-mono text-teal-800">{currentMerchant?.phone || 'ยังไม่ได้ระบุ'}</strong>
-                </p>
-              </div>
-            </div>
-            <span className="text-[10px] bg-teal-100 text-teal-800 px-2 py-0.5 rounded-full font-bold">
-              ผูกระบบแล้ว
-            </span>
-          </div>
-          <p className="mt-2 text-[10px] text-slate-500 leading-snug">
-            เงินค่าสินค้าจากสิทธิ์ร่วมจ่าย 60/40 จะเข้ากระเป๋าถุงเงินทันที และร้านค้าสามารถกดถอนโอนเข้าบัญชีธนาคารได้ตลอด 24 ชม.
-          </p>
+          )} */}
         </div>
 
         {/* WALLET TRANSACTION LEDGER */}
@@ -461,143 +319,6 @@ export const MerchantWalletView: React.FC<MerchantWalletViewProps> = ({
         </div>
       </main>
 
-      {/* WITHDRAWAL MODAL */}
-      {withdrawModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xs p-0 sm:p-4 animate-in fade-in">
-          <div className="w-full max-w-[420px] bg-white rounded-t-[32px] sm:rounded-[32px] p-6 shadow-2xl animate-in slide-in-from-bottom duration-200">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <span className="grid size-8 place-items-center rounded-xl bg-teal-100 text-teal-800 text-base">
-                  💸
-                </span>
-                <h3 className="text-base font-bold text-slate-800">ถอนเงินจากถุงเงินร้านค้า</h3>
-              </div>
-              <button
-                onClick={() => setWithdrawModalOpen(false)}
-                className="grid size-8 place-items-center rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600"
-              >
-                ✕
-              </button>
-            </div>
-
-            {withdrawSuccess ? (
-              <div className="py-8 text-center space-y-2">
-                <span className="text-4xl block">🎉</span>
-                <h4 className="text-base font-bold text-emerald-700">ถอนเงินสำเร็จ!</h4>
-                <p className="text-xs text-slate-600">{withdrawSuccess}</p>
-                <p className="text-[11px] text-slate-400">ระบบได้อัปเดตยอดคงเหลือในกระเป๋าเรียบร้อยแล้ว</p>
-              </div>
-            ) : (
-              <form onSubmit={handleWithdrawSubmit} className="mt-4 space-y-4">
-                {/* Balance display */}
-                <div className="p-3.5 rounded-2xl bg-teal-50/70 border border-teal-100 flex items-center justify-between text-xs">
-                  <span className="text-slate-600">ยอดเงินในกระเป๋าที่ถอนได้:</span>
-                  <strong className="text-sm font-bold text-[#115e59] font-mono">
-                    ฿ {currentBalance.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
-                  </strong>
-                </div>
-
-                {/* Amount input */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    ระบุจำนวนเงินที่ต้องการถอน (บาท)
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-3.5 top-2.5 text-base font-bold text-teal-800">฿</span>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="1"
-                      max={currentBalance}
-                      placeholder="0.00"
-                      value={withdrawAmount}
-                      onChange={e => setWithdrawAmount(e.target.value)}
-                      required
-                      className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 font-mono text-lg font-bold text-slate-800 focus:outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
-                    />
-                  </div>
-
-                  {/* Preset quick buttons */}
-                  <div className="grid grid-cols-4 gap-1.5 mt-2">
-                    {[100, 500, 1000].map(amt => (
-                      <button
-                        key={amt}
-                        type="button"
-                        onClick={() => setWithdrawAmount(String(amt))}
-                        disabled={amt > currentBalance}
-                        className="py-1 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-teal-50 hover:text-teal-800 border border-slate-200 disabled:opacity-40"
-                      >
-                        ฿{amt}
-                      </button>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={() => setWithdrawAmount(String(currentBalance))}
-                      disabled={currentBalance <= 0}
-                      className="py-1 rounded-lg text-xs font-bold bg-teal-100 hover:bg-teal-200 text-teal-800 border border-teal-200 disabled:opacity-40"
-                    >
-                      ทั้งหมด
-                    </button>
-                  </div>
-                </div>
-
-                {/* Transfer destination */}
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    บัญชีปลายทาง / หมายเลขพร้อมเพย์
-                  </label>
-                  <input
-                    type="text"
-                    value={withdrawDestination}
-                    onChange={e => setWithdrawDestination(e.target.value)}
-                    placeholder="เบอร์โทรศัพท์ หรือ เลขบัญชีธนาคาร"
-                    required
-                    className="w-full px-3.5 py-2 rounded-xl border border-slate-200 text-xs text-slate-800 focus:outline-none focus:border-teal-500"
-                  />
-                  <span className="text-[10px] text-slate-400 mt-0.5 block">
-                    ค่าเริ่มต้น: เบอร์โทรศัพท์ที่ลงทะเบียนไว้กับร้านค้า
-                  </span>
-                </div>
-
-                {/* Summary calculation */}
-                {parseFloat(withdrawAmount) > 0 && (
-                  <div className="p-3 rounded-xl bg-slate-50 text-[11px] space-y-1 border border-slate-200">
-                    <div className="flex justify-between text-slate-600">
-                      <span>ยอดเงินถอน:</span>
-                      <strong className="text-slate-800 font-mono">฿ {parseFloat(withdrawAmount).toLocaleString('th-TH', { minimumFractionDigits: 2 })}</strong>
-                    </div>
-                    <div className="flex justify-between text-slate-600">
-                      <span>ยอดคงเหลือหลังถอน:</span>
-                      <strong className="text-teal-800 font-mono">
-                        ฿ {Math.max(0, currentBalance - parseFloat(withdrawAmount)).toLocaleString('th-TH', { minimumFractionDigits: 2 })}
-                      </strong>
-                    </div>
-                  </div>
-                )}
-
-                {/* Submit button */}
-                <div className="pt-2 flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setWithdrawModalOpen(false)}
-                    className="flex-1 py-2.5 rounded-xl border border-slate-200 text-xs font-bold text-slate-600 hover:bg-slate-50 cursor-pointer"
-                  >
-                    ยกเลิก
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={withdrawSubmitting || !withdrawAmount || parseFloat(withdrawAmount) <= 0 || parseFloat(withdrawAmount) > currentBalance}
-                    className="flex-1 py-2.5 rounded-xl bg-[#115e59] hover:bg-[#0f766e] text-white text-xs font-bold shadow-md disabled:opacity-50 transition-all cursor-pointer"
-                  >
-                    {withdrawSubmitting ? 'กำลังโอนเงิน…' : 'ยืนยันการถอนเงิน'}
-                  </button>
-                </div>
-              </form>
-            )}
-          </div>
-        </div>
-      )}
-
       {/* TRANSACTION RECEIPT DETAIL MODAL */}
       {selectedTxForDetail && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in">
@@ -668,13 +389,8 @@ export const MerchantWalletView: React.FC<MerchantWalletViewProps> = ({
           </div>
         </div>
       )}
-
-      {/* QR GENERATOR MODAL */}
-      <QRGeneratorModal
-        isOpen={qrModalOpen}
-        onClose={() => setQrModalOpen(false)}
-      />
     </div>
   );
 };
+
 

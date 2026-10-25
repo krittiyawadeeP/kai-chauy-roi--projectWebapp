@@ -53,7 +53,7 @@ export function mapApiMerchant(data: ApiMerchant): Merchant {
     phone: data.users?.Phone ?? '',
     status: 'approved',
     registeredAt: '',
-    imageUrl: '',
+    imageUrl: (data as any).Image_URL || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=600&auto=format&fit=crop&q=80',
     promptpayId: data.users?.Phone ?? '',
     dailyAvgSales: 0,
     currentDailySales: 0,

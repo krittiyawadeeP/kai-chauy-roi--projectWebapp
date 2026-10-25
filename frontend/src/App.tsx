@@ -6,6 +6,7 @@ import { MerchantMobilePage } from './pages/merchant/MerchantMobilePage';
 import { MerchantRevenuePage } from './pages/merchant/MerchantRevenuePage';
 import { MerchantWalletPage } from './pages/merchant/MerchantWalletPage';
 import { AdminDesktopShell } from './components/admin/AdminDesktopShell';
+import { AuthPage } from './pages/auth/AuthPage';
 
 // Modals
 import { QRScannerModal } from './components/citizen/QRScannerModal';
@@ -23,6 +24,7 @@ const AppContent: React.FC = () => {
     currentUser,
     currentMerchant,
     isAuthenticated,
+    logout,
   } = useApp();
 
   const [activeNav, setActiveNav] = useState('หน้าหลัก');
@@ -56,8 +58,16 @@ const AppContent: React.FC = () => {
       // Navigates directly to dedicated full page
     } else if (label === 'สถานะ' || label === 'สิทธิ์ 60/40') {
       setGlobalStatusOpen(true);
+    } else if (label === 'ออกจากระบบ') {
+      logout();
+      setActiveNav('หน้าหลัก');
     } else if (label === 'เข้าสู่ระบบ' || label === 'ยืนยันตัวตน') {
-      setGlobalAuthOpen(true);
+      if (isAuthenticated) {
+        logout();
+        setActiveNav('หน้าหลัก');
+      } else {
+        setGlobalAuthOpen(true);
+      }
     } else if (label === 'ตั้งค่าร้าน' || label === 'โปรไฟล์') {
       setGlobalProfileOpen(true);
     } else if (label === 'ปักหมุดร้าน' || label === 'พิกัด') {
@@ -73,6 +83,27 @@ const AppContent: React.FC = () => {
   // Admin: full-screen desktop layout, no mobile shell
   if (role === 'admin') {
     return <AdminDesktopShell />;
+  }
+
+  // First screen must be Login / Register Page before accessing Citizen or Merchant
+  if (!isAuthenticated) {
+    return (
+      <main className="min-h-screen bg-[#f1f5fb] text-[#14213d] flex flex-col items-center justify-start py-0 md:py-4">
+        <div className="w-full max-w-[430px] min-h-screen bg-[#f8faff] shadow-2xl relative flex flex-col overflow-y-auto md:rounded-[40px] md:border-4 md:border-slate-300/40">
+          <div className="hidden md:flex justify-center pt-2 pb-1 bg-slate-900 select-none">
+            <div className="w-24 h-4 bg-black rounded-full" />
+          </div>
+          <AuthPage
+            defaultRole={role === 'merchant' ? 'merchant' : 'citizen'}
+            onSuccess={(authenticatedRole) => {
+              setRole(authenticatedRole);
+              setActiveNav('หน้าหลัก');
+            }}
+            onGoToAdmin={() => setRole('admin')}
+          />
+        </div>
+      </main>
+    );
   }
 
   return (
@@ -94,6 +125,7 @@ const AppContent: React.FC = () => {
           onSelectRole={handleRoleSelect}
           onReset={resetAllData}
           onOpenAuth={() => setGlobalAuthOpen(true)}
+          onLogout={logout}
           onOpenWallet={() => setActiveNav('ถุงเงิน')}
           onOpenRevenue={() => setActiveNav('ยอดขาย')}
           onOpenProfile={() => setGlobalProfileOpen(true)}

@@ -152,11 +152,17 @@ export const MerchantRegistrationModal: React.FC<MerchantRegistrationModalProps>
               {currentMerchant ? (
                 <div className="rounded-[22px] bg-[#f8faff] p-4 border border-blue-100 space-y-3">
                   <div className="flex items-center gap-3">
-                    <img
-                      src={currentMerchant.imageUrl}
-                      alt={currentMerchant.shopName}
-                      className="size-14 rounded-xl object-cover border border-slate-200"
-                    />
+                    {currentMerchant.imageUrl ? (
+                      <img
+                        src={currentMerchant.imageUrl}
+                        alt={currentMerchant.shopName}
+                        className="size-14 rounded-xl object-cover border border-slate-200"
+                      />
+                    ) : (
+                      <div className="size-14 rounded-xl bg-teal-50 border border-teal-200 flex items-center justify-center text-teal-700 text-xl">
+                        🏪
+                      </div>
+                    )}
                     <div>
                       <h4 className="font-bold text-sm text-slate-800">{currentMerchant.shopName}</h4>
                       <p className="text-slate-500 text-[11px]">{currentMerchant.category}</p>

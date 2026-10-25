@@ -277,7 +277,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     const saved = localStorage.getItem(`${STORAGE_KEY}_is_auth`);
-    return saved !== null ? JSON.parse(saved) : true;
+    return saved !== null ? JSON.parse(saved) : false;
   });
 
   useEffect(() => {
@@ -355,6 +355,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Logout
   const logout = () => {
+    authStorage.removeToken();
     setIsAuthenticated(false);
   };
 

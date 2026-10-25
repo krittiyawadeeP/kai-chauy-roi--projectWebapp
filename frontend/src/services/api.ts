@@ -16,6 +16,9 @@ export const authStorage = {
   removeToken: (): void => {
     localStorage.removeItem(TOKEN_KEY);
   },
+  clearToken: (): void => {
+    localStorage.removeItem(TOKEN_KEY);
+  },
 };
 
 export class ApiError extends Error {

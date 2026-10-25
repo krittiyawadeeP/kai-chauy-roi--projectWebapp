@@ -10,6 +10,7 @@ interface RoleSwitcherBarProps {
   onSelectRole: (selected: 'ประชาชน' | 'ร้านค้า' | 'ภาครัฐ') => void;
   onReset: () => void;
   onOpenAuth: () => void;
+  onLogout?: () => void;
   onOpenWallet?: () => void;
   onOpenRevenue?: () => void;
   onOpenProfile?: () => void;
@@ -25,6 +26,7 @@ export const RoleSwitcherBar: React.FC<RoleSwitcherBarProps> = ({
   onSelectRole,
   onReset,
   onOpenAuth,
+  onLogout,
   onOpenWallet,
   onOpenRevenue,
   onOpenProfile,
@@ -94,14 +96,29 @@ export const RoleSwitcherBar: React.FC<RoleSwitcherBarProps> = ({
 
       {/* Quick Action Badges for Authentication, Merchant Profile, Map Pinning */}
       <div className="mt-2 pt-2 border-t border-white/10 flex items-center justify-between gap-1.5 overflow-x-auto text-[10px]">
-        {/* Quick Auth Button */}
-        <button
-          onClick={onOpenAuth}
-          className="px-2.5 py-1 rounded-lg bg-white/15 hover:bg-white/25 text-white font-bold flex items-center gap-1 shrink-0 transition-colors"
-        >
-          <span>🔑</span>
-          <span>เข้าสู่ระบบ/ลงทะเบียน</span>
-        </button>
+        {/* Quick Auth / Logout Button */}
+        {isAuthenticated && onLogout ? (
+          <button
+            onClick={() => {
+              if (confirm('คุณต้องการออกจากระบบเพื่อกลับไปหน้าแรกหรือไม่?')) {
+                onLogout();
+              }
+            }}
+            className="px-2.5 py-1 rounded-lg bg-rose-500/25 hover:bg-rose-500/40 text-rose-200 border border-rose-400/30 font-bold flex items-center gap-1 shrink-0 transition-colors cursor-pointer"
+            title="ออกจากระบบ"
+          >
+            <span>🚪</span>
+            <span>ออกจากระบบ</span>
+          </button>
+        ) : (
+          <button
+            onClick={onOpenAuth}
+            className="px-2.5 py-1 rounded-lg bg-white/15 hover:bg-white/25 text-white font-bold flex items-center gap-1 shrink-0 transition-colors"
+          >
+            <span>🔑</span>
+            <span>เข้าสู่ระบบ/ลงทะเบียน</span>
+          </button>
+        )}
 
         {/* Merchant-specific shortcuts */}
         {role === 'merchant' && (

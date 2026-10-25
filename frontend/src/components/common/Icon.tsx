@@ -22,7 +22,8 @@ export type IconName =
   | 'search'
   | 'share'
   | 'history'
-  | 'repeat';
+  | 'repeat'
+  | 'logout';
 
 interface IconProps {
   name: IconName;
@@ -158,6 +159,13 @@ export const Icon: React.FC<IconProps> = ({ name, className = 'size-5' }) => {
         <path d="M3 11v-1a4 4 0 0 1 4-4h14" />
         <path d="m7 22-4-4 4-4" />
         <path d="M21 13v1a4 4 0 0 1-4 4H3" />
+      </>
+    ),
+    logout: (
+      <>
+        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+        <polyline points="16 17 21 12 16 7" />
+        <line x1="21" y1="12" x2="9" y2="12" />
       </>
     )
   };
