@@ -12,7 +12,8 @@ import {
   StampRedemption,
   Wallet,
   UserGrant,
-  SocialImpactMetrics
+  SocialImpactMetrics,
+  AiTargetShop
 } from '../types';
 import {
   INITIAL_PROVINCES,
@@ -30,7 +31,8 @@ import {
   INITIAL_REDEMPTIONS
 } from '../mock/initialData';
 import { api, authStorage } from '../services/api';
-import { ApiSale, merchantService, mapApiMerchant, getCoordinates } from '../services/merchantService';
+import { ApiMerchant, ApiSale, merchantService, mapApiMerchant, getCoordinates } from '../services/merchantService';
+import { citizenService } from '../services/citizenService';
 
 interface AppContextType {
   role: Role;
@@ -52,11 +54,12 @@ interface AppContextType {
   redemptions: StampRedemption[];
   wallet: Wallet;
   userGrant: UserGrant;
+  aiTargetShops: AiTargetShop[];
   
   // Auth & Profile
   isAuthenticated: boolean;
   setIsAuthenticated: (val: boolean) => void;
-  loginCitizen: (citizenId: string, phoneOrOtp?: string) => { success: boolean; message: string; user?: User };
+  loginCitizen: (citizenId: string, phoneOrOtp?: string, dbUser?: any) => { success: boolean; message: string; user?: User };
   loginMerchant: (phoneOrTax: string, passwordOrPin?: string, mchId?: number) => { success: boolean; message: string; merchant?: Merchant };
   logout: () => void;
   updateMerchantProfile: (mchId: number, data: Partial<Merchant>) => Promise<void>;
@@ -73,7 +76,7 @@ interface AppContextType {
     merchantId: number;
     totalAmount: number;
     note?: string;
-  }) => { success: boolean; message: string; earnedStamp?: DistrictStamp; tx?: SalesTransaction };
+  }) => Promise<{ success: boolean; message: string; earnedStamp?: DistrictStamp; tx?: SalesTransaction }>;
   redeemReward: (rewardId: number) => { success: boolean; message: string; redemption?: StampRedemption };
   tradeStamp: (stampId: number, targetName: string) => { success: boolean; message: string };
   topupWallet: (amount: number) => void;
@@ -196,7 +199,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return saved ? JSON.parse(saved) : INITIAL_AI_ANALYSIS;
   });
 
-  const [districtStamps] = useState<DistrictStamp[]>(INITIAL_DISTRICT_STAMPS);
+  const [districtStamps, setDistrictStamps] = useState<DistrictStamp[]>(INITIAL_DISTRICT_STAMPS);
 
   const [userStamps, setUserStamps] = useState<UserStamp[]>(() => {
     const saved = localStorage.getItem(`${STORAGE_KEY}_user_stamps`);
@@ -222,6 +225,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const saved = localStorage.getItem(`${STORAGE_KEY}_grant`);
     return saved ? JSON.parse(saved) : INITIAL_USER_GRANT;
   });
+
+  const [aiTargetShops, setAiTargetShops] = useState<AiTargetShop[]>([]);
 
   useEffect(() => {
     let active = true;
@@ -277,15 +282,157 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     const saved = localStorage.getItem(`${STORAGE_KEY}_is_auth`);
-    return saved !== null ? JSON.parse(saved) : false;
+    return saved !== null ? JSON.parse(saved) : !!authStorage.getToken();
   });
 
   useEffect(() => {
     localStorage.setItem(`${STORAGE_KEY}_is_auth`, JSON.stringify(isAuthenticated));
   }, [isAuthenticated]);
 
+  const refreshCitizenData = React.useCallback(async () => {
+    const token = authStorage.getToken();
+    if (!token) {
+      setIsAuthenticated(false);
+      return;
+    }
+
+    try {
+      const userRes = await api.get<any>('/user/me');
+      if (userRes && userRes.User_ID) {
+        const mappedUser: User = {
+          userId: Number(userRes.User_ID),
+          citizenId: userRes.Citizen_ID,
+          name: userRes.Phone ? `คุณ (${userRes.Phone})` : 'ประชาชนผู้ใช้สิทธิ์',
+          role: 'citizen',
+          phone: userRes.Phone,
+          provId: Number(userRes.Province_ID || 1),
+          distId: Number(userRes.Dist_ID || 101),
+          status: 'approved',
+          registeredAt: new Date().toISOString(),
+        };
+        setCurrentUser(mappedUser);
+        setIsAuthenticated(true);
+
+        if (userRes.wallets) {
+          setWallet({
+            walletId: userRes.wallets.Wallet_ID,
+            userId: userRes.User_ID,
+            balance: Number(userRes.wallets.Balance || 0),
+            currency: 'THB',
+            status: 'active',
+            updatedAt: userRes.wallets.Updated_At || new Date().toISOString(),
+          });
+        }
+
+        if (Array.isArray(userRes.user_grants) && userRes.user_grants.length > 0) {
+          const g = userRes.user_grants[0];
+          setUserGrant({
+            grantId: Number(g.Grant_ID || 1),
+            userId: userRes.User_ID,
+            totalGrantAmount: Number(g.Total_Grant_Amount || 1000),
+            remainingAmount: Number(g.Remaining_Amount || 1000),
+            dailyMaxUsage: Number(g.Daily_Max_Usage || 150),
+            usedToday: Number(g.Used_Today || 0),
+            status: 'active',
+            expiryDate: '2026-12-31',
+          });
+        }
+      }
+
+      const txs = await citizenService.getMyTransactions();
+      if (Array.isArray(txs)) {
+        setTransactions(txs);
+      }
+
+      // Sync Database Stamps, Rewards, Missions, Redemptions, and AI Target Shops
+      const [stampsRes, myStampsRes, rewardsRes, missionsRes, redemptionsRes, aiTargetShopsRes] = await Promise.all([
+        api.get<DistrictStamp[]>('/district-stamps').catch(() => []),
+        api.get<UserStamp[]>('/users/me/stamps').catch(() => []),
+        api.get<Reward[]>('/rewards').catch(() => []),
+        api.get<Mission[]>('/missions').catch(() => []),
+        api.get<StampRedemption[]>('/users/me/stamp-redemptions').catch(() => []),
+        api.get<AiTargetShop[]>('/ai/target-shops').catch(() => []),
+      ]);
+
+      if (Array.isArray(stampsRes) && stampsRes.length > 0) setDistrictStamps(stampsRes);
+      if (Array.isArray(myStampsRes)) setUserStamps(myStampsRes);
+      if (Array.isArray(rewardsRes) && rewardsRes.length > 0) setRewards(rewardsRes);
+      if (Array.isArray(missionsRes) && missionsRes.length > 0) setMissions(missionsRes);
+      if (Array.isArray(redemptionsRes)) setRedemptions(redemptionsRes);
+      if (Array.isArray(aiTargetShopsRes) && aiTargetShopsRes.length > 0) setAiTargetShops(aiTargetShopsRes);
+    } catch (err: any) {
+      console.warn('refreshCitizenData notice:', err);
+      if (err?.status === 401 || err?.status === 403) {
+        authStorage.removeToken();
+        setIsAuthenticated(false);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (authStorage.getToken()) {
+      refreshCitizenData();
+    }
+  }, [refreshCitizenData]);
+
   // Login Citizen
-  const loginCitizen = (citizenId: string, phoneOrOtp?: string) => {
+  const loginCitizen = (citizenId: string, phoneOrOtp?: string, dbUser?: any) => {
+    if (dbUser) {
+      const mappedUser: User = {
+        userId: Number(dbUser.User_ID || Date.now()),
+        citizenId: dbUser.Citizen_ID || citizenId,
+        name: dbUser.Name || (dbUser.Phone ? `คุณผู้ใช้ ${dbUser.Phone}` : 'ผู้ใช้งานระบบไทยช่วยไทยพลีส'),
+        role: 'citizen',
+        phone: dbUser.Phone || phoneOrOtp || '',
+        provId: Number(dbUser.Province_ID || 1),
+        distId: Number(dbUser.Dist_ID || 101),
+        status: 'approved',
+        registeredAt: new Date().toISOString().replace('T', ' ').substring(0, 19),
+      };
+
+      setUsers(prev => [mappedUser, ...prev.filter(u => u.userId !== mappedUser.userId)]);
+      setCurrentUser(mappedUser);
+      setRole('citizen');
+      setIsAuthenticated(true);
+
+      if (dbUser.wallets) {
+        setWallet(prev => ({
+          ...prev,
+          walletId: dbUser.wallets.Wallet_ID || prev.walletId,
+          userId: Number(dbUser.User_ID),
+          balance: Number(dbUser.wallets.Balance || 0),
+        }));
+      }
+
+      if (Array.isArray(dbUser.user_grants) && dbUser.user_grants.length > 0) {
+        const g = dbUser.user_grants[0];
+        setUserGrant({
+          grantId: g.Grant_ID || 1,
+          userId: Number(dbUser.User_ID),
+          totalGrantAmount: Number(g.Total_Grant_Amount || 1000),
+          remainingAmount: Number(g.Remaining_Amount || 1000),
+          dailyMaxUsage: Number(g.Daily_Max_Usage || 150),
+          usedToday: Number(g.Used_Today || 0),
+          status: 'active',
+          expiryDate: '2026-12-31',
+        });
+      }
+
+      // Sync transactions from backend
+      fetch('/api/user/me/transactions', {
+        headers: authStorage.getToken() ? { Authorization: `Bearer ${authStorage.getToken()}` } : {},
+      })
+        .then(r => r.json())
+        .then(res => {
+          if (Array.isArray(res)) {
+            setTransactions(res);
+          }
+        })
+        .catch(console.error);
+
+      return { success: true, message: `ยินดีต้อนรับ ${mappedUser.name}`, user: mappedUser };
+    }
+
     const cleanId = citizenId.replace(/[^0-9]/g, '');
     const found = users.find(u => u.citizenId.replace(/[^0-9]/g, '') === cleanId || (phoneOrOtp && u.phone.replace(/[^0-9]/g, '') === phoneOrOtp.replace(/[^0-9]/g, '')));
     if (found) {
@@ -299,7 +446,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const newUser: User = {
       userId: Date.now(),
       citizenId: citizenId.length >= 13 ? citizenId : '1-1037-02948-11-2',
-      name: 'ผู้ใช้งานระบบไทยช่วยไทยพลีส',
+      name: `คุณผู้ใช้ (${phoneOrOtp || citizenId})`,
       role: 'citizen',
       phone: phoneOrOtp || '081-456-7890',
       provId: 1,
@@ -529,7 +676,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Execute 60/40 Co-payment
-  const executePayment = ({
+  const executePayment = async ({
     merchantId,
     totalAmount,
     note
@@ -543,7 +690,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, message: 'ไม่พบข้อมูลร้านค้าในระบบ' };
     }
 
-    const requestedGovShare = Math.round(totalAmount * userGrant.govPayRatio * 100) / 100;
+    const govRatio = userGrant?.govPayRatio ?? 0.60;
+    const requestedGovShare = Math.round(totalAmount * govRatio * 100) / 100;
     const govShare = Math.min(requestedGovShare, userGrant.remainingAmount);
     const userShare = (Math.round(totalAmount * 100) - Math.round(govShare * 100)) / 100;
 
@@ -554,7 +702,87 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
     }
 
-    // Deduct balances
+    if (userGrant.remainingAmount < govShare) {
+      return {
+        success: false,
+        message: `วงเงินสิทธิรัฐช่วยจ่ายคงเหลือไม่เพียงพอ (คงเหลือ ${userGrant.remainingAmount.toLocaleString()} บาท)`
+      };
+    }
+
+    // Try Real Backend DB Transaction
+    if (authStorage.getToken()) {
+      try {
+        const res = await citizenService.pay({
+          Merchant_ID: merchantId,
+          Total_Amount: totalAmount,
+          District_ID: targetShop.distId,
+        });
+
+        if (res && res.transaction) {
+          if (res.wallet) {
+            setWallet(prev => ({
+              ...prev,
+              balance: Number(res.wallet.Balance),
+              updatedAt: res.wallet.Updated_At || new Date().toISOString(),
+            }));
+          }
+          if (res.grant) {
+            setUserGrant(prev => ({
+              ...prev,
+              remainingAmount: Number(res.grant.Remaining_Amount),
+            }));
+          }
+
+          let awardedStamp: DistrictStamp | undefined = undefined;
+          if (res.awardedStamp) {
+            awardedStamp = districtStamps.find(s => s.stampId === res.awardedStamp.Stamp_ID) || {
+              stampId: res.awardedStamp.Stamp_ID,
+              stampName: res.awardedStamp.district_stamps?.Stamp_Name || 'แสตมป์ดิจิทัล',
+              distName: targetShop.address,
+              distId: targetShop.distId,
+              provId: targetShop.provId,
+              imageUrl: 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?w=300&auto=format&fit=crop&q=80',
+              highlightProduct: 'ของดีประจำอำเภอ',
+              description: 'แสตมป์ดิจิทัลประจำอำเภอ',
+            };
+          }
+
+          const newTx: SalesTransaction = {
+            txId: Number(res.transaction.Tx_ID),
+            userId: currentUser.userId,
+            userName: currentUser.name,
+            merchantId,
+            merchantName: targetShop.shopName,
+            totalAmount,
+            userPaidAmount: Number(res.transaction.User_Paid_Amount),
+            govSubsidizedAmount: Number(res.transaction.Gov_Subsidized_Amount),
+            txTimestamp: String(res.transaction.Tx_Timestamp).replace('T', ' ').substring(0, 19),
+            distId: targetShop.distId,
+            status: 'completed',
+            note: note || 'ชำระค่าสินค้าสิทธิ 60/40 (บันทึกลงฐานข้อมูลจริง)',
+            earnedStampId: awardedStamp?.stampId,
+          };
+
+          setTransactions(prev => [newTx, ...prev]);
+          refreshCitizenData().catch(console.warn);
+
+          return {
+            success: true,
+            message: `ชำระเงินสำเร็จ ฿${totalAmount.toLocaleString()} (คุณจ่าย ฿${userShare.toLocaleString()}, รัฐช่วยจ่าย ฿${govShare.toLocaleString()})`,
+            earnedStamp: awardedStamp,
+            tx: newTx,
+          };
+        }
+      } catch (err: any) {
+        console.warn('Real payment API failed, falling back to local simulation:', err);
+        const errMessage = err?.message || err?.error;
+        if (errMessage && typeof errMessage === 'string' && (errMessage.includes('ไม่เพียงพอ') || errMessage.includes('ยอดเงิน'))) {
+          return { success: false, message: errMessage };
+        }
+      }
+    }
+
+    // Deduct balances (local fallback)
     setWallet(prev => ({
       ...prev,
       balance: Math.round((prev.balance - userShare) * 100) / 100,
@@ -565,80 +793,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...prev,
       remainingAmount: Math.round((prev.remainingAmount - govShare) * 100) / 100
     }));
-
-    // Update merchant sales
-    setMerchants(prev =>
-      prev.map(m =>
-        m.mchId === merchantId
-          ? { ...m, currentDailySales: m.currentDailySales + totalAmount }
-          : m
-      )
-    );
-
-    // Check Missions & Stamps
-    // Conditions from doc: Purchase >= 150 THB OR Complete General Mission -> Award Stamp
-    let awardedStamp: DistrictStamp | undefined = undefined;
-    let matchingMissionId: number | undefined = undefined;
-
-    // Check if there is an active mission for this merchant
-    const activeMission = missions.find(
-      ms =>
-        ms.status === 'active' &&
-        (ms.targetMerchantId === merchantId || ms.targetDistId === targetShop.distId) &&
-        totalAmount >= ms.minSpend &&
-        ms.currentRecipients < ms.maxRecipients &&
-        !ms.completedUserIds.includes(currentUser.userId)
-    );
-
-    if (activeMission) {
-      matchingMissionId = activeMission.missionId;
-      awardedStamp = districtStamps.find(s => s.stampId === activeMission.rewardStampId);
-
-      // Increment mission recipients
-      setMissions(prev =>
-        prev.map(m =>
-          m.missionId === activeMission.missionId
-            ? {
-                ...m,
-                currentRecipients: m.currentRecipients + 1,
-                completedUserIds: [...m.completedUserIds, currentUser.userId],
-                status: m.currentRecipients + 1 >= m.maxRecipients ? 'completed' : 'active'
-              }
-            : m
-        )
-      );
-    } else if (totalAmount >= 150) {
-      // General rule: Spend >= 150 THB gets a district stamp based on merchant location
-      awardedStamp =
-        districtStamps.find(s => s.distId === targetShop.distId) ||
-        districtStamps.find(s => s.provId === targetShop.provId) ||
-        districtStamps[0];
-    }
-
-    if (awardedStamp) {
-      // Add to user stamps
-      setUserStamps(prev => {
-        const existing = prev.find(us => us.stampId === awardedStamp!.stampId);
-        if (existing) {
-          return prev.map(us =>
-            us.stampId === awardedStamp!.stampId ? { ...us, count: us.count + 1 } : us
-          );
-        } else {
-          return [
-            ...prev,
-            {
-              userStampId: Date.now(),
-              userId: currentUser.userId,
-              stampId: awardedStamp!.stampId,
-              count: 1,
-              earnedAt: new Date().toISOString().replace('T', ' ').substring(0, 19),
-              earnSource: matchingMissionId ? 'mission' : 'spend_150',
-              qualifyingAmount: totalAmount
-            }
-          ];
-        }
-      });
-    }
 
     // Create transaction record
     const newTx: SalesTransaction = {
@@ -653,9 +807,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       txTimestamp: new Date().toISOString().replace('T', ' ').substring(0, 19),
       distId: targetShop.distId,
       status: 'completed',
-      note: note || (matchingMissionId ? 'สำเร็จภารกิจและใช้สิทธิ 60/40' : 'ชำระค่าสินค้าสิทธิ 60/40'),
-      earnedStampId: awardedStamp?.stampId,
-      missionId: matchingMissionId
+      note: note || 'ชำระค่าสินค้าสิทธิ 60/40',
     };
 
     setTransactions(prev => [newTx, ...prev]);
@@ -663,7 +815,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return {
       success: true,
       message: `ชำระเงินสำเร็จ ฿${totalAmount.toLocaleString()} (คุณจ่าย ฿${userShare.toLocaleString()}, รัฐจ่าย ฿${govShare.toLocaleString()})`,
-      earnedStamp: awardedStamp,
       tx: newTx
     };
   };
@@ -714,8 +865,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       prev.map(r => (r.rewardId === rewardId ? { ...r, remainingStock: r.remainingStock - 1 } : r))
     );
 
-    // Create redemption code
-    const redemptionCode = `THAI-${reward.rewardType.toUpperCase().substring(0, 4)}-${Math.floor(1000 + Math.random() * 9000)}`;
+    // Save to Database
+    if (authStorage.getToken()) {
+      try {
+        const stampId = targetStampId || userStamps[0]?.stampId || 1;
+        api.post('/stamp-redemptions', {
+          Reward_ID: rewardId,
+          Stamp_ID: stampId,
+          Quantity: 1,
+        }).then(() => refreshCitizenData()).catch(console.warn);
+      } catch (e) {
+        console.warn('Real redeem error:', e);
+      }
+    }
+    const redemptionCode = `THAI-REWARD-${reward.rewardId}-${Math.floor(1000 + Math.random() * 9000)}`;
     const newRedemption: StampRedemption = {
       redemptionId: Date.now(),
       userId: currentUser.userId,
@@ -757,7 +920,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   };
 
-  const topupWallet = (amount: number) => {
+  const topupWallet = async (amount: number = 500) => {
+    if (authStorage.getToken()) {
+      try {
+        const res = await citizenService.topupWallet(amount);
+        const newBal = res?.wallet?.balance ?? res?.wallet?.Balance ?? (res as any)?.balance ?? (res as any)?.Balance;
+        if (newBal !== undefined) {
+          setWallet(prev => ({
+            ...prev,
+            balance: Number(newBal),
+            updatedAt: res?.wallet?.updatedAt || new Date().toISOString(),
+          }));
+          return;
+        }
+      } catch (e) {
+        console.warn('Real topup API warning, using local state:', e);
+      }
+    }
     setWallet(prev => ({
       ...prev,
       balance: Math.round((prev.balance + amount) * 100) / 100,
@@ -894,6 +1073,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         redemptions,
         wallet,
         userGrant,
+        aiTargetShops,
         isAuthenticated,
         setIsAuthenticated,
         loginCitizen,

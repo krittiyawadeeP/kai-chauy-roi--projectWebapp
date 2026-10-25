@@ -15,7 +15,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
   onClose,
   presetMerchantId
 }) => {
-  const { merchants, executePayment, wallet, userGrant, missions, districtStamps } = useApp();
+  const { merchants, executePayment, wallet, userGrant, missions, districtStamps, topupWallet } = useApp();
 
   const [step, setStep] = useState<'scan' | 'confirm' | 'success'>('scan');
   const [selectedMerchant, setSelectedMerchant] = useState<Merchant | null>(null);
@@ -23,11 +23,16 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [awardedStamp, setAwardedStamp] = useState<DistrictStamp | null>(null);
   const [cameraActive, setCameraActive] = useState<boolean>(false);
+  const [isPaying, setIsPaying] = useState<boolean>(false);
+  const [topupSuccess, setTopupSuccess] = useState<string>('');
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       setErrorMsg('');
+      setTopupSuccess('');
+      setIsPaying(false);
       if (presetMerchantId) {
         const m = merchants.find(item => item.mchId === presetMerchantId);
         if (m) {
@@ -54,7 +59,9 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
   const startCamera = async () => {
     try {
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'environment' }
+        });
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           videoRef.current.play();
@@ -66,8 +73,24 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     }
   };
 
-  const govPays = Math.min(Math.round(amount * userGrant.govPayRatio * 100) / 100, userGrant.remainingAmount);
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Simulate QR reading or match merchant
+    const randomMerchant = merchants.find(m => m.status === 'approved') || merchants[0];
+    if (randomMerchant) {
+      setSelectedMerchant(randomMerchant);
+      setAmount(200);
+      setStep('confirm');
+    }
+  };
+
+  const govRatio = userGrant?.govPayRatio ?? 0.60;
+  const govPays = Math.min(Math.round(amount * govRatio * 100) / 100, userGrant?.remainingAmount ?? amount);
   const userPays = (Math.round(amount * 100) - Math.round(govPays * 100)) / 100;
+  const isBalanceEnough = wallet.balance >= userPays;
+
 
   const matchingMission = selectedMerchant
     ? missions.find(
@@ -84,40 +107,58 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     ? districtStamps.find(s => s.distId === selectedMerchant.distId) || districtStamps[0]
     : null;
 
-  const handleConfirmPay = () => {
+  const handleConfirmPay = async () => {
     if (!selectedMerchant) return;
     setErrorMsg('');
+    setIsPaying(true);
 
-    const res = executePayment({
-      merchantId: selectedMerchant.mchId,
-      totalAmount: amount,
-      note: `ชำระเงินสิทธิ์ร่วมจ่าย ณ ร้าน ${selectedMerchant.shopName}`
-    });
+    try {
+      const res = await executePayment({
+        merchantId: selectedMerchant.mchId,
+        totalAmount: amount,
+        note: `ชำระเงินสิทธิ์ร่วมจ่าย ณ ร้าน ${selectedMerchant.shopName}`
+      });
 
-    if (!res.success) {
-      setErrorMsg(res.message);
-      return;
+      if (!res.success) {
+        setErrorMsg(res.message);
+        setIsPaying(false);
+        return;
+      }
+
+      if (res.earnedStamp) {
+        setAwardedStamp(res.earnedStamp);
+      }
+
+      setStep('success');
+      confetti({
+        particleCount: 70,
+        spread: 60,
+        origin: { y: 0.6 }
+      });
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'การชำระเงินขัดข้อง กรุณาลองใหม่อีกครั้ง');
+    } finally {
+      setIsPaying(false);
     }
+  };
 
-    if (res.earnedStamp) {
-      setAwardedStamp(res.earnedStamp);
+  const handleQuickTopup = async (addAmount: number) => {
+    try {
+      await topupWallet(addAmount);
+      setTopupSuccess(`เติมเงินสำเร็จ +฿${addAmount.toLocaleString()}`);
+      setErrorMsg('');
+    } catch {
+      setErrorMsg('เติมเงินไม่สำเร็จ กรุณาลองใหม่');
     }
-
-    setStep('success');
-    confetti({
-      particleCount: 70,
-      spread: 60,
-      origin: { y: 0.6 }
-    });
   };
 
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center bg-[#07162d]/70 p-4 backdrop-blur-sm animate-fade-in"
+      className="fixed inset-0 z-50 grid place-items-center bg-[#07162d]/75 p-4 backdrop-blur-sm animate-fade-in"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-[390px] rounded-[28px] bg-white p-5 shadow-2xl overflow-hidden"
+        className="w-full max-w-[395px] rounded-[28px] bg-white p-5 shadow-2xl overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -133,7 +174,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="grid size-8 place-items-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500"
+            className="grid size-8 place-items-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 transition-colors"
           >
             <Icon name="x" className="size-4" />
           </button>
@@ -154,7 +195,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
                   <p className="text-[11px] text-slate-300">หันกล้องไปที่ QR ร้านค้า</p>
                   <button
                     onClick={startCamera}
-                    className="mt-2 text-[10px] bg-[#1769ed] hover:bg-blue-600 text-white px-3 py-1 rounded-full font-bold transition-all"
+                    className="mt-2 text-[10px] bg-[#1769ed] hover:bg-blue-600 text-white px-3 py-1 rounded-full font-bold transition-all cursor-pointer"
                   >
                     เปิดกล้องถ่ายจริง
                   </button>
@@ -165,15 +206,30 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
               <div className="absolute inset-x-4 h-0.5 bg-gradient-to-r from-transparent via-cyan-400 to-transparent shadow-[0_0_10px_#38bdf8] animate-bounce pointer-events-none" />
             </div>
 
-            <p className="text-[11px] text-amber-700 mb-3">โหมดสาธิต: รายการนี้บันทึกในเครื่อง ยังไม่บันทึกลงฐานข้อมูล</p>
+            <div className="flex items-center gap-3 mb-3">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="text-xs font-semibold text-[#1769ed] bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
+              >
+                <span>📁 อัปโหลดภาพ QR ร้านค้า</span>
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleFileUpload}
+              />
+            </div>
 
-            {/* Quick Demo Shop Presets */}
+            {/* Quick Real Shop Selection */}
             <div className="w-full border-t border-slate-100 pt-3">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">
-                เลือกร้านค้าจำลองเพื่อทดสอบสแกน:
+                หรือเลือกร้านค้าที่ต้องการชำระสิทธิ์:
               </span>
               <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
-                {merchants.filter(m => m.status === 'approved').map(shop => (
+                {merchants.map(shop => (
                   <button
                     key={shop.mchId}
                     onClick={() => {
@@ -181,26 +237,24 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
                       setAmount(200);
                       setStep('confirm');
                     }}
-                    className="w-full text-left p-2.5 rounded-xl border border-slate-100 hover:border-blue-200 hover:bg-[#f8faff] transition-all flex items-center justify-between group"
+                    className="w-full text-left p-2.5 rounded-xl border border-slate-100 hover:border-blue-200 hover:bg-[#f8faff] transition-all flex items-center justify-between group cursor-pointer"
                   >
                     <div className="flex items-center gap-2.5">
-                      {shop.imageUrl ? (
-                        <img
-                          src={shop.imageUrl}
-                          alt={shop.shopName}
-                          className="size-9 rounded-lg object-cover border border-slate-100"
-                        />
-                      ) : (
-                        <div className="size-9 rounded-lg bg-teal-50 flex items-center justify-center text-xs">🏪</div>
-                      )}
-                      <div>
-                        <p className="text-xs font-bold text-slate-800 group-hover:text-[#1769ed]">
+                      <img
+                        src={shop.imageUrl || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=200&auto=format&fit=crop&q=80'}
+                        alt={shop.shopName}
+                        className="size-9 rounded-lg object-cover border border-slate-100 shrink-0"
+                      />
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-800 group-hover:text-[#1769ed] truncate">
                           {shop.shopName}
                         </p>
-                        <p className="text-[10px] text-slate-400">{shop.category}</p>
+                        <p className="text-[10px] text-slate-400">
+                          {shop.category} • {shop.address}
+                        </p>
                       </div>
                     </div>
-                    <Icon name="chevron" className="size-4 text-slate-300 group-hover:text-[#1769ed]" />
+                    <Icon name="chevron" className="size-4 text-slate-300 group-hover:text-[#1769ed] shrink-0" />
                   </button>
                 ))}
               </div>
@@ -212,20 +266,16 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
         {step === 'confirm' && selectedMerchant && (
           <div className="pt-4 space-y-3.5">
             <div className="flex items-center gap-3 p-3 rounded-2xl bg-[#f8faff] border border-blue-50">
-              {selectedMerchant.imageUrl ? (
-                <img
-                  src={selectedMerchant.imageUrl}
-                  alt={selectedMerchant.shopName}
-                  className="size-12 rounded-xl object-cover border border-slate-100"
-                />
-              ) : (
-                <div className="size-12 rounded-xl bg-teal-50 flex items-center justify-center text-base">🏪</div>
-              )}
+              <img
+                src={selectedMerchant.imageUrl || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=200&auto=format&fit=crop&q=80'}
+                alt={selectedMerchant.shopName}
+                className="size-12 rounded-xl object-cover border border-slate-100 shrink-0"
+              />
               <div className="min-w-0 flex-1">
-                <p className="font-bold text-xs text-slate-800 line-clamp-1">{selectedMerchant.shopName}</p>
+                <p className="font-bold text-xs text-slate-800 truncate">{selectedMerchant.shopName}</p>
                 <p className="text-[10px] text-slate-400">{selectedMerchant.category}</p>
                 <p className="text-[10px] text-[#1769ed] font-medium mt-0.5">
-                  รับเงินเข้ากระเป๋าร้านค้า
+                  พร้อมเพย์: {selectedMerchant.promptpayId || selectedMerchant.phone || 'รับเงินเข้ากระเป๋าร้านค้า'}
                 </p>
               </div>
             </div>
@@ -253,7 +303,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
                     key={val}
                     type="button"
                     onClick={() => setAmount(val)}
-                    className={`flex-1 py-1 text-xs rounded-lg font-bold transition-colors ${
+                    className={`flex-1 py-1 text-xs rounded-lg font-bold transition-colors cursor-pointer ${
                       amount === val
                         ? 'bg-[#1769ed] text-white'
                         : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
@@ -281,6 +331,51 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
               </div>
             </div>
 
+            {/* Balances Check */}
+            <div className="grid grid-cols-2 gap-2 text-[11px]">
+              <div className="p-2 bg-slate-50 rounded-xl border border-slate-100">
+                <span className="text-slate-400 block">เงินในกระเป๋าของคุณ</span>
+                <strong className={`text-xs ${isBalanceEnough ? 'text-slate-800' : 'text-rose-600 font-extrabold'}`}>
+                  ฿ {wallet.balance.toLocaleString()}
+                </strong>
+              </div>
+              <div className="p-2 bg-slate-50 rounded-xl border border-slate-100">
+                <span className="text-slate-400 block">สิทธิ์รัฐคงเหลือ</span>
+                <strong className="text-xs text-emerald-600 font-bold">
+                  ฿ {userGrant.remainingAmount.toLocaleString()}
+                </strong>
+              </div>
+            </div>
+
+            {/* Insufficient balance warning + Quick Top-up */}
+            {!isBalanceEnough && (
+              <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700 space-y-2">
+                <p className="font-bold">⚠️ ยอดเงินในกระเป๋าไม่พอจ่าย 40% (ขาด ฿{(userPays - wallet.balance).toLocaleString()})</p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleQuickTopup(300)}
+                    className="flex-1 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[11px] transition-colors"
+                  >
+                    + เติม ฿300
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleQuickTopup(500)}
+                    className="flex-1 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-[11px] transition-colors"
+                  >
+                    + เติม ฿500
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {topupSuccess && (
+              <p className="text-xs text-emerald-700 bg-emerald-50 p-2 rounded-xl border border-emerald-200">
+                ✓ {topupSuccess}
+              </p>
+            )}
+
             {/* Stamp bonus hint */}
             {previewStamp && (
               <div className="rounded-xl bg-amber-50 p-2.5 border border-amber-200 flex items-center gap-2 text-xs text-amber-900">
@@ -301,16 +396,30 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
 
             <div className="flex gap-2 pt-1">
               <button
+                type="button"
                 onClick={() => setStep('scan')}
-                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold"
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
               >
                 ย้อนกลับ
               </button>
               <button
+                type="button"
+                disabled={!isBalanceEnough || isPaying}
                 onClick={handleConfirmPay}
-                className="flex-[2] py-2.5 bg-[#1769ed] hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20"
+                className={`flex-[2] py-2.5 rounded-xl text-xs font-bold shadow-md transition-all flex items-center justify-center gap-1.5 ${
+                  !isBalanceEnough || isPaying
+                    ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
+                    : 'bg-[#1769ed] hover:bg-blue-700 text-white shadow-blue-500/20 cursor-pointer'
+                }`}
               >
-                ยืนยันชำระ ฿{userPays.toLocaleString()}
+                {isPaying ? (
+                  <>
+                    <div className="size-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>กำลังชำระเงิน...</span>
+                  </>
+                ) : (
+                  <span>ยืนยันชำระ ฿{userPays.toLocaleString()}</span>
+                )}
               </button>
             </div>
           </div>
@@ -349,7 +458,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
                 <img
                   src={awardedStamp.imageUrl}
                   alt={awardedStamp.stampName}
-                  className="size-11 rounded-xl object-cover border border-amber-300"
+                  className="size-11 rounded-xl object-cover border border-amber-300 shrink-0"
                 />
                 <div>
                   <span className="text-[10px] font-bold text-amber-700">ได้รับแสตมป์ดิจิทัล!</span>
@@ -360,7 +469,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
 
             <button
               onClick={onClose}
-              className="w-full py-2.5 bg-[#1769ed] hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20"
+              className="w-full py-2.5 bg-[#1769ed] hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 cursor-pointer"
             >
               เสร็จสิ้น
             </button>

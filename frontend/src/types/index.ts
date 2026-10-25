@@ -83,6 +83,22 @@ export interface AISalesAnalysis {
   suggestedAction: string;
 }
 
+export interface AiTargetShop {
+  analysisId: number;
+  merchantId: number;
+  merchantName: string;
+  category: string;
+  districtName: string;
+  provinceName: string;
+  salesRatio: number;
+  salesStatus: string;
+  boostRecommended: boolean;
+  missionTitle: string;
+  missionDetail: string;
+  criticalHours: string;
+  imageUrl: string;
+}
+
 export interface Mission {
   missionId: number;
   missionName: string;
