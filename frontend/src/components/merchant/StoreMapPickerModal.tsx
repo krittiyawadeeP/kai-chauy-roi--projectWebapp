@@ -44,7 +44,7 @@ export const StoreMapPickerModal: React.FC<StoreMapPickerModalProps> = ({
 }) => {
   const { currentMerchant, updateMerchantLocation, merchants } = useApp();
 
-  const targetShop = inline ? null : mchId ? merchants.find(m => m.mchId === mchId) : currentMerchant;
+  const targetShop = inline || onLocationSelect ? null : mchId ? merchants.find(m => m.mchId === mchId) : currentMerchant;
 
   const [lat, setLat] = useState<number>(initialLocation?.lat ?? targetShop?.lat ?? 13.8475);
   const [lng, setLng] = useState<number>(initialLocation?.lng ?? targetShop?.lng ?? 100.4932);

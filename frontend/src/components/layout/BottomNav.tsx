@@ -1,14 +1,13 @@
 import React from 'react';
 import { Icon, IconName } from '../common/Icon';
-import { Role } from '../../types';
 
 interface BottomNavProps {
-  role: Role;
+  role?: string;
   activeNav: string;
   onNavClick: (label: string) => void;
 }
 
-export const BottomNav: React.FC<BottomNavProps> = ({ role, activeNav, onNavClick }) => {
+export const BottomNav: React.FC<BottomNavProps> = ({ role = 'citizen', activeNav, onNavClick }) => {
   const isMerchant = role === 'merchant';
   const isAdmin = role === 'admin';
 
@@ -19,10 +18,10 @@ export const BottomNav: React.FC<BottomNavProps> = ({ role, activeNav, onNavClic
   const navItems: [string, IconName][] = isMerchant
     ? [
         ['หน้าหลัก', 'home'],
-        ['ยอดขาย', 'wallet'],
+        ['ถุงเงิน', 'wallet'],
         ['สร้าง QR', 'qr'],
-        ['ตั้งค่าร้าน', 'shop'],
-        ['เข้าสู่ระบบ', 'user'],
+        ['ยอดขาย', 'status'],
+        ['ออกจากระบบ', 'logout'],
       ]
     : isAdmin
     ? [
@@ -34,10 +33,10 @@ export const BottomNav: React.FC<BottomNavProps> = ({ role, activeNav, onNavClic
       ]
     : [
         ['หน้าหลัก', 'home'],
-        ['สิทธิ์ 60/40', 'wallet'],
+        ['บริการทั้งหมด', 'grid'],
         ['สแกนจ่าย', 'scan'],
-        ['สถานะ', 'status'],
-        ['เข้าสู่ระบบ', 'user'],
+        ['ของรางวัล', 'gift'],
+        ['โปรไฟล์', 'user'],
       ];
 
   return (

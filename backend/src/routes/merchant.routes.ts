@@ -7,6 +7,7 @@ import { merchantCategory } from "../lib/merchant-category";
 import { hashPin, validPin } from "../lib/pin";
 import { getCurrentPolicy } from '../policy/policy';
 import { awardMissionStamp } from '../lib/mission-stamp';
+import { remainingDailySubsidy } from "../lib/daily-subsidy";
 
 export const merchantRoutes = Router();
 
@@ -124,12 +125,16 @@ merchantRoutes.post("/", requireAuth, async (req: AuthRequest, res) => {
 });
 
 merchantRoutes.get("/me", requireMerchant, async (req: AuthRequest, res) => {
-  const merchant = await prisma.merchants.findFirst({
+  let merchant = await prisma.merchants.findFirst({
     where: {
       User_ID: req.user!.userId,
     },
     include: {
-      districts: true,
+      districts: {
+        include: {
+          provinces: true,
+        },
+      },
       users: true,
       wallet: true,
     },
@@ -139,7 +144,129 @@ merchantRoutes.get("/me", requireMerchant, async (req: AuthRequest, res) => {
     return notFound(res, "Merchant not found");
   }
 
+  if (!merchant.wallet) {
+    const newWallet = await prisma.wallets.create({
+      data: {
+        Merchant_ID: merchant.Mch_ID,
+        Balance: 0,
+        Status: "ACTIVE",
+      },
+    });
+    merchant = { ...merchant, wallet: newWallet };
+  }
+
   sendJson(res, merchant);
+});
+
+merchantRoutes.get("/me/wallet", requireMerchant, async (req: AuthRequest, res) => {
+  const merchant = await prisma.merchants.findFirst({
+    where: {
+      User_ID: req.user!.userId,
+    },
+    include: {
+      wallet: true,
+      users: true,
+    },
+  });
+
+  if (!merchant) {
+    return notFound(res, "Merchant not found");
+  }
+
+  let wallet = merchant.wallet;
+  if (!wallet) {
+    wallet = await prisma.wallets.create({
+      data: {
+        Merchant_ID: merchant.Mch_ID,
+        Balance: 0,
+        Status: "ACTIVE",
+      },
+    });
+  }
+
+  const sales = await prisma.sales_transactions.findMany({
+    where: {
+      Merchant_ID: merchant.Mch_ID,
+    },
+    include: {
+      users: true,
+    },
+    orderBy: {
+      Tx_Timestamp: "desc",
+    },
+  });
+
+  const totalRevenue = sales.reduce((acc, s) => acc + Number(s.Total_Amount), 0);
+  const userPaidTotal = sales.reduce((acc, s) => acc + Number(s.User_Paid_Amount), 0);
+  const govSubsidizedTotal = sales.reduce((acc, s) => acc + Number(s.Gov_Subsidized_Amount), 0);
+
+  sendJson(res, {
+    wallet,
+    summary: {
+      totalRevenue,
+      totalBills: sales.length,
+      userPaidTotal,
+      govSubsidizedTotal,
+    },
+    recentTransactions: sales,
+  });
+});
+
+merchantRoutes.post("/me/wallet/withdraw", requireMerchant, async (req: AuthRequest, res) => {
+  const { amount, promptpayOrAccount } = req.body;
+  const withdrawAmount = Number(amount);
+
+  if (!Number.isFinite(withdrawAmount) || withdrawAmount <= 0) {
+    return badRequest(res, "จำนวนเงินที่ต้องการถอนต้องมากกว่า 0 บาท");
+  }
+
+  const merchant = await prisma.merchants.findFirst({
+    where: {
+      User_ID: req.user!.userId,
+    },
+    include: {
+      wallet: true,
+      users: true,
+    },
+  });
+
+  if (!merchant) {
+    return notFound(res, "Merchant not found");
+  }
+
+  let wallet = merchant.wallet;
+  if (!wallet) {
+    wallet = await prisma.wallets.create({
+      data: {
+        Merchant_ID: merchant.Mch_ID,
+        Balance: 0,
+        Status: "ACTIVE",
+      },
+    });
+  }
+
+  const currentBalance = Number(wallet.Balance);
+  if (currentBalance < withdrawAmount) {
+    return badRequest(res, "ยอดเงินในกระเป๋าไม่เพียงพอ มีอยู่ ฿" + currentBalance.toLocaleString('th-TH', { minimumFractionDigits: 2 }) + " ต้องการถอน ฿" + withdrawAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 }));
+  }
+
+  const updatedWallet = await prisma.wallets.update({
+    where: {
+      Merchant_ID: merchant.Mch_ID,
+    },
+    data: {
+      Balance: {
+        decrement: withdrawAmount,
+      },
+    },
+  });
+
+  sendJson(res, {
+    message: "ถอนเงินจำนวน ฿" + withdrawAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 }) + " สำเร็จ เข้าบัญชี/พร้อมเพย์ " + (promptpayOrAccount || merchant.users.Phone),
+    amount: withdrawAmount,
+    newBalance: Number(updatedWallet.Balance),
+    wallet: updatedWallet,
+  });
 });
 
 merchantRoutes.patch("/me", requireMerchant, async (req: AuthRequest, res) => {
@@ -223,11 +350,11 @@ merchantRoutes.post("/me/sales", requireMerchant, async (req: AuthRequest, res) 
 
   const requestedGovAmount = Math.round(totalAmount * 100 * govRatio) / 100;
   const remainingGrant = activeGrant ? Number(activeGrant.Remaining_Amount) : 0;
-  const govSubsidizedAmount = Math.min(requestedGovAmount, remainingGrant);
-  const userPaidAmount = Number((totalAmount - govSubsidizedAmount).toFixed(2));
-
   try {
     const transaction = await prisma.$transaction(async (tx) => {
+    const dailySubsidy = await remainingDailySubsidy(tx, userId);
+    const govSubsidizedAmount = Math.min(requestedGovAmount, remainingGrant, dailySubsidy.remaining);
+    const userPaidAmount = Number((totalAmount - govSubsidizedAmount).toFixed(2));
     const paid = await tx.wallets.updateMany({
       where: { User_ID: userId, Status: "ACTIVE", Balance: { gte: userPaidAmount } },
       data: { Balance: { decrement: userPaidAmount } },
@@ -249,7 +376,7 @@ merchantRoutes.post("/me/sales", requireMerchant, async (req: AuthRequest, res) 
         Total_Amount: totalAmount,
         User_Paid_Amount: userPaidAmount,
         Gov_Subsidized_Amount: govSubsidizedAmount,
-        Tx_Timestamp: new Date(),
+        Tx_Timestamp: dailySubsidy.timestamp,
         District_ID: districtId,
         Status: "COMPLETED",
       },
@@ -259,9 +386,10 @@ merchantRoutes.post("/me/sales", requireMerchant, async (req: AuthRequest, res) 
       },
     });
 
-    await tx.wallets.update({
+    await tx.wallets.upsert({
       where: { Merchant_ID: merchant.Mch_ID },
-      data: { Balance: { increment: totalAmount } },
+      update: { Balance: { increment: totalAmount } },
+      create: { Merchant_ID: merchant.Mch_ID, Balance: totalAmount, Status: "ACTIVE" },
     });
 
     const mission = await tx.missions.findFirst({

@@ -40,11 +40,8 @@ export const authService = {
   },
 
   register: async (payload: RegisterPayload): Promise<AuthResponse> => {
-    const res = await api.post<AuthResponse>('/user', payload);
-    if (res?.token) {
-      authStorage.setToken(res.token);
-    }
-    return res;
+    await api.post('/user', payload);
+    return authService.login({ Citizen_ID: payload.Citizen_ID, Password: payload.Password });
   },
 
   logout: (): void => {

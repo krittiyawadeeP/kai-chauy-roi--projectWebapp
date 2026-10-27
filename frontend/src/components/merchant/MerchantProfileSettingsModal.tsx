@@ -91,6 +91,9 @@ export const MerchantProfileSettingsModal: React.FC<MerchantProfileSettingsModal
       ownerName,
       category,
       distId: districtId,
+      imageUrl: imageUrl || undefined,
+      openingHours,
+      description
     });
     setSavedNotice(true);
     setTimeout(() => {
@@ -144,7 +147,14 @@ export const MerchantProfileSettingsModal: React.FC<MerchantProfileSettingsModal
 
           {/* Shop Image Preview */}
           <div className="relative rounded-2xl overflow-hidden border border-slate-200 h-32 bg-slate-100 group">
-            <img src={imageUrl} alt={shopName} className="w-full h-full object-cover" />
+            {imageUrl ? (
+              <img src={imageUrl} alt={shopName} className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full flex flex-col items-center justify-center bg-slate-50 text-slate-400">
+                <span className="text-2xl mb-1">🏪</span>
+                <span className="text-[11px] font-medium">ไม่มีรูปภาพหน้าร้าน (กดระบุ URL ด้านล่าง)</span>
+              </div>
+            )}
             <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
               <span className="text-white text-[11px] font-bold bg-white/20 px-3 py-1 rounded-full backdrop-blur-xs">
                 เปลี่ยนรูปภาพหน้าร้าน
@@ -181,16 +191,7 @@ export const MerchantProfileSettingsModal: React.FC<MerchantProfileSettingsModal
                 type="text"
                 value={ownerName}
                 onChange={e => setOwnerName(e.target.value)}
-                className="w-full px-3 py-2 border border-slate-200 rounded-xl"
-              />
-            </div>
-            <div>
-              <label className="block text-[11px] font-bold text-slate-600 mb-1">กระเป๋ารับเงินร้านค้า</label>
-              <input
-                type="text"
-                value={currentMerchant.walletBalance === undefined ? 'ยังไม่มีข้อมูลยอดเงิน' : `฿ ${currentMerchant.walletBalance.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`}
-                readOnly
-                className="w-full px-3 py-2 border border-slate-200 rounded-xl font-mono"
+                className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs"
               />
             </div>
             <div>
@@ -198,7 +199,7 @@ export const MerchantProfileSettingsModal: React.FC<MerchantProfileSettingsModal
               <select
                 value={category}
                 onChange={e => setCategory(e.target.value as any)}
-                className="w-full px-2.5 py-2 border border-slate-200 rounded-xl bg-white"
+                className="w-full px-2.5 py-2 border border-slate-200 rounded-xl bg-white text-xs"
               >
                 <option value="อาหารและเครื่องดื่ม">อาหารและเครื่องดื่ม</option>
                 <option value="ของใช้ทั่วไป">ของใช้ทั่วไป</option>
@@ -301,6 +302,10 @@ export const MerchantProfileSettingsModal: React.FC<MerchantProfileSettingsModal
         isOpen={mapPickerOpen}
         onClose={() => setMapPickerOpen(false)}
         mchId={currentMerchant.mchId}
+        onLocationSelect={(loc) => {
+          setProvinceId(loc.provinceId);
+          setDistrictId(loc.districtId);
+        }}
       />
     </div>
   );

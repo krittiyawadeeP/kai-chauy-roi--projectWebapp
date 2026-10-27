@@ -44,6 +44,7 @@ export interface Merchant {
   dailyAvgSales: number;
   currentDailySales: number;
   walletBalance?: number;
+  wallet?: Wallet;
   isAiTarget: boolean;
   openingHours?: string;
   description?: string;
@@ -53,6 +54,7 @@ export interface SalesTransaction {
   txId: number;
   userId: number;
   userName: string;
+  userPhone?: string;
   merchantId: number;
   merchantName: string;
   totalAmount: number;
@@ -79,6 +81,22 @@ export interface AISalesAnalysis {
   criticalHours: string; // e.g. "13:00 - 16:00 น."
   aiInsight: string;
   suggestedAction: string;
+}
+
+export interface AiTargetShop {
+  analysisId: number;
+  merchantId: number;
+  merchantName: string;
+  category: string;
+  districtName: string;
+  provinceName: string;
+  salesRatio: number;
+  salesStatus: string;
+  boostRecommended: boolean;
+  missionTitle: string;
+  missionDetail: string;
+  criticalHours: string;
+  imageUrl: string;
 }
 
 export interface Mission {
@@ -153,8 +171,10 @@ export interface StampRedemption {
 
 export interface Wallet {
   walletId: number;
-  userId: number;
+  userId?: number | null;
+  merchantId?: number | null;
   balance: number;
+  status?: string;
   updatedAt: string;
 }
 

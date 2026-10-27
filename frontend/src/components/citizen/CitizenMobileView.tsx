@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Icon, IconName } from '../common/Icon';
 import { QRScannerModal } from './QRScannerModal';
+import { CitizenQrModal } from './CitizenQrModal';
+import { CitizenStatementScreen } from './CitizenStatementScreen';
 import { CitizenRegistrationModal } from './CitizenRegistrationModal';
 import { StampRedeemModal } from './StampRedeemModal';
 import { StampTradeModal } from './StampTradeModal';
@@ -16,14 +18,19 @@ export const CitizenMobileView: React.FC = () => {
     userGrant,
     merchants,
     missions,
+    aiTargetShops,
     districtStamps,
     userStamps,
     rewards,
     transactions,
-    topupWallet
+    topupWallet,
+    logout
   } = useApp();
 
-  const [activeTab, setActiveTab] = useState<'home' | 'wallet' | 'missions' | 'status' | 'profile'>('home');
+  const featuredAiShop = aiTargetShops.length > 0 ? aiTargetShops[0] : null;
+
+  const [currentScreen, setCurrentScreen] = useState<'home' | 'statement'>('home');
+  const [activeTab, setActiveTab] = useState<'home' | 'missions' | 'wallet'>('home');
   const [scannerOpen, setScannerOpen] = useState(false);
   const [selectedMerchantIdForScan, setSelectedMerchantIdForScan] = useState<number | undefined>();
   const [showMyQr, setShowMyQr] = useState(false);
@@ -56,13 +63,17 @@ export const CitizenMobileView: React.FC = () => {
       onClick: () => setShowMyQr(true)
     },
     {
-      icon: 'status' as IconName,
-      label: 'ติดตามสถานะ',
-      detail: 'ตรวจสอบคำขอ 13 หลัก',
+      icon: 'history' as IconName,
+      label: 'สรุปรายรับ-รายจ่าย',
+      detail: 'ประวัติ & สิทธิคงเหลือ',
       color: 'green',
-      onClick: () => setRegistrationModalOpen(true)
+      onClick: () => setCurrentScreen('statement')
     }
   ];
+
+  if (currentScreen === 'statement') {
+    return <CitizenStatementScreen onBack={() => setCurrentScreen('home')} />;
+  }
 
   return (
     <div className="pb-28">
@@ -84,11 +95,11 @@ export const CitizenMobileView: React.FC = () => {
           </div>
           <div className="flex items-center gap-1.5">
             <button
-              onClick={() => setAuthModalOpen(true)}
-              className="px-2.5 py-1 rounded-full bg-white/20 hover:bg-white/30 text-[11px] font-bold text-white flex items-center gap-1 backdrop-blur-xs transition-colors"
+              onClick={() => logout()}
+              className="px-2.5 py-1 rounded-full bg-white/20 hover:bg-white/30 text-[11px] font-bold text-white flex items-center gap-1 backdrop-blur-xs transition-colors cursor-pointer"
             >
-              <Icon name="user" className="size-3" />
-              <span>เข้าสู่ระบบ</span>
+              <Icon name="logout" className="size-3" />
+              <span>ออกจากระบบ</span>
             </button>
             <button
               onClick={() => setRegistrationModalOpen(true)}
@@ -106,14 +117,12 @@ export const CitizenMobileView: React.FC = () => {
             <p className="text-sm text-blue-100">สวัสดี{currentUser?.name || 'คุณผู้ใช้งาน'}</p>
             <h1 className="mt-1 text-[24px] font-bold tracking-tight">สิทธิ์ 60/40 พร้อมใช้แล้ว</h1>
           </div>
-          <button
-            onClick={() => setAuthModalOpen(true)}
-            className="mb-1 rounded-full bg-white/20 hover:bg-white/30 px-3 py-1.5 text-xs font-semibold backdrop-blur text-white flex items-center gap-1 cursor-pointer transition-colors border border-white/20"
-            title="คลิกเพื่อสลับบัญชีหรือดูข้อมูลการยืนยันตัวตน"
+          <div
+            className="mb-1 rounded-full bg-white/20 px-3 py-1.5 text-xs font-semibold backdrop-blur text-white flex items-center gap-1 border border-white/20"
           >
             <span className="size-2 rounded-full bg-emerald-300 animate-pulse" />
             <span>ยืนยันตัวตนแล้ว</span>
-          </button>
+          </div>
         </div>
       </header>
 
@@ -124,7 +133,7 @@ export const CitizenMobileView: React.FC = () => {
             <div>
               <p className="text-xs font-medium text-slate-500">วงเงินสิทธิรัฐช่วยจ่ายคงเหลือ </p>
               <p className="mt-1 text-[28px] font-bold tracking-tight text-[#123b84]">
-                ฿ {userGrant.remainingAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                ฿ {Number(userGrant?.remainingAmount || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}
               </p>
             </div>
             <div className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-600">
@@ -136,14 +145,14 @@ export const CitizenMobileView: React.FC = () => {
             <div
               className="h-full rounded-full bg-gradient-to-r from-[#1769ed] to-[#5b93f6] transition-all duration-500"
               style={{
-                width: `${Math.min(100, (userGrant.remainingAmount / userGrant.totalGrantAmount) * 100)}%`
+                width: `${Math.min(100, (Number(userGrant?.remainingAmount || 0) / (Number(userGrant?.totalGrantAmount) || 1000)) * 100)}%`
               }}
             />
           </div>
 
           <div className="mt-2.5 flex justify-between text-[11px] text-slate-400">
-            <span>ใช้ไปแล้ว ฿{(userGrant.totalGrantAmount - userGrant.remainingAmount).toLocaleString()}</span>
-            <span>วงเงินรวม ฿{userGrant.totalGrantAmount.toLocaleString()}</span>
+            <span>ใช้ไปแล้ว ฿{(Number(userGrant?.totalGrantAmount || 0) - Number(userGrant?.remainingAmount || 0)).toLocaleString()}</span>
+            <span>วงเงินรวม ฿{Number(userGrant?.totalGrantAmount || 0).toLocaleString()}</span>
           </div>
 
           {/* Wallet Balance Box */}
@@ -155,13 +164,13 @@ export const CitizenMobileView: React.FC = () => {
               <div>
                 <span className="text-[10px] text-slate-400 block">กระเป๋าเงิน</span>
                 <span className="text-sm font-bold text-slate-800">
-                  ฿ {wallet.balance.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                  ฿ {Number(wallet?.balance || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}
                 </span>
               </div>
             </div>
             <button
               onClick={() => topupWallet(500)}
-              className="rounded-xl bg-[#eaf2ff] px-3 py-1.5 text-xs font-bold text-[#1769ed] hover:bg-blue-100 transition-colors flex items-center gap-1"
+              className="rounded-xl bg-[#eaf2ff] px-3 py-1.5 text-xs font-bold text-[#1769ed] hover:bg-blue-100 transition-colors flex items-center gap-1 cursor-pointer"
             >
               <Icon name="plus" className="size-3.5" />
               <span>เติมเงิน</span>
@@ -208,7 +217,7 @@ export const CitizenMobileView: React.FC = () => {
               activeTab === 'missions' ? 'bg-white text-[#123b84] shadow-xs' : 'hover:text-slate-900'
             }`}
           >
-            ภารกิจ AI ({missions.length})
+            ภารกิจ AI ({missions.length + aiTargetShops.length})
           </button>
           <button
             onClick={() => setActiveTab('wallet')}
@@ -277,30 +286,34 @@ export const CitizenMobileView: React.FC = () => {
                   <Icon name="sparkle" className="size-3" />
                   AI TARGET SHOP
                 </span>
-                <span className="text-[11px] font-bold text-amber-900">ภารกิจพิเศษชุมชน</span>
+                <span className="text-[11px] font-bold text-amber-900">
+                  {featuredAiShop ? 'ภารกิจชี้เป้าพิเศษจาก AI' : 'ภารกิจพิเศษชุมชน'}
+                </span>
               </div>
 
               <div className="flex items-center gap-3 bg-white/90 p-3 rounded-2xl border border-amber-200/60 mt-2">
                 <img
-                  src="https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=200&auto=format&fit=crop&q=80"
-                  alt="ร้านกาแฟโบราณลุงเปี๊ยก"
+                  src={featuredAiShop?.imageUrl || "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=200&auto=format&fit=crop&q=80"}
+                  alt={featuredAiShop?.merchantName || "ร้านค้าแนะนำ"}
                   className="size-14 rounded-xl object-cover shrink-0"
                 />
                 <div className="min-w-0 flex-1">
                   <h4 className="font-bold text-xs text-slate-800 line-clamp-1">
-                    ร้านกาแฟโบราณลุงเปี๊ยก (ท่าน้ำนนท์)
+                    {featuredAiShop ? `${featuredAiShop.merchantName} (${featuredAiShop.districtName})` : 'ร้านกาแฟโบราณลุงเปี๊ยก (ท่าน้ำนนท์)'}
                   </h4>
-                  <p className="text-[11px] text-amber-800 font-medium mt-0.5">
-                    ซื้อครบ 150 บาท รับแสตมป์ของดีเมืองนนท์ทันที
+                  <p className="text-[11px] text-amber-800 font-medium mt-0.5 line-clamp-1">
+                    {featuredAiShop ? featuredAiShop.missionTitle : 'ซื้อครบ 150 บาท รับแสตมป์ของดีเมืองนนท์ทันที'}
                   </p>
-                  <p className="text-[10px] text-slate-400 mt-1">ช่วงบ่าย 13:00 - 16:00 น. • จำกัด 10 สิทธิ์แรก</p>
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    {featuredAiShop ? `${featuredAiShop.criticalHours} • AI วิเคราะห์ฟื้นฟูร้านค้า` : 'ช่วงบ่าย 13:00 - 16:00 น. • จำกัด 10 สิทธิ์แรก'}
+                  </p>
                 </div>
               </div>
 
               <div className="flex gap-2 mt-3">
                 <button
                   type="button"
-                  onClick={() => setMapModalShopId(1)}
+                  onClick={() => setMapModalShopId(featuredAiShop?.merchantId || 1)}
                   className="px-3 py-2.5 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1 shrink-0"
                 >
                   <span>📍 ดูพิกัดร้าน</span>
@@ -308,7 +321,7 @@ export const CitizenMobileView: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => {
-                    setSelectedMerchantIdForScan(1);
+                    setSelectedMerchantIdForScan(featuredAiShop?.merchantId || 1);
                     setScannerOpen(true);
                   }}
                   className="flex-1 py-2.5 bg-[#d97706] hover:bg-amber-600 text-white rounded-xl text-xs font-bold shadow-sm transition-colors flex items-center justify-center gap-1.5"
@@ -359,7 +372,96 @@ export const CitizenMobileView: React.FC = () => {
 
       {/* TAB 2: MISSIONS */}
       {activeTab === 'missions' && (
-        <section className="px-4 pt-5 space-y-3">
+        <section className="px-4 pt-5 space-y-4">
+          {/* Section 1: AI Target Missions */}
+          {aiTargetShops.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between bg-gradient-to-r from-amber-500 to-amber-600 text-white p-3.5 rounded-[22px] shadow-sm">
+                <div className="flex items-center gap-2">
+                  <span className="p-1.5 bg-white/20 rounded-xl">
+                    <Icon name="sparkle" className="size-4 text-white" />
+                  </span>
+                  <div>
+                    <h3 className="font-extrabold text-sm">ภารกิจชี้เป้าฟื้นฟูร้านค้าจาก AI</h3>
+                    <p className="text-[11px] text-amber-100">ช่วยอุดหนุนร้านที่ AI ชี้เป้าเพื่อรับแสตมป์ทันที</p>
+                  </div>
+                </div>
+                <span className="text-xs font-bold bg-white text-amber-700 px-2.5 py-1 rounded-full shadow-xs">
+                  {aiTargetShops.length} ร้าน
+                </span>
+              </div>
+
+              <div className="space-y-3">
+                {aiTargetShops.map((shop) => (
+                  <div
+                    key={shop.analysisId}
+                    className="rounded-[22px] bg-white p-4 border border-amber-200/70 shadow-sm space-y-3"
+                  >
+                    <div className="flex items-start gap-3">
+                      <img
+                        src={shop.imageUrl}
+                        alt={shop.merchantName}
+                        className="size-16 rounded-2xl object-cover border border-amber-200 shrink-0"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[10px] font-extrabold text-white bg-amber-500 px-2 py-0.5 rounded-md">
+                            AI TARGET
+                          </span>
+                          <span className="text-[10px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
+                            {shop.category}
+                          </span>
+                        </div>
+                        <h4 className="font-bold text-sm text-slate-800 mt-1">{shop.merchantName}</h4>
+                        <p className="text-xs text-amber-800 font-medium mt-0.5">{shop.missionTitle}</p>
+                        <p className="text-[11px] text-slate-500 mt-0.5">
+                          📍 {shop.districtName} จังหวัด{shop.provinceName}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="bg-amber-50/60 p-3 rounded-xl text-xs space-y-1.5 border border-amber-100">
+                      <div className="flex justify-between text-slate-600">
+                        <span>สถานะจาก AI:</span>
+                        <strong className="text-amber-800 font-bold">ยอดขายชะลอตัว (ต้องการแรงหนุน)</strong>
+                      </div>
+                      <div className="flex justify-between text-slate-600">
+                        <span>เงื่อนไขรับแสตมป์:</span>
+                        <strong className="text-[#1769ed]">ซื้อครบ 150 บาท (สิทธิ์ 60/40)</strong>
+                      </div>
+                      <div className="flex justify-between text-slate-600">
+                        <span>ช่วงเวลาเร่งด่วน:</span>
+                        <strong className="text-emerald-700">{shop.criticalHours}</strong>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setMapModalShopId(shop.merchantId)}
+                        className="px-3 py-2.5 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1 shrink-0"
+                      >
+                        <span>📍 ดูพิกัดร้าน</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedMerchantIdForScan(shop.merchantId);
+                          setScannerOpen(true);
+                        }}
+                        className="flex-1 py-2.5 bg-[#d97706] hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-sm transition-colors flex items-center justify-center gap-1.5"
+                      >
+                        <Icon name="scan" className="size-4" />
+                        <span>สแกนจ่ายที่ร้านนี้</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Section 2: General Missions */}
           <div className="flex items-center justify-between bg-white p-4 rounded-[22px] border border-blue-50 shadow-xs">
             <div>
               <h3 className="font-bold text-sm text-[#123b84]">ภารกิจกระตุ้นเศรษฐกิจชุมชน (General Missions)</h3>
@@ -580,37 +682,17 @@ export const CitizenMobileView: React.FC = () => {
         stamp={selectedStampForTrade}
       />
 
-      {/* POPUP "QR ของฉัน" (Matching User Snippet with .qr pattern) */}
-      {showMyQr && (
-        <div
-          className="fixed inset-0 z-50 grid place-items-center bg-[#07162d]/70 p-5 backdrop-blur-sm animate-fade-in"
-          onClick={() => setShowMyQr(false)}
-        >
-          <div
-            className="w-full max-w-[360px] rounded-[28px] bg-white p-6 text-center shadow-2xl"
-            onClick={e => e.stopPropagation()}
-          >
-            <p className="text-xl font-bold text-slate-800">QR รับสิทธิ์ของฉัน</p>
-            <p className="mt-1 text-xs text-slate-500">แสดง QR นี้ให้ร้านค้าเพื่อชำระเงินสิทธิ์ 60/40</p>
-            <div className="qr mx-auto my-5 grid size-52 place-items-center rounded-2xl border-8 border-white shadow-lg">
-              <div className="grid size-12 place-items-center rounded-xl bg-[#1769ed] text-sm font-extrabold text-white shadow-md">
-                ไทย
-              </div>
-            </div>
-            <p className="font-bold text-slate-800 text-base">{currentUser?.name || 'นายกิตติคุณ ศรีสวัสดิ์'}</p>
-            <p className="mt-1 text-xs text-slate-400 font-mono">
-              รหัสประชาชน {currentUser?.citizenId || '1-1037-02948-11-2'}
-            </p>
-            <p className="mt-1 text-xs text-blue-600 font-medium">QR จะรีเฟรชอัตโนมัติใน 02:45 นาที</p>
-            <button
-              onClick={() => setShowMyQr(false)}
-              className="mt-5 w-full rounded-xl bg-[#1769ed] hover:bg-blue-700 py-3 text-sm font-bold text-white transition-colors shadow-md shadow-blue-500/20"
-            >
-              ปิดหน้าต่าง
-            </button>
-          </div>
-        </div>
-      )}
+      <StoreMapPickerModal
+        isOpen={mapModalShopId !== null}
+        onClose={() => setMapModalShopId(null)}
+        mchId={mapModalShopId ?? undefined}
+      />
+
+      {/* POPUP "QR ของฉัน" (Real Dynamic QR Code & Token) */}
+      <CitizenQrModal
+        isOpen={showMyQr}
+        onClose={() => setShowMyQr(false)}
+      />
     </div>
   );
 };

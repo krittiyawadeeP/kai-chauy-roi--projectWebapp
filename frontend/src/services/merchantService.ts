@@ -24,7 +24,14 @@ export interface ApiMerchant {
   Dist_ID: number;
   districts?: { Dist_Name: string; Prov_ID: number; provinces?: { Prov_Name: string } };
   users?: { Name?: string | null; Phone?: string; Role?: string };
-  wallet?: { Balance: number | string } | null;
+  wallet?: {
+    Wallet_ID?: number;
+    Merchant_ID?: number | null;
+    User_ID?: number | null;
+    Balance: number | string;
+    Status?: string;
+    Updated_At?: string;
+  } | null;
 }
 
 export function mapApiMerchant(data: ApiMerchant): Merchant {
@@ -46,11 +53,19 @@ export function mapApiMerchant(data: ApiMerchant): Merchant {
     phone: data.users?.Phone ?? '',
     status: 'approved',
     registeredAt: '',
-    imageUrl: '',
+    imageUrl: (data as any).Image_URL || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=600&auto=format&fit=crop&q=80',
     promptpayId: data.users?.Phone ?? '',
     dailyAvgSales: 0,
     currentDailySales: 0,
-    walletBalance: data.wallet ? Number(data.wallet.Balance) : undefined,
+    walletBalance: data.wallet ? Number(data.wallet.Balance) : 0,
+    wallet: data.wallet ? {
+      walletId: Number(data.wallet.Wallet_ID || 0),
+      merchantId: data.wallet.Merchant_ID ?? data.Mch_ID,
+      userId: data.wallet.User_ID ?? data.User_ID,
+      balance: Number(data.wallet.Balance || 0),
+      status: data.wallet.Status || 'ACTIVE',
+      updatedAt: data.wallet.Updated_At || '',
+    } : undefined,
     isAiTarget: false,
     description: provinceName ? `อำเภอ${data.districts?.Dist_Name} จังหวัด${provinceName}` : undefined,
   };
@@ -66,7 +81,7 @@ export interface ApiSale {
   Tx_Timestamp: string;
   District_ID: number;
   Status: string;
-  users?: { Phone?: string; Citizen_ID?: string };
+  users?: { Name?: string | null; Phone?: string; Citizen_ID?: string };
 }
 
 export interface MerchantRegistrationPayload {
@@ -84,6 +99,27 @@ export interface MerchantRegistrationPayload {
   Lng?: number;
 }
 
+
+export interface ApiMerchantWallet {
+  Wallet_ID: number;
+  User_ID?: number | null;
+  Merchant_ID: number;
+  Balance: number | string;
+  Status: string;
+  Updated_At: string;
+}
+
+export interface MerchantWalletDetailsResponse {
+  wallet: ApiMerchantWallet;
+  summary: {
+    totalRevenue: number;
+    totalBills: number;
+    userPaidTotal: number;
+    govSubsidizedTotal: number;
+  };
+  recentTransactions: ApiSale[];
+}
+
 export interface MerchantRegistrationResponse {
   token: string;
   user: { User_ID: number; Citizen_ID: string; Phone: string; Role: string };
@@ -98,6 +134,15 @@ export const merchantService = {
   },
 
   getMyProfile: () => api.get<ApiMerchant>('/merchants/me'),
+
+  getWallet: () => api.get<MerchantWalletDetailsResponse>('/merchants/me/wallet'),
+
+  withdrawWallet: (amount: number, promptpayOrAccount?: string) =>
+    api.post<{ message: string; amount: number; newBalance: number; wallet: ApiMerchantWallet }>('/merchants/me/wallet/withdraw', {
+      amount,
+      promptpayOrAccount,
+    }),
+
 
   getMerchants: (params?: { prov_id?: number; dist_id?: number; low_sales_only?: boolean }) => {
     const query = new URLSearchParams();

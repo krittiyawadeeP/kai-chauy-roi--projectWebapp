@@ -22,7 +22,9 @@ export type IconName =
   | 'search'
   | 'share'
   | 'history'
-  | 'repeat';
+  | 'repeat'
+  | 'logout'
+  | 'grid';
 
 interface IconProps {
   name: IconName;
@@ -79,40 +81,38 @@ export const Icon: React.FC<IconProps> = ({ name, className = 'size-5' }) => {
     ),
     wallet: (
       <>
-        <path d="M3 6h16v14H3zM3 6l3-3h12v3M15 12h4" />
+        <path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1" />
+        <path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4" />
       </>
     ),
     chevron: <path d="m9 18 6-6-6-6" />,
     award: (
       <>
         <circle cx="12" cy="8" r="6" />
-        <path d="m15.5 13.5 2.5 7.5-6-3.5-6 3.5 2.5-7.5" />
+        <path d="m15.4 12.6 3.6 7.4-7-3-7 3 3.6-7.4" />
       </>
     ),
     gift: (
       <>
         <rect x="3" y="8" width="18" height="4" rx="1" />
-        <path d="M12 8v13" />
-        <path d="M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7" />
-        <path d="M7.5 8a2.5 2.5 0 0 1 0-5A4.8 4.8 0 0 1 12 8a4.8 4.8 0 0 1 4.5-5 2.5 2.5 0 0 1 0 5" />
+        <path d="M12 8v13M19 12v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-7" />
+        <path d="M7.5 8a2.5 2.5 0 0 1 0-5A4.5 4.5 0 0 1 12 7.5a4.5 4.5 0 0 1 4.5-4.5 2.5 2.5 0 0 1 0 5" />
       </>
     ),
     flame: (
-      <>
-        <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 3.5z" />
-      </>
+      <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
     ),
     sparkle: (
       <>
-        <path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z" />
+        <path d="M12 3v18M3 12h18M6.5 6.5l11 11M6.5 17.5l11-11" />
       </>
     ),
     refresh: (
       <>
-        <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-        <path d="M3 3v5h5" />
-        <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16" />
-        <path d="M16 21h5v-5" />
+        <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+        <path d="M21 3v5h-5" />
+        <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+        <path d="M3 21v-5h5" />
       </>
     ),
     plus: (
@@ -120,16 +120,8 @@ export const Icon: React.FC<IconProps> = ({ name, className = 'size-5' }) => {
         <path d="M12 5v14M5 12h14" />
       </>
     ),
-    check: (
-      <>
-        <path d="M20 6 9 17l-5-5" />
-      </>
-    ),
-    x: (
-      <>
-        <path d="M18 6 6 18M6 6l12 12" />
-      </>
-    ),
+    check: <path d="M20 6 9 17l-5-5" />,
+    x: <path d="M18 6 6 18M6 6l12 12" />,
     search: (
       <>
         <circle cx="11" cy="11" r="8" />
@@ -149,7 +141,7 @@ export const Icon: React.FC<IconProps> = ({ name, className = 'size-5' }) => {
       <>
         <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
         <path d="M3 3v5h5" />
-        <path d="M12 7v5l3 3" />
+        <path d="M12 7v5l4 2" />
       </>
     ),
     repeat: (
@@ -158,6 +150,21 @@ export const Icon: React.FC<IconProps> = ({ name, className = 'size-5' }) => {
         <path d="M3 11v-1a4 4 0 0 1 4-4h14" />
         <path d="m7 22-4-4 4-4" />
         <path d="M21 13v1a4 4 0 0 1-4 4H3" />
+      </>
+    ),
+    logout: (
+      <>
+        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+        <polyline points="16 17 21 12 16 7" />
+        <line x1="21" y1="12" x2="9" y2="12" />
+      </>
+    ),
+    grid: (
+      <>
+        <rect x="3" y="3" width="7" height="7" rx="1.5" />
+        <rect x="14" y="3" width="7" height="7" rx="1.5" />
+        <rect x="14" y="14" width="7" height="7" rx="1.5" />
+        <rect x="3" y="14" width="7" height="7" rx="1.5" />
       </>
     )
   };
