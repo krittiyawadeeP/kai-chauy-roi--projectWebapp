@@ -143,10 +143,11 @@ export const MerchantProfileSettingsModal: React.FC<MerchantProfileSettingsModal
             </div>
           )}
           {saveError && <div role="alert" className="p-2.5 bg-rose-50 text-rose-800 rounded-xl border border-rose-200">{saveError}</div>}
-          {authStorage.getToken() && <p className="text-[10px] text-slate-500">จังหวัดและอำเภอโหลดจากฐานข้อมูล และบันทึกตำแหน่งร้านด้วย Dist_ID</p>}
+          {/* {authStorage.getToken()} */}
+          {/* {authStorage.getToken() && <p className="text-[10px] text-slate-500">จังหวัดและอำเภอโหลดจากฐานข้อมูล และบันทึกตำแหน่งร้านด้วย Dist_ID</p>} */}
 
           {/* Shop Image Preview */}
-          <div className="relative rounded-2xl overflow-hidden border border-slate-200 h-32 bg-slate-100 group">
+          {/* <div className="relative rounded-2xl overflow-hidden border border-slate-200 h-32 bg-slate-100 group">
             {imageUrl ? (
               <img src={imageUrl} alt={shopName} className="w-full h-full object-cover" />
             ) : (
@@ -171,7 +172,7 @@ export const MerchantProfileSettingsModal: React.FC<MerchantProfileSettingsModal
               placeholder="https://..."
               className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#115e59]"
             />
-          </div>
+          </div> */}
 
           <div>
             <label className="block text-[11px] font-bold text-slate-600 mb-1">ชื่อร้านค้า *</label>
@@ -214,7 +215,7 @@ export const MerchantProfileSettingsModal: React.FC<MerchantProfileSettingsModal
           </div>
 
           {/* GEOLOCATION PIN SECTION */}
-          <div className="p-3 bg-[#f0fdfa] rounded-2xl border border-teal-200 space-y-2">
+          {/* <div className="p-3 bg-[#f0fdfa] rounded-2xl border border-teal-200 space-y-2">
             <div className="flex items-center justify-between">
               <div>
                 <span className="font-bold text-[#042f2e] text-[11px] block">พิกัดแผนที่ร้านค้า (GPS)</span>
@@ -235,7 +236,7 @@ export const MerchantProfileSettingsModal: React.FC<MerchantProfileSettingsModal
             <p className="text-[10px] text-slate-500">
               พิกัดนี้จะใช้แสดงในระบบนำทางสำหรับประชาชนที่ต้องการเดินทางมาทำภารกิจล่าแสตมป์
             </p>
-          </div>
+          </div> */}
 
           {/* <div className="grid grid-cols-2 gap-2">
             <div>

@@ -686,9 +686,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, message: 'ไม่พบข้อมูลร้านค้าในระบบ' };
     }
 
+    const DAILY_SUBSIDY_LIMIT = 200;
+    const todayStr = new Date().toISOString().split('T')[0];
+    const todayGovSpent = transactions
+      .filter(t => t.userId === currentUser.userId && t.status === 'completed' && String(t.txTimestamp).startsWith(todayStr))
+      .reduce((sum, t) => sum + (Number(t.govSubsidizedAmount) || 0), 0);
+    const remainingDaily = Math.max(0, DAILY_SUBSIDY_LIMIT - todayGovSpent);
+
     const govRatio = userGrant?.govPayRatio ?? 0.60;
     const requestedGovShare = Math.round(totalAmount * govRatio * 100) / 100;
-    const govShare = Math.min(requestedGovShare, userGrant.remainingAmount);
+    const govShare = Math.min(requestedGovShare, remainingDaily, userGrant.remainingAmount);
     const userShare = (Math.round(totalAmount * 100) - Math.round(govShare * 100)) / 100;
 
     if (wallet.balance < userShare) {
