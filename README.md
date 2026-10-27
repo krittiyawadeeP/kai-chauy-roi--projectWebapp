@@ -65,12 +65,12 @@ kai-chauy-roi--projectWebapp/
 npm run install:all
 npm install
 
-# รัน Backend (Port 3001) และ Frontend (Port 3000) พร้อมกัน
+# รัน Backend (Port 4001) และ Frontend (Port 4000) พร้อมกัน
 npm run dev
 ```
-* **Frontend Web App**: `http://localhost:3000`
-* **Backend API**: `http://localhost:3001`
-* **Swagger API Docs**: `http://localhost:3001/api-docs`
+* **Frontend Web App**: `http://localhost:4000`
+* **Backend API**: `http://localhost:4001`
+* **Swagger API Docs**: `http://localhost:4001/api-docs`
 
 ---
 

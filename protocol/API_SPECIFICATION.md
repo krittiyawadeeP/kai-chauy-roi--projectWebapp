@@ -7,8 +7,8 @@
 
 1. **Protocol & Format**: สื่อสารผ่านโปรโตคอล **HTTP/HTTPS** โดยส่งและรับข้อมูลในรูปแบบ **JSON (`application/json`)**
 2. **Base URL**:
-   * โหมดพัฒนาในเครื่อง (Local Development): `http://localhost:3001`
-   * เอกสาร Interactive Swagger: `http://localhost:3001/api-docs`
+   * โหมดพัฒนาในเครื่อง (Local Development): `http://localhost:4001`
+   * เอกสาร Interactive Swagger: `http://localhost:4001/api-docs`
 3. **การตั้งชื่อ Path**:
    * ใช้ตัวพิมพ์เล็กและเครื่องหมายขีดกลาง (kebab-case) หรือมาตรฐาน RESTful
    * เส้นทางหลักขึ้นต้นด้วย `/api` เสมอ

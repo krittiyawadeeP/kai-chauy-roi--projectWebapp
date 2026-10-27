@@ -68,8 +68,8 @@ cd backend
 npm install
 cp .env.example .env   # ตรวจสอบค่า DATABASE_URL ให้ตรงกับเครื่องของคุณ
 npx prisma generate    # สร้าง Prisma Client
-npm run dev            # เริ่มเซิร์ฟเวอร์ที่ http://localhost:3001
-# ดูเอกสาร API Interactive: http://localhost:3001/api-docs
+npm run dev            # เริ่มเซิร์ฟเวอร์ที่ http://localhost:4001
+# ดูเอกสาร API Interactive: http://localhost:4001/api-docs
 ```
 
 ### 3. ตั้งค่า Frontend

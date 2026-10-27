@@ -22,8 +22,12 @@ app.get("/", (_req, res) => {
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.use("/api", apiRouter);
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+const PORT = process.env.PORT || 4001;
+app.listen(PORT, (error?: Error) => {
+  if (error) {
+    console.error(`Backend failed to listen on port ${PORT}:`, error);
+    process.exit(1);
+  }
   console.log(`Backend running at http://localhost:${PORT}`);
   startDailyMissionScheduler();
 });
