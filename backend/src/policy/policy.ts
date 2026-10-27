@@ -1,6 +1,6 @@
 import { prisma } from '../lib/prisma';
 
-export const DEFAULT_POLICY = { Policy_ID: null, Gov_Pay_Ratio: '0.4000', User_Pay_Ratio: '0.6000', Grant_Amount: '1000.00', Note: 'นโยบายเริ่มต้นของระบบ' };
+export const DEFAULT_POLICY = { Policy_ID: null, Gov_Pay_Ratio: '0.6000', User_Pay_Ratio: '0.4000', Grant_Amount: '1000.00', Note: 'นโยบายเริ่มต้นของระบบ' };
 export const currentPolicyOrder = [{ Effective_From: 'desc' as const }, { Policy_ID: 'desc' as const }];
 export async function getCurrentPolicy() {
   return await prisma.grant_policy.findFirst({ where: { Effective_From: { lte: new Date() } }, orderBy: currentPolicyOrder }) ?? DEFAULT_POLICY;
