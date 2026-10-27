@@ -1,12 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import { Icon } from '../../components/common/Icon';
-import { INITIAL_PROVINCES, INITIAL_DISTRICTS } from '../../mock/initialData';
 import { Merchant } from '../../types';
 import { authService } from '../../services/authService';
 import { ApiError } from '../../services/api';
 import { merchantService } from '../../services/merchantService';
 import { StoreMapPickerModal } from '../../components/merchant/StoreMapPickerModal';
+import { ApiProvince, ApiDistrict, geoService } from '../../services/geoService';
 
 interface AuthPageProps {
   onSuccess: (role: 'citizen' | 'merchant') => void;
@@ -24,8 +23,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     loginMerchant,
     setRole,
     setIsAuthenticated,
-    users,
-    merchants,
     refreshMerchantData,
     refreshCitizenData
   } = useApp();
@@ -34,7 +31,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
 
   // Citizen Login fields
-  const [citizenId, setCitizenId] = useState('');
+  const [citizenId, setCitizenId] = useState('1100703611736');
   const [citizenPassword, setCitizenPassword] = useState('123456');
 
   // Citizen Register fields
@@ -42,14 +39,17 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   const [regName, setRegName] = useState('');
   const [regPhone, setRegPhone] = useState('');
   const [regPassword, setRegPassword] = useState('123456');
-  const [regProvId, setRegProvId] = useState<number>(1);
-  const [regDistId, setRegDistId] = useState<number>(101);
+  const [regProvId, setRegProvId] = useState<number>(10);
+  const [regDistId, setRegDistId] = useState<number>(0);
+
+  // Geographic state from DB
+  const [provinces, setProvinces] = useState<ApiProvince[]>([]);
+  const [districts, setDistricts] = useState<ApiDistrict[]>([]);
+  const [loadingGeo, setLoadingGeo] = useState(false);
 
   // Merchant Login fields
-  // const [merchantPhone, setMerchantPhone] = useState('089-223-4455');
-  const [merchantPhone, setMerchantPhone] = useState('');
-  const [merchantPassword, setMerchantPassword] = useState('');
-  const [selectedMchId, setSelectedMchId] = useState<number>(merchants[0]?.mchId || 1);
+  const [merchantPhone, setMerchantPhone] = useState('0618700517');
+  const [merchantPassword, setMerchantPassword] = useState('123456');
 
   // Merchant Register fields
   const [mchShopName, setMchShopName] = useState('');
@@ -68,34 +68,36 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   const [errorNotice, setErrorNotice] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
 
-  const filteredDistricts = INITIAL_DISTRICTS.filter(d => d.provId === regProvId);
+  // Fetch real provinces from Cloud MySQL
+  useEffect(() => {
+    setLoadingGeo(true);
+    geoService.getProvinces()
+      .then(items => {
+        setProvinces(items);
+        if (items.length > 0) {
+          setRegProvId(prev => prev || items[0].Prov_ID);
+        }
+      })
+      .catch(err => {
+        console.error('Failed to load provinces:', err);
+      })
+      .finally(() => setLoadingGeo(false));
+  }, []);
 
-  // Quick preset demo login
-  const handleDemoCitizenLogin = (userId: number) => {
-    const targetUser = users.find(u => u.userId === userId) || users[0];
-    loginCitizen(targetUser.citizenId, targetUser.phone);
-    setNotice(`เข้าสู่ระบบสำเร็จ: ${targetUser.name}`);
-    setTimeout(() => {
-      setNotice('');
-      onSuccess('citizen');
-    }, 500);
-  };
-
-  const handleDemoMerchantMock = (mchId: number) => {
-    const targetMch = merchants.find(m => m.mchId === mchId) || merchants[0];
-    const res = loginMerchant(targetMch.phone, '123456', targetMch.mchId);
-    if (res.success) {
-      setNotice(`เข้าสู่ระบบสำเร็จ: ร้าน ${targetMch.shopName}`);
-      setTimeout(() => {
-        setNotice('');
-        onSuccess('merchant');
-      }, 500);
-    } else {
-      setMerchantPhone(targetMch.phone);
-      setSelectedMchId(targetMch.mchId);
-      setErrorNotice('กรุณากรอกรหัสผ่านเพื่อเข้าสู่ระบบร้านค้านี้');
-    }
-  };
+  // Fetch real districts when selected province changes
+  useEffect(() => {
+    if (!regProvId) return;
+    geoService.getDistricts(regProvId)
+      .then(items => {
+        setDistricts(items);
+        if (items.length > 0) {
+          setRegDistId(items[0].Dist_ID);
+        }
+      })
+      .catch(err => {
+        console.error('Failed to load districts:', err);
+      });
+  }, [regProvId]);
 
   // Submit Citizen (Login or Register)
   const handleCitizenSubmit = async (e: React.FormEvent) => {
@@ -103,43 +105,72 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     setErrorNotice('');
     setSubmitting(true);
     try {
-    if (authMode === 'login') {
-      if (!citizenId.trim()) {
-        setErrorNotice('กรุณากรอกเลขประจำตัวประชาชน 13 หลัก');
-        return;
+      if (authMode === 'login') {
+        const cleanIdentifier = citizenId.replace(/\D/g, '');
+        if (!cleanIdentifier) {
+          setErrorNotice('กรุณากรอกเลขประจำตัวประชาชน 13 หลัก หรือเบอร์โทรศัพท์');
+          return;
+        }
+        const response = await authService.login({ identifier: cleanIdentifier, Password: citizenPassword });
+        if (response.user.Role !== 'USER') {
+          throw new Error(`บัญชีนี้ไม่ใช่บัญชีประชาชน (Role ในระบบ: ${response.user.Role})`);
+        }
+        const res = loginCitizen(response.user.Citizen_ID, response.user.Phone, response.user);
+        await refreshCitizenData();
+        setNotice(res.message);
+        setTimeout(() => {
+          setNotice('');
+          onSuccess('citizen');
+        }, 600);
+      } else {
+        const cleanRegId = regCitizenId.replace(/\D/g, '');
+        const cleanRegPhone = regPhone.replace(/\D/g, '');
+
+        if (!cleanRegId || !regName.trim() || !cleanRegPhone) {
+          setErrorNotice('กรุณากรอกข้อมูลประชาชนให้ครบถ้วน');
+          return;
+        }
+        if (!/^\d{13}$/.test(cleanRegId)) {
+          setErrorNotice('เลขประจำตัวประชาชนต้องมี 13 หลัก');
+          return;
+        }
+        if (cleanRegPhone.length < 9) {
+          setErrorNotice('เบอร์โทรศัพท์ต้องมีอย่างน้อย 9-10 หลัก');
+          return;
+        }
+        if (regPassword.length < 6) {
+          setErrorNotice('รหัสผ่าน / PIN ต้องมีอย่างน้อย 6 หลัก');
+          return;
+        }
+        if (!regProvId) {
+          setErrorNotice('กรุณาเลือกจังหวัดภูมิลำเนา');
+          return;
+        }
+
+        const response = await authService.register({
+          Citizen_ID: cleanRegId,
+          Phone: cleanRegPhone,
+          Password: regPassword,
+          Name: regName.trim(),
+          Province_ID: regProvId,
+          Role: 'USER',
+        });
+        loginCitizen(response.user.Citizen_ID, response.user.Phone, response.user);
+        await refreshCitizenData();
+        setNotice(`ลงทะเบียนประชาชนสำเร็จ ยินดีต้อนรับคุณ ${regName}`);
+        setTimeout(() => {
+          setNotice('');
+          onSuccess('citizen');
+        }, 700);
       }
-      const response = await authService.login({ Citizen_ID: citizenId, Password: citizenPassword });
-      if (response.user.Role !== 'USER') throw new Error('บัญชีนี้ไม่ใช่บัญชีประชาชน');
-      const res = loginCitizen(response.user.Citizen_ID, response.user.Phone, response.user);
-      await refreshCitizenData();
-      setNotice(res.message);
-      setTimeout(() => {
-        setNotice('');
-        onSuccess('citizen');
-      }, 600);
-    } else {
-      if (!regCitizenId.trim() || !regName.trim() || !regPhone.trim()) {
-        setErrorNotice('กรุณากรอกข้อมูลประชาชนให้ครบถ้วน');
-        return;
-      }
-      const response = await authService.register({
-        Citizen_ID: regCitizenId,
-        Phone: regPhone,
-        Password: regPassword,
-        Name: regName,
-        Province_ID: regProvId,
-        Role: 'USER',
-      });
-      loginCitizen(response.user.Citizen_ID, response.user.Phone, response.user);
-      await refreshCitizenData();
-      setNotice(`ลงทะเบียนประชาชนสำเร็จ ยินดีต้อนรับ ${regName}`);
-      setTimeout(() => {
-        setNotice('');
-        onSuccess('citizen');
-      }, 700);
-    }
     } catch (error) {
-      setErrorNotice(error instanceof Error ? error.message : 'เข้าสู่ระบบประชาชนไม่สำเร็จ');
+      setErrorNotice(
+        error instanceof ApiError && error.status === 401
+          ? 'ข้อมูลเข้าสู่ระบบไม่ถูกต้อง (เลขบัตร/เบอร์โทร หรือรหัสผ่านไม่ตรง)'
+          : error instanceof Error
+          ? error.message
+          : 'เข้าสู่ระบบประชาชนไม่สำเร็จ'
+      );
     } finally {
       setSubmitting(false);
     }
@@ -153,10 +184,21 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
     if (authMode === 'login') {
       try {
-        const response = await authService.login({ Phone: merchantPhone, Password: merchantPassword });
-        if (response.user.Role !== 'MERCHANT') throw new Error('บัญชีนี้ไม่ได้กำหนดสิทธิ์เป็น MERCHANT');
-        const res = loginMerchant(merchantPhone, merchantPassword, selectedMchId);
+        const cleanPhone = merchantPhone.replace(/\D/g, '');
+        if (!cleanPhone) {
+          setErrorNotice('กรุณากรอกเบอร์โทรศัพท์หรือเลขประจำตัวร้านค้า');
+          return;
+        }
+
+        const response = await authService.login({ identifier: cleanPhone, Password: merchantPassword });
+        if (response.user.Role !== 'MERCHANT') {
+          throw new Error(`บัญชีนี้ไม่ใช่บัญชีร้านค้า (Role ในระบบ: ${response.user.Role})`);
+        }
+
+        const targetMchId = response.merchant?.Mch_ID;
+        const res = loginMerchant(cleanPhone, merchantPassword, targetMchId);
         if (!res.success) throw new Error(res.message);
+
         await refreshMerchantData();
         setNotice(res.message);
         setTimeout(() => {
@@ -164,22 +206,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           onSuccess('merchant');
         }, 600);
       } catch (error) {
-        // Fallback for mock store accounts
-        const targetMch = merchants.find(m => m.phone.replace(/\D/g, '') === merchantPhone.replace(/\D/g, '')) || merchants[0];
-        if (targetMch && (!merchantPassword || merchantPassword === '123456')) {
-          const res = loginMerchant(merchantPhone, merchantPassword, targetMch.mchId);
-          if (res.success) {
-            setNotice(`เข้าสู่ระบบร้านค้า ${targetMch.shopName} เรียบร้อยแล้ว`);
-            setTimeout(() => {
-              setNotice('');
-              onSuccess('merchant');
-            }, 600);
-            return;
-          }
-        }
         setErrorNotice(
           error instanceof ApiError && error.status === 401
-            ? 'เบอร์โทรศัพท์หรือรหัสผ่านไม่ถูกต้อง'
+            ? 'เบอร์โทรศัพท์หรือรหัสผ่านร้านค้าไม่ถูกต้อง'
             : error instanceof Error
             ? error.message
             : 'เข้าสู่ระบบร้านค้าไม่สำเร็จ'
@@ -189,12 +218,15 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       }
     } else {
       // Merchant Registration
-      if (!mchShopName || !mchOwnerName || !mchPhone || !mchProvId || !mchDistId || !mchPinLocation) {
+      const cleanMchCitizenId = mchCitizenId.replace(/\D/g, '');
+      const cleanMchPhone = mchPhone.replace(/\D/g, '');
+
+      if (!mchShopName.trim() || !mchOwnerName.trim() || !cleanMchPhone || !mchProvId || !mchDistId || !mchPinLocation) {
         setErrorNotice('กรุณากรอกข้อมูลร้านค้าและปักหมุดแผนที่ให้ครบถ้วน');
         setSubmitting(false);
         return;
       }
-      if (!/^\d{13}$/.test(mchCitizenId.replace(/\D/g, ''))) {
+      if (!/^\d{13}$/.test(cleanMchCitizenId)) {
         setErrorNotice('กรุณากรอกเลขประจำตัวประชาชน 13 หลักของผู้ประกอบการ');
         setSubmitting(false);
         return;
@@ -212,13 +244,13 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
       try {
         await merchantService.registerAccount({
-          Citizen_ID: mchCitizenId.replace(/\D/g, ''),
-          Phone: mchPhone,
+          Citizen_ID: cleanMchCitizenId,
+          Phone: cleanMchPhone,
           Password: mchRegisterPassword,
           Province_ID: mchPinLocation.provinceId,
-          Shop_Name: mchShopName,
-          Owner_Name: mchOwnerName,
-          User_Name: mchOwnerName,
+          Shop_Name: mchShopName.trim(),
+          Owner_Name: mchOwnerName.trim(),
+          User_Name: mchOwnerName.trim(),
           Category: mchCategory,
           Dist_ID: mchPinLocation.districtId,
           Lat: mchPinLocation.lat,
@@ -245,7 +277,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
   return (
     <div className="w-full min-h-screen bg-slate-50 flex flex-col justify-start pb-10">
-      {/* 1. Header (Clean non-overlapping banner) */}
+      {/* 1. Header Banner */}
       <div
         className={`px-6 pt-7 pb-6 text-white relative transition-colors duration-300 shadow-md ${
           isCitizen
@@ -369,32 +401,47 @@ export const AuthPage: React.FC<AuthPageProps> = ({
               {isLogin ? (
                 /* Citizen Login */
                 <form onSubmit={handleCitizenSubmit} className="space-y-3.5">
-                  {/* Demo 1-Click Login Card */}
-                  {/* <div className="p-3 rounded-2xl bg-blue-50/70 border border-blue-200/80 flex items-center justify-between">
-                    <div>
-                      <span className="text-[10px] text-blue-700 font-bold block">
-                        ⚡ บัญชีทดสอบประชาชน (1-Click):
-                      </span>
-                      <strong className="text-xs text-slate-800 block">นายกิตติคุณ ศรีสวัสดิ์</strong>
-                      <span className="text-[10px] text-slate-500 font-mono">1-1037-02948-11-2</span>
+                  {/* Quick Seeded DB Accounts Helper */}
+                  <div className="p-3 rounded-2xl bg-blue-50/70 border border-blue-200/80 space-y-2">
+                    <span className="text-[10px] text-blue-700 font-bold block">
+                      ⚡ บัญชีประชาชนในฐานข้อมูล Cloud MySQL (กดเพื่อกรอกอัตโนมัติ):
+                    </span>
+                    <div className="grid grid-cols-2 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCitizenId('1100703611736');
+                          setCitizenPassword('123456');
+                          setErrorNotice('');
+                        }}
+                        className="p-2 rounded-xl bg-white border border-blue-200 hover:border-blue-400 text-left transition-all cursor-pointer text-xs"
+                      >
+                        <strong className="block text-[#1769ed] truncate text-[11px]">ผู้ใช้ทดสอบ 1</strong>
+                        <span className="text-[9px] text-slate-500 font-mono block">1100703611736 (123456)</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCitizenId('2222222222222');
+                          setCitizenPassword('password456');
+                          setErrorNotice('');
+                        }}
+                        className="p-2 rounded-xl bg-white border border-blue-200 hover:border-blue-400 text-left transition-all cursor-pointer text-xs"
+                      >
+                        <strong className="block text-[#1769ed] truncate text-[11px]">ผู้ใช้ทดสอบ 2</strong>
+                        <span className="text-[9px] text-slate-500 font-mono block">2222222222222 (password456)</span>
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => handleDemoCitizenLogin(1)}
-                      className="px-3 py-1.5 bg-[#1769ed] hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-xs transition-colors cursor-pointer"
-                    >
-                      เข้าสู่ระบบทันที
-                    </button>
-                  </div> */}
+                  </div>
 
                   <div className="pt-1">
                     <label className="block text-xs font-bold text-slate-700 mb-1">
-                      เลขประจำตัวประชาชน 13 หลัก
+                      เลขประจำตัวประชาชน 13 หลัก หรือ เบอร์โทรศัพท์
                     </label>
                     <input
                       type="text"
                       required
-                      placeholder="1-1037-02948-11-2"
+                      placeholder="1100703611736 หรือ 0618700516"
                       value={citizenId}
                       onChange={e => setCitizenId(e.target.value)}
                       className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[#1769ed]"
@@ -417,9 +464,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
                   <button
                     type="submit"
-                    className="w-full py-3 bg-[#1769ed] hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md transition-colors cursor-pointer mt-1"
+                    disabled={submitting}
+                    className="w-full py-3 bg-[#1769ed] hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md transition-colors cursor-pointer disabled:opacity-50 mt-1"
                   >
-                    เข้าสู่ระบบประชาชน ➔
+                    {submitting ? 'กำลังเข้าสู่ระบบ…' : 'เข้าสู่ระบบประชาชน ➔'}
                   </button>
                 </form>
               ) : (
@@ -432,7 +480,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     <input
                       type="text"
                       required
-                      placeholder="1-1037-02948-11-2"
+                      placeholder="เช่น 1100703611799"
                       value={regCitizenId}
                       onChange={e => setRegCitizenId(e.target.value)}
                       className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[#1769ed]"
@@ -446,7 +494,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     <input
                       type="text"
                       required
-                      placeholder="นายกิตติคุณ ศรีสวัสดิ์"
+                      placeholder="เช่น สมชาย ใจดี"
                       value={regName}
                       onChange={e => setRegName(e.target.value)}
                       className="w-full px-3.5 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#1769ed]"
@@ -461,7 +509,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       <input
                         type="tel"
                         required
-                        placeholder="081-234-5678"
+                        placeholder="0812345678"
                         value={regPhone}
                         onChange={e => setRegPhone(e.target.value)}
                         className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#1769ed]"
@@ -474,7 +522,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       <input
                         type="password"
                         required
-                        maxLength={6}
+                        minLength={6}
                         placeholder="123456"
                         value={regPassword}
                         onChange={e => setRegPassword(e.target.value)}
@@ -483,33 +531,39 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     </div>
                   </div>
 
+                  {/* Province & District from real DB */}
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">จังหวัดภูมิลำเนา</label>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        จังหวัดภูมิลำเนา *
+                      </label>
                       <select
                         value={regProvId}
-                        onChange={e => {
-                          const newProv = Number(e.target.value);
-                          setRegProvId(newProv);
-                          const firstDist = INITIAL_DISTRICTS.find(d => d.provId === newProv);
-                          if (firstDist) setRegDistId(firstDist.distId);
-                        }}
-                        className="w-full px-2.5 py-2 border border-slate-200 rounded-xl bg-white text-xs focus:outline-none focus:ring-2 focus:ring-[#1769ed]"
+                        disabled={loadingGeo || provinces.length === 0}
+                        onChange={e => setRegProvId(Number(e.target.value))}
+                        className="w-full px-2.5 py-2 border border-slate-200 rounded-xl bg-white text-xs focus:outline-none focus:ring-2 focus:ring-[#1769ed] disabled:bg-slate-100"
                       >
-                        {INITIAL_PROVINCES.map(p => (
-                          <option key={p.provId} value={p.provId}>{p.provName}</option>
+                        {provinces.map(p => (
+                          <option key={p.Prov_ID} value={p.Prov_ID}>
+                            {p.Prov_Name}
+                          </option>
                         ))}
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs font-bold text-slate-700 mb-1">อำเภอ/เขต</label>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        อำเภอ/เขต
+                      </label>
                       <select
                         value={regDistId}
+                        disabled={districts.length === 0}
                         onChange={e => setRegDistId(Number(e.target.value))}
-                        className="w-full px-2.5 py-2 border border-slate-200 rounded-xl bg-white text-xs focus:outline-none focus:ring-2 focus:ring-[#1769ed]"
+                        className="w-full px-2.5 py-2 border border-slate-200 rounded-xl bg-white text-xs focus:outline-none focus:ring-2 focus:ring-[#1769ed] disabled:bg-slate-100"
                       >
-                        {filteredDistricts.map(d => (
-                          <option key={d.distId} value={d.distId}>{d.distName}</option>
+                        {districts.map(d => (
+                          <option key={d.Dist_ID} value={d.Dist_ID}>
+                            {d.Dist_Name}
+                          </option>
                         ))}
                       </select>
                     </div>
@@ -517,9 +571,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
                   <button
                     type="submit"
-                    className="w-full py-3 bg-[#1769ed] hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md transition-colors cursor-pointer mt-2"
+                    disabled={submitting}
+                    className="w-full py-3 bg-[#1769ed] hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md transition-colors cursor-pointer disabled:opacity-50 mt-2"
                   >
-                    ยืนยันลงทะเบียนรับสิทธิ์ 60/40 ➔
+                    {submitting ? 'กำลังบันทึกข้อมูล…' : 'ยืนยันลงทะเบียนรับสิทธิ์ 60/40 ➔'}
                   </button>
                 </form>
               )}
@@ -532,34 +587,35 @@ export const AuthPage: React.FC<AuthPageProps> = ({
               {isLogin ? (
                 /* Merchant Login */
                 <form onSubmit={handleMerchantSubmit} className="space-y-3.5">
-                  {/* Demo Stores Picker */}
-                  {/* <div className="p-3 rounded-2xl bg-teal-50/70 border border-teal-200/80 space-y-2">
+                  {/* Quick Seeded DB Merchant Helper */}
+                  <div className="p-3 rounded-2xl bg-teal-50/70 border border-teal-200/80 space-y-2">
                     <span className="text-[10px] text-teal-800 font-bold block">
-                      ⚡ เลือกร้านค้าตัวอย่าง (1-Click Login):
+                      ⚡ บัญชีร้านค้าในฐานข้อมูล Cloud MySQL (กดเพื่อกรอกอัตโนมัติ):
                     </span>
-                    <div className="grid grid-cols-2 gap-1.5">
-                      {merchants.slice(0, 2).map(m => (
-                        <button
-                          key={m.mchId}
-                          type="button"
-                          onClick={() => handleDemoMerchantMock(m.mchId)}
-                          className="p-2 rounded-xl bg-white border border-teal-200 hover:border-teal-400 text-left transition-all cursor-pointer text-xs"
-                        >
-                          <strong className="block text-[#115e59] truncate text-[11px]">{m.shopName}</strong>
-                          <span className="text-[9px] text-slate-400 block">{m.category}</span>
-                        </button>
-                      ))}
+                    <div className="grid grid-cols-1 gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMerchantPhone('0618700517');
+                          setMerchantPassword('123456');
+                          setErrorNotice('');
+                        }}
+                        className="p-2 rounded-xl bg-white border border-teal-200 hover:border-teal-400 text-left transition-all cursor-pointer text-xs"
+                      >
+                        <strong className="block text-[#115e59] truncate text-[11px]">ร้านค้าตัวอย่าง (User 12)</strong>
+                        <span className="text-[9px] text-slate-500 font-mono block">เบอร์: 0618700517 | รหัสผ่าน: 123456</span>
+                      </button>
                     </div>
-                  </div> */}
+                  </div>
 
                   <div className="pt-1">
                     <label className="block text-xs font-bold text-slate-700 mb-1">
-                      เบอร์โทรศัพท์ร้านค้า (ที่ลงทะเบียน)
+                      เบอร์โทรศัพท์ร้านค้า หรือ เลขประจำตัว
                     </label>
                     <input
                       type="tel"
                       required
-                      placeholder="089-223-4455"
+                      placeholder="0618700517 หรือ 1100703611737"
                       value={merchantPhone}
                       onChange={e => setMerchantPhone(e.target.value)}
                       className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[#115e59]"
@@ -572,7 +628,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                     </label>
                     <input
                       type="password"
-                      placeholder="กรอกรหัสผ่าน (หรือ 123456 สำหรับบัญชีทดสอบ)"
+                      required
+                      placeholder="กรอกรหัสผ่าน"
                       value={merchantPassword}
                       onChange={e => setMerchantPassword(e.target.value)}
                       className="w-full px-3.5 py-2.5 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-[#115e59]"
@@ -632,6 +689,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                         <option value="หัตถกรรม/ของฝาก">หัตถกรรม/ของฝาก (OTOP)</option>
                         <option value="บริการชุมชน">บริการชุมชน</option>
                         <option value="ผลไม้/เกษตรแปรรูป">ผลไม้/เกษตรแปรรูป</option>
+                        <option value="เสื้อผ้าและเครื่องแต่งกาย">เสื้อผ้าและเครื่องแต่งกาย</option>
+                        <option value="สุขภาพและความงาม">สุขภาพและความงาม</option>
+                        <option value="บ้านและเครื่องใช้">บ้านและเครื่องใช้</option>
                       </select>
                     </div>
                   </div>
@@ -657,7 +717,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       <input
                         type="tel"
                         required
-                        placeholder="089-111-2222"
+                        placeholder="0812345678"
                         value={mchPhone}
                         onChange={e => setMchPhone(e.target.value)}
                         className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs font-mono focus:outline-none focus:ring-2 focus:ring-[#115e59]"
@@ -686,7 +746,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       </div>
                     ) : (
                       <p className="text-[10px] text-slate-500">
-                        จำเป็นต้องระบุพิกัดเพื่อให้ลูกค้าค้นหาร้านค้าบนแผนที่ชุมชนได้
+                        จำเป็นต้องระบุพิกัดเพื่อให้ลูกค้าค้นหาร้านค้าบนแผนที่โครงการได้
                       </p>
                     )}
                   </div>

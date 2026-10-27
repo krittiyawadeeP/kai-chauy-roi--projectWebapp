@@ -149,25 +149,39 @@ export const MerchantWalletView: React.FC<MerchantWalletViewProps> = ({
         </div>
       </header>
 
-      {/* Main Content Area */}
-      <main className="-mt-6 px-4 space-y-4">
-        {/* Notice banners */}
-        {errorMsg && (
-          <div className="rounded-2xl bg-rose-50 border border-rose-200 p-3 text-xs text-rose-800 flex items-center justify-between shadow-sm">
-            <div className="flex items-center gap-2">
-              <span className="text-rose-600 font-bold">⚠️</span>
-              <span>{errorMsg}</span>
-            </div>
-            <button onClick={() => setErrorMsg('')} className="text-rose-500 hover:text-rose-700 text-sm font-bold">✕</button>
-          </div>
-        )}
-        {successMsg && (
-          <div className="rounded-2xl bg-emerald-50 border border-emerald-200 p-3 text-xs text-emerald-800 flex items-center gap-2 shadow-sm animate-in fade-in">
-            <span>✅</span>
+      {/* Floating Notifications (Won't be blocked or push the layout) */}
+      {successMsg && (
+        <div className="fixed top-14 left-1/2 -translate-x-1/2 z-50 max-w-[390px] w-[90%] mx-auto flex items-center justify-between gap-2 rounded-2xl bg-[#042f2e]/95 text-white px-4 py-3 shadow-2xl text-xs font-bold border border-emerald-500/50 backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="flex items-center gap-2">
+            <span className="text-emerald-400 text-sm">✅</span>
             <span>{successMsg}</span>
           </div>
-        )}
+          <button
+            onClick={() => setSuccessMsg('')}
+            className="text-white/70 hover:text-white text-xs font-bold ml-2 cursor-pointer p-1"
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
+      {errorMsg && (
+        <div className="fixed top-14 left-1/2 -translate-x-1/2 z-50 max-w-[390px] w-[90%] mx-auto flex items-center justify-between gap-2 rounded-2xl bg-rose-900/95 text-white px-4 py-3 shadow-2xl text-xs font-bold border border-rose-500/50 backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-200">
+          <div className="flex items-center gap-2">
+            <span className="text-rose-300 text-sm">⚠️</span>
+            <span>{errorMsg}</span>
+          </div>
+          <button
+            onClick={() => setErrorMsg('')}
+            className="text-white/70 hover:text-white text-xs font-bold ml-2 cursor-pointer p-1"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* Main Content Area */}
+      <main className="relative z-10 -mt-6 px-4 space-y-4">
         {/* HERO WALLET CARD */}
         <div className="relative rounded-[24px] bg-white p-5 shadow-[0_12px_36px_rgba(17,94,89,.14)] border border-teal-100/90 overflow-hidden">
           {/* Subtle background glow */}
@@ -181,15 +195,27 @@ export const MerchantWalletView: React.FC<MerchantWalletViewProps> = ({
                 สถานะ: <span className="text-emerald-700">{walletStatus === 'ACTIVE' ? 'เปิดใช้งาน (ACTIVE)' : walletStatus}</span>
               </span>
             </div>
-            <button
-              onClick={handleManualRefresh}
-              disabled={refreshing || loading}
-              className="flex items-center gap-1 text-[11px] font-bold text-teal-700 hover:text-teal-900 bg-teal-50 hover:bg-teal-100 px-2.5 py-1 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
-              title="ดึงยอดเงินล่าสุดจากฐานข้อมูล"
-            >
-              <Icon name="refresh" className={`size-3 ${refreshing ? 'animate-spin' : ''}`} />
-              <span>{refreshing ? 'กำลังซิงก์…' : 'รีเฟรชยอด'}</span>
-            </button>
+            <div className="flex items-center gap-1.5">
+              {refreshing && (
+                <span className="text-[10px] text-teal-600 font-medium animate-pulse">
+                  กำลังซิงก์…
+                </span>
+              )}
+              {successMsg && !refreshing && (
+                <span className="text-[10px] text-emerald-600 font-bold animate-in fade-in">
+                  ✓ อัปเดตแล้ว
+                </span>
+              )}
+              <button
+                onClick={handleManualRefresh}
+                disabled={refreshing || loading}
+                className="flex items-center gap-1 text-[11px] font-bold text-teal-700 hover:text-teal-900 bg-teal-50 hover:bg-teal-100 px-2.5 py-1 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                title="ดึงยอดเงินล่าสุดจากฐานข้อมูล"
+              >
+                <Icon name="refresh" className={`size-3 ${refreshing ? 'animate-spin' : ''}`} />
+                <span>{refreshing ? 'กำลังซิงก์…' : 'รีเฟรชยอด'}</span>
+              </button>
+            </div>
           </div>
 
           {/* Balance Display */}
