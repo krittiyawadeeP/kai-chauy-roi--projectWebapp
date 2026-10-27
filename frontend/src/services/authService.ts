@@ -1,6 +1,7 @@
 import { api, authStorage } from './api';
 
 export interface LoginPayload {
+  identifier?: string;
   Citizen_ID?: string;
   Phone?: string;
   Password: string;
@@ -18,16 +19,34 @@ export interface RegisterPayload {
   Role?: 'USER' | 'MERCHANT';
 }
 
+export interface MerchantRegisterPayload {
+  Shop_Name: string;
+  Owner_Name: string;
+  Category: string;
+  Phone: string;
+  Citizen_ID: string;
+  Password: string;
+  Province_ID: number;
+  Dist_ID: number;
+  Lat?: number;
+  Lng?: number;
+  Pin?: string;
+}
+
 export interface AuthResponse {
   token: string;
   user: {
     User_ID: number;
     Citizen_ID: string;
     Phone: string;
-    Role?: string;
+    Name?: string | null;
+    Role: string;
     Province_ID?: number;
     Dist_ID?: number;
   };
+  merchant?: any;
+  wallet?: any;
+  grant?: any;
 }
 
 export const authService = {
@@ -40,8 +59,19 @@ export const authService = {
   },
 
   register: async (payload: RegisterPayload): Promise<AuthResponse> => {
-    await api.post('/user', payload);
-    return authService.login({ Citizen_ID: payload.Citizen_ID, Password: payload.Password });
+    const res = await api.post<AuthResponse>('/user', payload);
+    if (res?.token) {
+      authStorage.setToken(res.token);
+    }
+    return res;
+  },
+
+  registerMerchant: async (payload: MerchantRegisterPayload): Promise<AuthResponse> => {
+    const res = await api.post<AuthResponse>('/merchants/register', payload);
+    if (res?.token) {
+      authStorage.setToken(res.token);
+    }
+    return res;
   },
 
   logout: (): void => {

@@ -46,65 +46,142 @@ citizenRoutes.post("/user", async (req, res) => {
   if (!Citizen_ID || !Phone || !Password) {
     return badRequest(res, "Citizen_ID, Phone, and Password are required");
   }
-  if (Name !== undefined && (typeof Name !== "string" || !Name.trim() || Name.length > 200)) return badRequest(res, "Name must be 1-200 characters");
-  if (Pin !== undefined && !validPin(Pin)) return badRequest(res, "Pin must contain exactly 6 digits");
 
-  const policy = await getCurrentPolicy();
-  const user = await prisma.users.create({
-    data: {
-      Citizen_ID,
-      Phone,
-      Password,
-      Name: Name?.trim(),
-      Pin_Hash: Pin === undefined ? undefined : hashPin(Pin),
-      Province_ID,
-      Role: "USER",
-      wallets: {
-        create: {
-          Balance: 0,
-          Status: "ACTIVE",
+  const cleanCitizenId = String(Citizen_ID).replace(/\D/g, "");
+  const cleanPhone = String(Phone).replace(/\D/g, "");
+
+  if (cleanCitizenId.length !== 13) {
+    return badRequest(res, "เลขประจำตัวประชาชนต้องมี 13 หลัก");
+  }
+  if (cleanPhone.length < 9 || cleanPhone.length > 15) {
+    return badRequest(res, "หมายเลขโทรศัพท์ไม่ถูกต้อง");
+  }
+  if (String(Password).length < 6) {
+    return badRequest(res, "รหัสผ่านต้องมีความยาวอย่างน้อย 6 ตัวอักษร");
+  }
+  if (Name !== undefined && (typeof Name !== "string" || !Name.trim() || Name.length > 200)) {
+    return badRequest(res, "Name must be 1-200 characters");
+  }
+  if (Pin !== undefined && !validPin(Pin)) {
+    return badRequest(res, "Pin must contain exactly 6 digits");
+  }
+
+  try {
+    const existing = await prisma.users.findFirst({
+      where: {
+        OR: [{ Citizen_ID: cleanCitizenId }, { Phone: cleanPhone }],
+      },
+    });
+
+    if (existing) {
+      return sendJson(res, { message: "หมายเลขบัตรประชาชนหรือเบอร์โทรศัพท์นี้ลงทะเบียนในระบบแล้ว" }, 409);
+    }
+
+    const policy = await getCurrentPolicy();
+    const user = await prisma.users.create({
+      data: {
+        Citizen_ID: cleanCitizenId,
+        Phone: cleanPhone,
+        Password: String(Password),
+        Name: Name?.trim(),
+        Pin_Hash: Pin === undefined ? undefined : hashPin(Pin),
+        Province_ID: Province_ID ? Number(Province_ID) : undefined,
+        Role: "USER",
+        wallets: {
+          create: {
+            Balance: 0,
+            Status: "ACTIVE",
+          },
+        },
+        user_grants: {
+          create: {
+            Grant_Name: "สิทธิร่วมจ่าย 60/40 ไทยช่วยไทย",
+            Total_Grant_Amount: Number(policy.Grant_Amount),
+            Remaining_Amount: Number(policy.Grant_Amount),
+            Status: "ACTIVE",
+          },
         },
       },
-      user_grants: {
-        create: {
-          Grant_Name: "Default government subsidy",
-          Total_Grant_Amount: Number(policy.Grant_Amount),
-          Remaining_Amount: Number(policy.Grant_Amount),
-          Status: "ACTIVE",
-        },
+      include: {
+        wallets: true,
+        user_grants: true,
+        provinces: true,
       },
+    });
+
+    const token = createSession(user.User_ID, user.Role);
+
+    sendJson(res, {
+      token,
+      user,
+      wallet: user.wallets,
+      grant: user.user_grants?.[0],
+    }, 201);
+  } catch (error) {
+    const prismaError = error as { code?: string };
+    if (prismaError.code === "P2002") {
+      return sendJson(res, { message: "หมายเลขบัตรประชาชนหรือเบอร์โทรศัพท์นี้ลงทะเบียนในระบบแล้ว" }, 409);
+    }
+    console.error("Citizen registration failed:", error);
+    return sendJson(res, { message: "การลงทะเบียนประชาชนขัดข้อง กรุณาลองใหม่อีกครั้ง" }, 500);
+  }
+});
+
+citizenRoutes.post("/login", async (req, res) => {
+  const { Phone, Citizen_ID, identifier, Password } = req.body;
+
+  const rawIdent = String(identifier || Phone || Citizen_ID || "").trim();
+  const rawPass = String(Password || "").trim();
+
+  if (!rawIdent || !rawPass) {
+    return badRequest(res, "กรุณากรอกเบอร์โทรศัพท์/เลขบัตรประชาชน และรหัสผ่าน");
+  }
+
+  const cleanDigits = rawIdent.replace(/\D/g, "");
+
+  const user = await prisma.users.findFirst({
+    where: {
+      OR: [
+        { Phone: rawIdent },
+        { Citizen_ID: rawIdent },
+        ...(cleanDigits ? [{ Phone: cleanDigits }, { Citizen_ID: cleanDigits }] : []),
+      ],
     },
     include: {
       wallets: true,
       user_grants: true,
+      provinces: true,
     },
   });
 
-  sendJson(res, user, 201);
-});
-
-citizenRoutes.post("/login", async (req, res) => {
-  const { Phone, Citizen_ID, Password } = req.body;
-
-  if ((!Phone && !Citizen_ID) || !Password) {
-    return badRequest(res, "Phone or Citizen_ID and Password are required");
-  }
-
-  const user = await prisma.users.findFirst({
-    where: {
-      OR: [{ Phone: Phone ?? "" }, { Citizen_ID: Citizen_ID ?? "" }],
-    },
-  });
-
-  if (!user || user.Password !== Password) {
-    return sendJson(res, { message: "Invalid login credentials" }, 401);
+  if (!user || user.Password !== rawPass) {
+    return sendJson(res, { message: "เบอร์โทรศัพท์/เลขบัตรประชาชน หรือรหัสผ่านไม่ถูกต้อง" }, 401);
   }
 
   const token = createSession(user.User_ID, user.Role);
 
+  // If user is a merchant, also fetch merchant details
+  let merchant = null;
+  if (user.Role === "MERCHANT") {
+    merchant = await prisma.merchants.findFirst({
+      where: { User_ID: user.User_ID },
+      include: {
+        wallet: true,
+        districts: {
+          include: {
+            provinces: true,
+          },
+        },
+      },
+    });
+  }
+
   sendJson(res, {
     token,
     user,
+    merchant,
+    wallet: user.wallets,
+    grant: user.user_grants?.[0],
   });
 });
 

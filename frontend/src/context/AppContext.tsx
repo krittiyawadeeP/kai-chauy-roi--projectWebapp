@@ -458,28 +458,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Login Merchant
-  const loginMerchant = (phoneOrTax: string, passwordOrPin?: string, mchId?: number) => {
-    const cleanPhone = phoneOrTax.replace(/[^0-9]/g, '');
-    let target = mchId ? merchants.find(m => m.mchId === mchId) : null;
-    if (!target) {
-      target = merchants.find(m => m.phone.replace(/[^0-9]/g, '') === cleanPhone || m.promptpayId === cleanPhone);
-    }
-    if (!target && merchants.length > 0) {
-      target = merchants[0];
-    }
+  const loginMerchant = (phoneOrTax: string, passwordOrPin?: string, mchId?: number, dbMerchant?: any) => {
+    let target: Merchant | null = dbMerchant ? {
+      mchId: Number(dbMerchant.Mch_ID || dbMerchant.mchId),
+      userId: Number(dbMerchant.User_ID || dbMerchant.userId),
+      shopName: dbMerchant.Shop_Name || dbMerchant.shopName,
+      ownerName: dbMerchant.Owner_Name || dbMerchant.ownerName || dbMerchant.users?.Name || 'เจ้าของร้าน',
+      category: dbMerchant.Category || dbMerchant.category || 'อาหารและเครื่องดื่ม',
+      distId: Number(dbMerchant.Dist_ID || dbMerchant.distId || 101),
+      provId: Number(dbMerchant.districts?.Prov_ID || dbMerchant.provId || 1),
+      address: dbMerchant.districts ? `อ.${dbMerchant.districts.Dist_Name} จ.${dbMerchant.districts.provinces?.Prov_Name || ''}` : '',
+      lat: dbMerchant.Lat ? Number(dbMerchant.Lat) : null,
+      lng: dbMerchant.Lng ? Number(dbMerchant.Lng) : null,
+      phone: dbMerchant.users?.Phone || phoneOrTax,
+      promptpayId: dbMerchant.users?.Phone || phoneOrTax,
+      status: 'approved' as const,
+      registeredAt: new Date().toISOString(),
+      dailyAvgSales: 5000,
+      currentDailySales: 0,
+      walletBalance: Number(dbMerchant.wallet?.Balance || 0),
+      imageUrl: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=500&auto=format&fit=crop&q=80',
+      isAiTarget: false,
+    } : (mchId ? merchants.find(m => m.mchId === mchId) : null);
 
-    if (target && authStorage.getToken()) {
-      setRole('merchant');
-      setIsAuthenticated(true);
-      return { success: true, message: 'เข้าสู่ระบบร้านค้าสำเร็จ', merchant: target };
+    if (!target) {
+      const cleanPhone = phoneOrTax.replace(/[^0-9]/g, '');
+      target = merchants.find(m => m.phone.replace(/[^0-9]/g, '') === cleanPhone || m.promptpayId === cleanPhone) || null;
     }
 
     if (target) {
       setCurrentMerchant(target);
-      const linkedUser = users.find(u => u.userId === target!.userId) || {
+      setMerchants(prev => [target!, ...prev.filter(m => m.mchId !== target!.mchId)]);
+      const linkedUser: User = {
         userId: target.userId,
         citizenId: '3-1005-00482-83-1',
-        name: target.ownerName,
+        name: target.ownerName || target.shopName,
         role: 'merchant' as Role,
         phone: target.phone,
         provId: target.provId,
@@ -493,7 +506,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: true, message: `เข้าสู่ระบบร้านค้า ${target.shopName}`, merchant: target };
     }
 
-    return { success: false, message: 'กรุณาเข้าสู่ระบบผ่าน API ก่อนใช้งานบัญชีร้านค้า' };
+    return { success: false, message: 'ไม่พบข้อมูลร้านค้าในระบบ' };
   };
 
   // Logout
@@ -510,6 +523,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ...(data.ownerName !== undefined ? { Owner_Name: data.ownerName } : {}),
         ...(data.category !== undefined ? { Category: data.category } : {}),
         ...(data.distId !== undefined ? { Dist_ID: data.distId } : {}),
+        ...(data.lat !== undefined && data.lat !== null ? { Lat: data.lat } : {}),
+        ...(data.lng !== undefined && data.lng !== null ? { Lng: data.lng } : {}),
       });
       await refreshMerchantData();
       return;
