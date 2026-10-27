@@ -722,14 +722,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (res.wallet) {
             setWallet(prev => ({
               ...prev,
-              balance: Number(res.wallet.Balance),
-              updatedAt: res.wallet.Updated_At || new Date().toISOString(),
+              balance: Number(res.wallet.balance),
+              updatedAt: res.wallet.updatedAt || new Date().toISOString(),
             }));
           }
           if (res.grant) {
             setUserGrant(prev => ({
               ...prev,
-              remainingAmount: Number(res.grant.Remaining_Amount),
+              remainingAmount: Number(res.grant.remainingAmount),
             }));
           }
 
@@ -748,15 +748,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
 
           const newTx: SalesTransaction = {
-            txId: Number(res.transaction.Tx_ID),
+            txId: Number(res.transaction.txId),
             userId: currentUser.userId,
             userName: currentUser.name,
             merchantId,
             merchantName: targetShop.shopName,
             totalAmount,
-            userPaidAmount: Number(res.transaction.User_Paid_Amount),
-            govSubsidizedAmount: Number(res.transaction.Gov_Subsidized_Amount),
-            txTimestamp: String(res.transaction.Tx_Timestamp).replace('T', ' ').substring(0, 19),
+            userPaidAmount: Number(res.transaction.userPaidAmount),
+            govSubsidizedAmount: Number(res.transaction.govSubsidizedAmount),
+            txTimestamp: String(res.transaction.txTimestamp),
             distId: targetShop.distId,
             status: 'completed',
             note: note || 'ชำระค่าสินค้าสิทธิ 60/40 (บันทึกลงฐานข้อมูลจริง)',
@@ -768,18 +768,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
           return {
             success: true,
-            message: `ชำระเงินสำเร็จ ฿${totalAmount.toLocaleString()} (คุณจ่าย ฿${userShare.toLocaleString()}, รัฐช่วยจ่าย ฿${govShare.toLocaleString()})`,
+            message: `ชำระเงินสำเร็จ ฿${totalAmount.toLocaleString()} (คุณจ่าย ฿${newTx.userPaidAmount.toLocaleString()}, รัฐช่วยจ่าย ฿${newTx.govSubsidizedAmount.toLocaleString()})`,
             earnedStamp: awardedStamp,
             tx: newTx,
           };
         }
       } catch (err: any) {
-        console.warn('Real payment API failed, falling back to local simulation:', err);
-        const errMessage = err?.message || err?.error;
-        if (errMessage && typeof errMessage === 'string' && (errMessage.includes('ไม่เพียงพอ') || errMessage.includes('ยอดเงิน'))) {
-          return { success: false, message: errMessage };
-        }
+        return { success: false, message: err?.message || 'ชำระเงินไม่สำเร็จ' };
       }
+      return { success: false, message: 'ชำระเงินไม่สำเร็จ' };
     }
 
     // Deduct balances (local fallback)

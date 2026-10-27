@@ -22,6 +22,7 @@ test('feature routes keep their URLs and admin guards; merchant sales use the gl
   let walletDebits = 0;
   let merchantCredits = 0;
   let allowPayment = true;
+  let dailySubsidySpent = 0;
   replace(prisma.grant_policy, 'findFirst', async () => policy);
   replace(prisma.grant_policy, 'findMany', async () => [policy]);
   replace(prisma.grant_policy, 'create', async ({ data }: any) => { policy = { Policy_ID: policy.Policy_ID + 1, ...data }; return policy; });
@@ -41,12 +42,23 @@ test('feature routes keep their URLs and admin guards; merchant sales use the gl
   replace(prisma.provinces, 'findMany', async () => [{ Prov_ID: 1, Prov_Name: 'Bangkok', districts: [{ Dist_ID: 99, Dist_Name: 'พระนคร', _count: { merchants: 2 } }] }]);
   replace(prisma.users, 'findMany', async () => []);
   replace(prisma, '$transaction', async (callback: any) => callback({
-    sales_transactions: { create: async ({ data }: any) => ({ Tx_ID: 1n, ...data }) },
-    user_grants: { updateMany: async () => { grantUpdates += 1; return { count: 1 }; } },
-    wallets: {
-      updateMany: async ({ data }: any) => { if (!allowPayment) return { count: 0 }; walletDebits += data.Balance.decrement; return { count: 1 }; },
-      update: async ({ data }: any) => { merchantCredits += data.Balance.increment; },
+    $queryRaw: async () => [{ User_ID: 10 }],
+    sales_transactions: {
+      aggregate: async () => ({ _sum: { Gov_Subsidized_Amount: dailySubsidySpent } }),
+      create: async ({ data }: any) => { dailySubsidySpent += data.Gov_Subsidized_Amount; return { Tx_ID: 1n, ...data }; },
     },
+    user_grants: {
+      findFirst: async () => ({ Grant_ID: 1n, User_ID: 10, Total_Grant_Amount: 1000, Remaining_Amount: 1000 }),
+      update: async () => ({ Grant_ID: 1n, User_ID: 10, Total_Grant_Amount: 1000, Remaining_Amount: 1000 }),
+      updateMany: async () => { grantUpdates += 1; return { count: 1 }; },
+    },
+    wallets: {
+      findFirst: async () => ({ Wallet_ID: 1, User_ID: 10, Balance: 1000 }),
+      updateMany: async ({ data }: any) => { if (!allowPayment) return { count: 0 }; walletDebits += data.Balance.decrement; return { count: 1 }; },
+      update: async ({ data }: any) => ({ Wallet_ID: 1, User_ID: 10, Balance: 1000 - data.Balance.decrement, Updated_At: new Date() }),
+      upsert: async ({ update }: any) => { merchantCredits += update.Balance.increment; },
+    },
+    district_stamps: { findFirst: async () => null },
   }));
   const server = app.listen(0, '127.0.0.1');
   await new Promise<void>(resolve => server.once('listening', resolve));
@@ -102,10 +114,15 @@ test('feature routes keep their URLs and admin guards; merchant sales use the gl
     assert.equal(merchantCredits, 200);
     await request('/admin/policy', admin, { Gov_Pay_Ratio: 0.3, Grant_Amount: 1500, Note: 'ปรับนโยบายรอบถัดไป' });
     const second = await (await request('/merchants/me/sales', merchant, { User_ID: 10, Total_Amount: 200, District_ID: 99 })).json() as any;
-    assert.equal(second.Gov_Subsidized_Amount, 60);
-    assert.equal(second.User_Paid_Amount, 140);
-    assert.equal(walletDebits, 190);
+    assert.equal(second.Gov_Subsidized_Amount, 50);
+    assert.equal(second.User_Paid_Amount, 150);
+    assert.equal(walletDebits, 200);
     assert.equal(merchantCredits, 400);
+    const citizenPayment = await request('/user/pay', citizen, { Merchant_ID: 1, Total_Amount: 100, District_ID: 99 });
+    assert.equal(citizenPayment.status, 200);
+    const citizenResult = await citizenPayment.json() as any;
+    assert.equal(citizenResult.transaction.govSubsidizedAmount, 0);
+    assert.equal(citizenResult.transaction.userPaidAmount, 100);
     allowPayment = false;
     assert.equal((await request('/merchants/me/sales', merchant, { User_ID: 10, Total_Amount: 200, District_ID: 99 })).status, 400);
     assert.equal(merchantCredits, 400, 'failed payment must not credit the merchant');

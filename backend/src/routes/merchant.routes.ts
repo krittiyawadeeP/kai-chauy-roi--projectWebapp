@@ -6,6 +6,7 @@ import { prisma } from "../lib/prisma";
 import { merchantCategory } from "../lib/merchant-category";
 import { hashPin, validPin } from "../lib/pin";
 import { getCurrentPolicy } from '../policy/policy';
+import { remainingDailySubsidy } from "../lib/daily-subsidy";
 
 export const merchantRoutes = Router();
 
@@ -348,11 +349,11 @@ merchantRoutes.post("/me/sales", requireMerchant, async (req: AuthRequest, res) 
 
   const requestedGovAmount = Math.round(totalAmount * 100 * govRatio) / 100;
   const remainingGrant = activeGrant ? Number(activeGrant.Remaining_Amount) : 0;
-  const govSubsidizedAmount = Math.min(requestedGovAmount, remainingGrant);
-  const userPaidAmount = Number((totalAmount - govSubsidizedAmount).toFixed(2));
-
   try {
     const transaction = await prisma.$transaction(async (tx) => {
+    const dailySubsidy = await remainingDailySubsidy(tx, userId);
+    const govSubsidizedAmount = Math.min(requestedGovAmount, remainingGrant, dailySubsidy.remaining);
+    const userPaidAmount = Number((totalAmount - govSubsidizedAmount).toFixed(2));
     const paid = await tx.wallets.updateMany({
       where: { User_ID: userId, Status: "ACTIVE", Balance: { gte: userPaidAmount } },
       data: { Balance: { decrement: userPaidAmount } },
@@ -374,7 +375,7 @@ merchantRoutes.post("/me/sales", requireMerchant, async (req: AuthRequest, res) 
         Total_Amount: totalAmount,
         User_Paid_Amount: userPaidAmount,
         Gov_Subsidized_Amount: govSubsidizedAmount,
-        Tx_Timestamp: new Date(),
+        Tx_Timestamp: dailySubsidy.timestamp,
         District_ID: districtId,
         Status: "COMPLETED",
       },

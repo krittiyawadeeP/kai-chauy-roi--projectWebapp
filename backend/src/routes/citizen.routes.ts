@@ -11,6 +11,7 @@ import { badRequest, notFound, sendJson, toNumber } from "../lib/http";
 import { prisma } from "../lib/prisma";
 import { hashPin, validPin } from "../lib/pin";
 import { getCurrentPolicy } from '../policy/policy';
+import { remainingDailySubsidy } from "../lib/daily-subsidy";
 
 export const citizenRoutes = Router();
 
@@ -583,18 +584,12 @@ citizenRoutes.post("/user/pay", requireAuth, async (req: AuthRequest, res) => {
     return badRequest(res, "Merchant_ID and valid Total_Amount are required");
   }
 
-  const userShare = Math.round(totalAmount * 0.40 * 100) / 100;
-  const govShare = Math.round(totalAmount * 0.60 * 100) / 100;
-
   try {
     const result = await prisma.$transaction(async (tx) => {
+      const dailySubsidy = await remainingDailySubsidy(tx, req.user!.userId);
       let wallet = await tx.wallets.findFirst({
         where: { User_ID: req.user!.userId },
       });
-
-      if (!wallet || Number(wallet.Balance) < userShare) {
-        throw new Error(`ยอดเงินในกระเป๋าไม่เพียงพอ (ต้องการ ${userShare} บาท มีอยู่ ${Number(wallet?.Balance || 0)} บาท)`);
-      }
 
       let grant = await tx.user_grants.findFirst({
         where: { User_ID: req.user!.userId, Status: "ACTIVE" },
@@ -612,8 +607,11 @@ citizenRoutes.post("/user/pay", requireAuth, async (req: AuthRequest, res) => {
         });
       }
 
-      if (Number(grant.Remaining_Amount) < govShare) {
-        throw new Error(`วงเงินสิทธิรัฐช่วยจ่ายคงเหลือไม่เพียงพอ (คงเหลือ ${Number(grant.Remaining_Amount)} บาท)`);
+      const requestedGovShare = Math.round(totalAmount * 0.60 * 100) / 100;
+      const govShare = Math.min(requestedGovShare, Number(grant.Remaining_Amount), dailySubsidy.remaining);
+      const userShare = Math.round((totalAmount - govShare) * 100) / 100;
+      if (!wallet || Number(wallet.Balance) < userShare) {
+        throw new Error(`ยอดเงินในกระเป๋าไม่เพียงพอ (ต้องการ ${userShare} บาท มีอยู่ ${Number(wallet?.Balance || 0)} บาท)`);
       }
 
       const updatedWallet = await tx.wallets.update({
@@ -641,7 +639,7 @@ citizenRoutes.post("/user/pay", requireAuth, async (req: AuthRequest, res) => {
           Total_Amount: totalAmount,
           User_Paid_Amount: userShare,
           Gov_Subsidized_Amount: govShare,
-          Tx_Timestamp: new Date(),
+          Tx_Timestamp: dailySubsidy.timestamp,
           District_ID: districtId,
           Status: "COMPLETED",
         },
