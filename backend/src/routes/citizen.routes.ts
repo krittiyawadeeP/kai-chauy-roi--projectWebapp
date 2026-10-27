@@ -14,6 +14,7 @@ import { getCurrentPolicy } from '../policy/policy';
 import { awardMissionStamp } from '../lib/mission-stamp';
 import { collectedDistrictCount, requiredDistrictStamps } from '../lib/otop-reward';
 import { remainingDailySubsidy } from "../lib/daily-subsidy";
+import { spendableStamps } from '../lib/spendable-stamps';
 
 export const citizenRoutes = Router();
 
@@ -341,22 +342,7 @@ citizenRoutes.post("/missions/:missionId/complete", requireAuth, async (req: Aut
 
 // GET /users/me/stamps
 citizenRoutes.get("/users/me/stamps", requireAuth, async (req: AuthRequest, res) => {
-  const stamps = await prisma.user_stamps.findMany({
-    where: {
-      User_ID: req.user!.userId,
-    },
-    include: {
-      district_stamps: {
-        include: {
-          districts: true,
-        },
-      },
-      missions: true,
-    },
-    orderBy: {
-      Earned_At: "desc",
-    },
-  });
+  const stamps = await spendableStamps(prisma, req.user!.userId);
 
   // Group by Stamp_ID
   const stampMap = new Map<number, { count: number; first: typeof stamps[0] }>();
@@ -395,6 +381,7 @@ citizenRoutes.get("/users/me/stamps/history", requireAuth, async (req: AuthReque
           sales_transactions: true,
         },
       },
+      stamp_spend_transactions: { include: { sales_transactions: true } },
     },
     orderBy: {
       Earned_At: "desc",
@@ -464,24 +451,23 @@ citizenRoutes.post("/stamp-redemptions", requireAuth, async (req: AuthRequest, r
     return sendJson(res, result.redemption, 201);
   }
 
-  if (!Stamp_ID || !Quantity) return badRequest(res, 'Stamp_ID and Quantity are required');
-
-  const redemption = await prisma.stamp_redemptions.create({
-    data: {
-      User_ID: req.user!.userId,
-      Reward_ID,
-      Stamp_ID,
-      Quantity,
-      Status: "REQUESTED",
-      Redeemed_At: new Date(),
-    },
-    include: {
-      rewards: true,
-      district_stamps: true,
-    },
-  });
-
-  sendJson(res, redemption, 201);
+  const stampId = Number(Stamp_ID);
+  const quantity = Number(Quantity);
+  if (!Number.isInteger(stampId) || stampId < 1 || !Number.isSafeInteger(quantity) || quantity < 1) return badRequest(res, 'Valid Stamp_ID and Quantity are required');
+  const required = quantity * reward.Required_Stamp_Count;
+  if (!Number.isSafeInteger(required) || required < 1) return badRequest(res, 'Invalid stamp requirement');
+  const result = await prisma.$transaction(async tx => {
+    const userId = req.user!.userId;
+    await tx.$queryRaw`SELECT User_ID FROM users WHERE User_ID = ${userId} FOR UPDATE`;
+    const stamps = await spendableStamps(tx, userId);
+    if (stamps.filter(stamp => stamp.Stamp_ID === stampId).length < required) return null;
+    return tx.stamp_redemptions.create({
+      data: { User_ID: userId, Reward_ID: rewardId, Stamp_ID: stampId, Quantity: quantity, Status: 'REQUESTED', Redeemed_At: new Date() },
+      include: { rewards: true, district_stamps: true },
+    });
+  }, { isolationLevel: 'ReadCommitted' });
+  if (!result) return badRequest(res, 'จำนวนสแตมป์คงเหลือไม่เพียงพอ');
+  sendJson(res, result, 201);
 });
 
 citizenRoutes.get("/users/me/stamp-redemptions", requireAuth, async (req: AuthRequest, res) => {
@@ -537,6 +523,7 @@ citizenRoutes.get("/user/me/transactions", requireAuth, async (req: AuthRequest,
     totalAmount: Number(t.Total_Amount),
     userPaidAmount: Number(t.User_Paid_Amount),
     govSubsidizedAmount: Number(t.Gov_Subsidized_Amount),
+    stampPaidAmount: Number(t.Stamp_Paid_Amount),
     txTimestamp: t.Tx_Timestamp.toISOString().replace("T", " ").substring(0, 19),
     distId: t.District_ID,
     status: t.Status.toLowerCase() === "cancelled" ? "cancelled" : "completed",
@@ -588,21 +575,25 @@ citizenRoutes.post("/user/topup", requireAuth, async (req: AuthRequest, res) => 
 
 // POST /user/pay
 citizenRoutes.post("/user/pay", requireAuth, async (req: AuthRequest, res) => {
-  const { Merchant_ID, Total_Amount, District_ID } = req.body;
-  const totalAmount = Number(Total_Amount);
+  const { Merchant_ID, Total_Amount, District_ID, Stamp_Count = 0 } = req.body;
+  const inputAmount = Number(Total_Amount);
+  const totalAmount = Number(inputAmount.toFixed(2));
   const merchantId = Number(Merchant_ID);
   const districtId = Number(District_ID);
 
-  if (!Number.isInteger(merchantId) || merchantId <= 0 || !Number.isFinite(totalAmount) || totalAmount <= 0) {
+  if (!Number.isInteger(merchantId) || merchantId <= 0 || !Number.isFinite(inputAmount) || inputAmount <= 0 || inputAmount > 9999999999.99 || totalAmount <= 0 || Math.abs(inputAmount * 100 - Math.round(inputAmount * 100)) > 0.0001) {
     return badRequest(res, "Merchant_ID and valid Total_Amount are required");
+  }
+  if (typeof Stamp_Count !== 'number' || !Number.isInteger(Stamp_Count) || Stamp_Count < 0) {
+    return badRequest(res, 'Stamp_Count must be a non-negative integer');
   }
 
   try {
     const policy = await getCurrentPolicy();
     const result = await prisma.$transaction(async (tx) => {
+      const dailySubsidy = await remainingDailySubsidy(tx, req.user!.userId);
       const merchant = await tx.merchants.findUnique({ where: { Mch_ID: merchantId } });
       if (!merchant || merchant.Dist_ID !== districtId) throw new Error("Invalid merchant or district");
-      const dailySubsidy = await remainingDailySubsidy(tx, req.user!.userId);
       let wallet = await tx.wallets.findFirst({
         where: { User_ID: req.user!.userId },
       });
@@ -626,35 +617,39 @@ citizenRoutes.post("/user/pay", requireAuth, async (req: AuthRequest, res) => {
       const requestedGovShare = Math.round(totalAmount * Number(policy.Gov_Pay_Ratio) * 100) / 100;
       const govShare = Math.min(requestedGovShare, Number(grant.Remaining_Amount), dailySubsidy.remaining);
       const userShare = Math.round((totalAmount - govShare) * 100) / 100;
-      if (!wallet || Number(wallet.Balance) < userShare) {
-        throw new Error(`ยอดเงินในกระเป๋าไม่เพียงพอ (ต้องการ ${userShare} บาท มีอยู่ ${Number(wallet?.Balance || 0)} บาท)`);
+      if (Stamp_Count > Math.floor(userShare / 2)) throw new Error('ใช้สแตมป์ได้ไม่เกิน 50% ของส่วนที่ผู้ใช้ต้องจ่าย');
+      if (Stamp_Count > dailySubsidy.remaining - govShare || Stamp_Count > Number(grant.Remaining_Amount) - govShare) {
+        throw new Error('วงเงินรัฐสำหรับจ่ายค่าสแตมป์ไม่เพียงพอ');
+      }
+      const stamps = Stamp_Count ? (await spendableStamps(tx, req.user!.userId)).slice(0, Stamp_Count) : [];
+      if (stamps.length !== Stamp_Count) throw new Error('จำนวนสแตมป์คงเหลือไม่เพียงพอ');
+      const walletShare = Math.round((userShare - Stamp_Count) * 100) / 100;
+      if (!wallet || Number(wallet.Balance) < walletShare) {
+        throw new Error(`ยอดเงินในกระเป๋าไม่เพียงพอ (ต้องการ ${walletShare} บาท มีอยู่ ${Number(wallet?.Balance || 0)} บาท)`);
       }
 
-      const updatedWallet = await tx.wallets.update({
-        where: { Wallet_ID: wallet.Wallet_ID },
-        data: {
-          Balance: {
-            decrement: userShare,
-          },
-        },
+      const paid = await tx.wallets.updateMany({
+        where: { Wallet_ID: wallet.Wallet_ID, Status: 'ACTIVE', Balance: { gte: walletShare } },
+        data: { Balance: { decrement: walletShare } },
       });
+      if (paid.count !== 1) throw new Error('ยอดเงินในกระเป๋าไม่เพียงพอ');
+      const updatedWallet = await tx.wallets.findUniqueOrThrow({ where: { Wallet_ID: wallet.Wallet_ID } });
 
-      const updatedGrant = await tx.user_grants.update({
-        where: { Grant_ID: grant.Grant_ID },
-        data: {
-          Remaining_Amount: {
-            decrement: govShare,
-          },
-        },
+      const granted = await tx.user_grants.updateMany({
+        where: { Grant_ID: grant.Grant_ID, Status: 'ACTIVE', Remaining_Amount: { gte: govShare + Stamp_Count } },
+        data: { Remaining_Amount: { decrement: govShare + Stamp_Count } },
       });
+      if (granted.count !== 1) throw new Error('วงเงินสิทธิรัฐคงเหลือไม่เพียงพอ');
+      const updatedGrant = await tx.user_grants.findUniqueOrThrow({ where: { Grant_ID: grant.Grant_ID } });
 
       const transaction = await tx.sales_transactions.create({
         data: {
           User_ID: req.user!.userId,
           Merchant_ID: merchantId,
           Total_Amount: totalAmount,
-          User_Paid_Amount: userShare,
+          User_Paid_Amount: walletShare,
           Gov_Subsidized_Amount: govShare,
+          Stamp_Paid_Amount: Stamp_Count,
           Tx_Timestamp: dailySubsidy.timestamp,
           District_ID: districtId,
           Status: "COMPLETED",
@@ -662,6 +657,9 @@ citizenRoutes.post("/user/pay", requireAuth, async (req: AuthRequest, res) => {
         include: {
           merchants: true,
         },
+      });
+      if (stamps.length) await tx.stamp_spend_transactions.createMany({
+        data: stamps.map(stamp => ({ User_Stamp_ID: stamp.User_Stamp_ID, Tx_ID: transaction.Tx_ID })),
       });
 
       await tx.wallets.upsert({
@@ -697,6 +695,7 @@ citizenRoutes.post("/user/pay", requireAuth, async (req: AuthRequest, res) => {
           totalAmount: Number(transaction.Total_Amount),
           userPaidAmount: Number(transaction.User_Paid_Amount),
           govSubsidizedAmount: Number(transaction.Gov_Subsidized_Amount),
+          stampPaidAmount: Number(transaction.Stamp_Paid_Amount),
           txTimestamp: transaction.Tx_Timestamp.toISOString().replace("T", " ").substring(0, 19),
           distId: transaction.District_ID,
           status: "completed",
@@ -716,6 +715,7 @@ citizenRoutes.post("/user/pay", requireAuth, async (req: AuthRequest, res) => {
         awardedStamp,
       };
     }, {
+      isolationLevel: 'ReadCommitted',
       maxWait: 15000,
       timeout: 30000,
     });

@@ -19,10 +19,14 @@ test('feature routes keep their URLs and admin guards; merchant sales use the gl
   const replace = (target: any, key: string, value: unknown) => { const original = target[key]; target[key] = value; originals.push(() => { target[key] = original; }); };
   let policy: any = { Policy_ID: 1, Gov_Pay_Ratio: 0.4, User_Pay_Ratio: 0.6, Grant_Amount: 1000 };
   let grantUpdates = 0;
+  let grantDebits = 0;
   let walletDebits = 0;
   let merchantCredits = 0;
   let allowPayment = true;
   let dailySubsidySpent = 0;
+  const spentStampIds = new Set<bigint>();
+  const rewardRedemptions: any[] = [];
+  let rewardRequired = 5;
   replace(prisma.grant_policy, 'findFirst', async () => policy);
   replace(prisma.grant_policy, 'findMany', async () => [policy]);
   replace(prisma.grant_policy, 'create', async ({ data }: any) => { policy = { Policy_ID: policy.Policy_ID + 1, ...data }; return policy; });
@@ -32,6 +36,7 @@ test('feature routes keep their URLs and admin guards; merchant sales use the gl
     { Mch_ID: 2, Shop_Name: 'ร้านไม่มีพิกัด', Category: null, Lat: null, Lng: null, districts: { Dist_ID: 99, Dist_Name: 'พระนคร', provinces: { Prov_ID: 1, Prov_Name: 'Bangkok' } } },
   ]);
   replace(prisma.users, 'findUnique', async () => ({ User_ID: 10, Role: 'USER' }));
+  replace(prisma.rewards, 'findUnique', async () => ({ Reward_ID: 1, Status: 'ACTIVE', Reward_Type: 'DISCOUNT', Required_Stamp_Count: rewardRequired }));
   replace(prisma.user_grants, 'findFirst', async () => ({ Grant_ID: 1n, Remaining_Amount: 1000 }));
   replace(prisma.user_grants, 'findMany', async () => [{ Status: 'ACTIVE' }]);
   replace(prisma.user_grants, 'create', async ({ data }: any) => ({ Grant_ID: 1n, ...data }));
@@ -44,21 +49,29 @@ test('feature routes keep their URLs and admin guards; merchant sales use the gl
   replace(prisma, '$transaction', async (callback: any) => callback({
     $queryRaw: async () => [{ User_ID: 10 }],
     sales_transactions: {
-      aggregate: async () => ({ _sum: { Gov_Subsidized_Amount: dailySubsidySpent } }),
-      create: async ({ data }: any) => { dailySubsidySpent += data.Gov_Subsidized_Amount; return { Tx_ID: 1n, ...data }; },
+      aggregate: async () => ({ _sum: { Gov_Subsidized_Amount: dailySubsidySpent, Stamp_Paid_Amount: 0 } }),
+      create: async ({ data }: any) => { dailySubsidySpent += data.Gov_Subsidized_Amount + (data.Stamp_Paid_Amount ?? 0); return { Tx_ID: 1n, ...data }; },
     },
     user_grants: {
       findFirst: async () => ({ Grant_ID: 1n, User_ID: 10, Total_Grant_Amount: 1000, Remaining_Amount: 1000 }),
+      findUniqueOrThrow: async () => ({ Grant_ID: 1n, User_ID: 10, Total_Grant_Amount: 1000, Remaining_Amount: 1000 }),
       update: async () => ({ Grant_ID: 1n, User_ID: 10, Total_Grant_Amount: 1000, Remaining_Amount: 1000 }),
-      updateMany: async () => { grantUpdates += 1; return { count: 1 }; },
+      updateMany: async ({ data }: any) => { grantUpdates += 1; grantDebits += data.Remaining_Amount.decrement; return { count: 1 }; },
     },
     wallets: {
       findFirst: async () => ({ Wallet_ID: 1, User_ID: 10, Balance: 1000 }),
+      findUniqueOrThrow: async () => ({ Wallet_ID: 1, User_ID: 10, Balance: 1000, Updated_At: new Date() }),
       updateMany: async ({ data }: any) => { if (!allowPayment) return { count: 0 }; walletDebits += data.Balance.decrement; return { count: 1 }; },
       update: async ({ data }: any) => ({ Wallet_ID: 1, User_ID: 10, Balance: 1000 - data.Balance.decrement, Updated_At: new Date() }),
       upsert: async ({ update }: any) => { merchantCredits += update.Balance.increment; },
     },
     merchants: { findUnique: async () => ({ Mch_ID: 1, Dist_ID: 99 }) },
+    user_stamps: { findMany: async () => Array.from({ length: 25 }, (_, index) => ({ User_Stamp_ID: BigInt(index + 1), Stamp_ID: 1, User_ID: 10, Earned_At: new Date(), Qualifying_Amount: null })).filter(stamp => !spentStampIds.has(stamp.User_Stamp_ID)) },
+    stamp_redemptions: {
+      findMany: async () => rewardRedemptions.map(redemption => ({ Stamp_ID: redemption.Stamp_ID, Quantity: redemption.Quantity, rewards: { Required_Stamp_Count: redemption.Required_Stamp_Count, Reward_Type: 'DISCOUNT' } })),
+      create: async ({ data }: any) => { rewardRedemptions.push({ ...data, Required_Stamp_Count: rewardRequired }); return data; },
+    },
+    stamp_spend_transactions: { createMany: async ({ data }: any) => { for (const stamp of data) spentStampIds.add(stamp.User_Stamp_ID); } },
     missions: { findFirst: async () => null },
     district_stamps: { findFirst: async () => null },
   }));
@@ -126,9 +139,29 @@ test('feature routes keep their URLs and admin guards; merchant sales use the gl
     assert.equal(citizenResult.transaction.govSubsidizedAmount, 0);
     assert.equal(citizenResult.transaction.userPaidAmount, 100);
     assert.equal(merchantCredits, 500, 'citizen payment must credit the merchant wallet');
+    dailySubsidySpent = 0;
+    policy = { ...policy, Gov_Pay_Ratio: 0.6, User_Pay_Ratio: 0.4 };
+    const stampPayment = await request('/user/pay', citizen, { Merchant_ID: 1, Total_Amount: 100, District_ID: 99, Stamp_Count: 20 });
+    assert.equal(stampPayment.status, 200);
+    const stampResult = await stampPayment.json() as any;
+    assert.equal(stampResult.transaction.govSubsidizedAmount, 60);
+    assert.equal(stampResult.transaction.stampPaidAmount, 20);
+    assert.equal(stampResult.transaction.userPaidAmount, 20);
+    assert.equal(walletDebits, 320, 'only the remaining citizen share is debited from the wallet');
+    assert.equal(grantDebits, 280, 'government balance pays both the normal subsidy and redeemed stamps');
+    assert.equal(spentStampIds.size, 20);
+    assert.equal(merchantCredits, 600, 'merchant receives the full sale including government-funded stamps');
+    assert.equal((await request('/user/pay', citizen, { Merchant_ID: 1, Total_Amount: 100, District_ID: 99, Stamp_Count: 21 })).status, 400);
+    assert.equal((await request('/user/pay', citizen, { Merchant_ID: 1, Total_Amount: 100, District_ID: 99, Stamp_Count: 6 })).status, 400);
+    rewardRequired = 5;
+    assert.equal((await request('/stamp-redemptions', citizen, { Reward_ID: 1, Stamp_ID: 1, Quantity: 1 })).status, 201);
+    assert.equal((await request('/user/pay', citizen, { Merchant_ID: 1, Total_Amount: 100, District_ID: 99, Stamp_Count: 1 })).status, 400, 'reward stamps cannot also pay for a sale');
+    dailySubsidySpent = 190;
+    assert.equal((await request('/user/pay', citizen, { Merchant_ID: 1, Total_Amount: 100, District_ID: 99, Stamp_Count: 1 })).status, 400);
+    assert.equal(merchantCredits, 600, 'rejected stamp payments do not credit the merchant');
     allowPayment = false;
     assert.equal((await request('/merchants/me/sales', merchant, { User_ID: 10, Total_Amount: 200, District_ID: 99 })).status, 400);
-    assert.equal(merchantCredits, 500, 'failed payment must not credit the merchant');
+    assert.equal(merchantCredits, 600, 'failed payment must not credit the merchant');
     assert.equal(first.Gov_Subsidized_Amount, 150, 'historical transaction amounts stay unchanged');
   } finally {
     [admin, merchant, government, citizen].forEach(destroySession);

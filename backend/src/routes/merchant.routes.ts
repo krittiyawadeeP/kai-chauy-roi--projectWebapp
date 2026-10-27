@@ -199,6 +199,7 @@ merchantRoutes.get("/me/wallet", requireMerchant, async (req: AuthRequest, res) 
   const totalRevenue = sales.reduce((acc, s) => acc + Number(s.Total_Amount), 0);
   const userPaidTotal = sales.reduce((acc, s) => acc + Number(s.User_Paid_Amount), 0);
   const govSubsidizedTotal = sales.reduce((acc, s) => acc + Number(s.Gov_Subsidized_Amount), 0);
+  const stampPaidTotal = sales.reduce((acc, s) => acc + Number(s.Stamp_Paid_Amount), 0);
 
   sendJson(res, {
     wallet,
@@ -207,6 +208,8 @@ merchantRoutes.get("/me/wallet", requireMerchant, async (req: AuthRequest, res) 
       totalBills: sales.length,
       userPaidTotal,
       govSubsidizedTotal,
+      stampPaidTotal,
+      govPaidTotal: govSubsidizedTotal + stampPaidTotal,
     },
     recentTransactions: sales,
   });
@@ -309,6 +312,8 @@ merchantRoutes.patch("/me", requireMerchant, async (req: AuthRequest, res) => {
 
 merchantRoutes.post("/me/sales", requireMerchant, async (req: AuthRequest, res) => {
   const { User_ID, Total_Amount, District_ID } = req.body;
+
+  if (req.body.Stamp_Count !== undefined && req.body.Stamp_Count !== 0) return badRequest(res, 'Customers must use stamps through /user/pay');
 
   if (!Number.isInteger(Number(User_ID)) || Number(User_ID) <= 0 || !Number.isFinite(Number(Total_Amount)) || Number(Total_Amount) <= 0 || !Number.isInteger(Number(District_ID)) || Number(District_ID) <= 0) {
     return badRequest(res, "User_ID, Total_Amount, and District_ID are required");

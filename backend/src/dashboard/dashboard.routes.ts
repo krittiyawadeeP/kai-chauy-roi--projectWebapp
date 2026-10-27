@@ -9,7 +9,7 @@ export const dashboardRoutes = Router();
 dashboardRoutes.get('/geography', async (_req, res) => {
   const [provinces, transactions, grants, users, merchants] = await Promise.all([
     prisma.provinces.findMany({ select: { Prov_ID: true, Prov_Name: true, districts: { select: { Dist_ID: true, Dist_Name: true, _count: { select: { merchants: true } } } } } }),
-    prisma.sales_transactions.groupBy({ by: ['District_ID'], where: { Status: 'COMPLETED' }, _sum: { Total_Amount: true, Gov_Subsidized_Amount: true, User_Paid_Amount: true }, _count: { Tx_ID: true } }),
+    prisma.sales_transactions.groupBy({ by: ['District_ID'], where: { Status: 'COMPLETED' }, _sum: { Total_Amount: true, Gov_Subsidized_Amount: true, Stamp_Paid_Amount: true, User_Paid_Amount: true }, _count: { Tx_ID: true } }),
     prisma.user_grants.groupBy({ by: ['User_ID'], _sum: { Total_Grant_Amount: true, Remaining_Amount: true } }),
     prisma.users.findMany({ select: { User_ID: true, Province_ID: true } }),
     prisma.merchants.findMany({ select: {
@@ -29,7 +29,7 @@ dashboardRoutes.get("/", async (_req, res) => {
   const [txAgg, grantsAgg, grants] = await Promise.all([
     prisma.sales_transactions.aggregate({
       where: { Status: 'COMPLETED' },
-      _sum: { Total_Amount: true, Gov_Subsidized_Amount: true, User_Paid_Amount: true },
+      _sum: { Total_Amount: true, Gov_Subsidized_Amount: true, Stamp_Paid_Amount: true, User_Paid_Amount: true },
       _count: { Tx_ID: true },
     }),
     prisma.user_grants.aggregate({
@@ -48,6 +48,8 @@ dashboardRoutes.get("/", async (_req, res) => {
       count: txAgg._count.Tx_ID,
       totalRevenue: Number(txAgg._sum.Total_Amount ?? 0),
       govSubsidized: Number(txAgg._sum.Gov_Subsidized_Amount ?? 0),
+      stampPaid: Number(txAgg._sum.Stamp_Paid_Amount ?? 0),
+      govPaidTotal: Number(txAgg._sum.Gov_Subsidized_Amount ?? 0) + Number(txAgg._sum.Stamp_Paid_Amount ?? 0),
       userPaid: Number(txAgg._sum.User_Paid_Amount ?? 0),
     },
     grants: {

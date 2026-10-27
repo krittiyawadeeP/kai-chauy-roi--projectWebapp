@@ -39,12 +39,14 @@ test('geographic totals join actual database IDs, preserve money and keep unmapp
     { Prov_ID: 2, Prov_Name: 'เชียงใหม่', districts: [{ Dist_ID: 100, Dist_Name: 'Mueang Chiang Mai', _count: { merchants: 1 } }] },
     { Prov_ID: 3, Prov_Name: 'พื้นที่เก่า', districts: [{ Dist_ID: 101, Dist_Name: 'อำเภอเดิม', _count: { merchants: 1 } }] },
   ], [
-    { District_ID: 99, _sum: { Total_Amount: '100.01', Gov_Subsidized_Amount: '40.00', User_Paid_Amount: '60.01' }, _count: { Tx_ID: 1 } },
+    { District_ID: 99, _sum: { Total_Amount: '100.01', Gov_Subsidized_Amount: '40.00', Stamp_Paid_Amount: '10.00', User_Paid_Amount: '50.01' }, _count: { Tx_ID: 1 } },
     { District_ID: 100, _sum: { Total_Amount: '250.00', Gov_Subsidized_Amount: '100.00', User_Paid_Amount: '150.00' }, _count: { Tx_ID: 2 } },
     { District_ID: 101, _sum: { Total_Amount: 10, Gov_Subsidized_Amount: 4, User_Paid_Amount: 6 }, _count: { Tx_ID: 1 } },
   ], [{ User_ID: 10, _sum: { Total_Grant_Amount: 1000, Remaining_Amount: 600 } }, { User_ID: 11, _sum: { Total_Grant_Amount: 1000, Remaining_Amount: 900 } }], [{ User_ID: 10, Province_ID: 1 }, { User_ID: 11, Province_ID: null }]);
   const bangkok = result.find(p => p.code === '10')!;
   assert.equal(bangkok.totalRevenue, 100.01);
+  assert.equal(bangkok.stampPaid, 10);
+  assert.equal(bangkok.govPaidTotal, 50);
   assert.equal(bangkok.totalAllocated, 1000);
   assert.equal(bangkok.totalRemaining, 600);
   assert.equal(bangkok.merchantCount, 2);

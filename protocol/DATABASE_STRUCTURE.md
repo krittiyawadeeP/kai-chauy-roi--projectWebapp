@@ -42,6 +42,8 @@ erDiagram
 
     SALES_TRANSACTIONS ||--o{ STAMP_EARN_TRANSACTIONS : links
     USER_STAMPS ||--o{ STAMP_EARN_TRANSACTIONS : verified_by
+    SALES_TRANSACTIONS ||--o{ STAMP_SPEND_TRANSACTIONS : paid_with
+    USER_STAMPS ||--o| STAMP_SPEND_TRANSACTIONS : spent_once
 
     REWARDS ||--o{ STAMP_REDEMPTIONS : provides
 ```
@@ -136,8 +138,9 @@ erDiagram
 | `User_ID` | `INT` | FK -> `users(User_ID)` | รหัสผู้ซื้อสินค้า |
 | `Merchant_ID` | `INT` | FK -> `merchants(Mch_ID)` | รหัสร้านค้าที่เกิดรายการ |
 | `Total_Amount` | `DECIMAL(12,2)` | Not Null | ยอดเงินรวมทั้งสิ้นของบิล |
-| `User_Paid_Amount` | `DECIMAL(12,2)` | Default `0.00` | ยอดเงินที่ประชาชนจ่ายจริงตามนโยบาย |
+| `User_Paid_Amount` | `DECIMAL(12,2)` | Default `0.00` | ยอดเงินที่ตัดจากกระเป๋าผู้ใช้ |
 | `Gov_Subsidized_Amount` | `DECIMAL(12,2)` | Default `0.00` | ยอดเงินที่ภาครัฐช่วยจ่ายตามนโยบาย |
+| `Stamp_Paid_Amount` | `DECIMAL(12,2)` | Default `0.00` | ยอดที่จ่ายด้วยสแตมป์ (1 ดวง = 1 บาท) |
 | `Tx_Timestamp` | `DATETIME` | Not Null | วันเวลาที่เกิดธุรกรรม |
 | `District_ID` | `INT` | FK -> `districts(Dist_ID)` | อำเภอที่เกิดการซื้อขาย |
 | `Status` | `VARCHAR(30)` | Not Null | สถานะธุรกรรม (`COMPLETED`, `CANCELLED`) |
@@ -215,6 +218,14 @@ erDiagram
 | `User_Stamp_ID` | `BIGINT` | PK, FK -> `user_stamps(User_Stamp_ID)` | แสตมป์ที่ได้รับ |
 | `Tx_ID` | `BIGINT` | PK, FK -> `sales_transactions(Tx_ID)` | ธุรกรรมการซื้อที่ใช้อ้างอิง |
 | `Amount_Used` | `DECIMAL(12,2)` | Not Null | จำนวนเงินจากบิลที่นำมาคำนวณรับแสตมป์ |
+
+#### ตาราง `stamp_spend_transactions` (แสตมป์ที่ใช้จ่ายแทนเงิน)
+| คอลัมน์ | ชนิดข้อมูล | เงื่อนไข | คำอธิบาย |
+| :--- | :--- | :---: | :--- |
+| `User_Stamp_ID` | `BIGINT` | PK, FK -> `user_stamps(User_Stamp_ID)` | หนึ่งสแตมป์ใช้จ่ายได้เพียงครั้งเดียว |
+| `Tx_ID` | `BIGINT` | FK -> `sales_transactions(Tx_ID)` | รายการซื้อที่ใช้สแตมป์ |
+
+เมื่อใช้สแตมป์ชำระเงิน API ต้องบันทึกแถวในตารางนี้พร้อมรายการซื้อใน transaction เดียวกัน และตรวจว่าเจ้าของสแตมป์ตรงกับผู้ซื้อ โดย `Stamp_Paid_Amount` ต้องเท่ากับจำนวนแถวที่ใช้ในรายการนั้น และ `Total_Amount = User_Paid_Amount + Gov_Subsidized_Amount + Stamp_Paid_Amount`
 
 #### 13) ตาราง `rewards` (ของรางวัลและสิทธิประโยชน์)
 | คอลัมน์ | ชนิดข้อมูล | เงื่อนไข | คำอธิบาย |

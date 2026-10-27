@@ -11,8 +11,8 @@ export async function remainingDailySubsidy(tx: Prisma.TransactionClient, userId
   const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
   const spent = await tx.sales_transactions.aggregate({
     where: { User_ID: userId, Status: "COMPLETED", Tx_Timestamp: { gte: start, lt: end } },
-    _sum: { Gov_Subsidized_Amount: true },
+    _sum: { Gov_Subsidized_Amount: true, Stamp_Paid_Amount: true },
   });
-  const spentCents = Math.round(Number(spent._sum.Gov_Subsidized_Amount ?? 0) * 100);
+  const spentCents = Math.round(Number(spent._sum.Gov_Subsidized_Amount ?? 0) * 100) + Math.round(Number(spent._sum.Stamp_Paid_Amount ?? 0) * 100);
   return { remaining: Math.max(0, DAILY_SUBSIDY_LIMIT * 100 - spentCents) / 100, timestamp: now };
 }

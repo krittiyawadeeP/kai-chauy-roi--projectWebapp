@@ -119,6 +119,7 @@ CREATE TABLE `sales_transactions` (
     `Total_Amount` DECIMAL(12, 2) NOT NULL,
     `User_Paid_Amount` DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
     `Gov_Subsidized_Amount` DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
+    `Stamp_Paid_Amount` DECIMAL(12, 2) NOT NULL DEFAULT 0.00,
     `Tx_Timestamp` DATETIME(0) NOT NULL,
     `District_ID` INTEGER NOT NULL,
     `Status` VARCHAR(30) NOT NULL,
@@ -137,6 +138,15 @@ CREATE TABLE `stamp_earn_transactions` (
 
     INDEX `fk_stamp_earn_transaction`(`Tx_ID`),
     PRIMARY KEY (`User_Stamp_ID`, `Tx_ID`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- CreateTable
+CREATE TABLE `stamp_spend_transactions` (
+    `User_Stamp_ID` BIGINT NOT NULL,
+    `Tx_ID` BIGINT NOT NULL,
+
+    INDEX `fk_stamp_spend_transaction`(`Tx_ID`),
+    PRIMARY KEY (`User_Stamp_ID`)
 ) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
@@ -254,6 +264,12 @@ ALTER TABLE `stamp_earn_transactions` ADD CONSTRAINT `fk_stamp_earn_transaction`
 
 -- AddForeignKey
 ALTER TABLE `stamp_earn_transactions` ADD CONSTRAINT `fk_stamp_earn_user_stamp` FOREIGN KEY (`User_Stamp_ID`) REFERENCES `user_stamps`(`User_Stamp_ID`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `stamp_spend_transactions` ADD CONSTRAINT `fk_stamp_spend_transaction` FOREIGN KEY (`Tx_ID`) REFERENCES `sales_transactions`(`Tx_ID`) ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `stamp_spend_transactions` ADD CONSTRAINT `fk_stamp_spend_user_stamp` FOREIGN KEY (`User_Stamp_ID`) REFERENCES `user_stamps`(`User_Stamp_ID`) ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE `stamp_redemptions` ADD CONSTRAINT `fk_redemption_reward` FOREIGN KEY (`Reward_ID`) REFERENCES `rewards`(`Reward_ID`) ON DELETE RESTRICT ON UPDATE CASCADE;

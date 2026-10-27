@@ -99,6 +99,16 @@ export const swaggerSpec = swaggerJSDoc({
             Status: { type: "string", example: "COMPLETED" },
           },
         },
+        CitizenPaymentRequest: {
+          type: "object",
+          required: ["Merchant_ID", "Total_Amount", "District_ID"],
+          properties: {
+            Merchant_ID: { type: "integer", example: 1 },
+            Total_Amount: { type: "number", exclusiveMinimum: 0, example: 100 },
+            District_ID: { type: "integer", example: 1 },
+            Stamp_Count: { type: "integer", minimum: 0, default: 0, description: "1 ดวง = 1 บาท ใช้ได้ไม่เกิน 50% ของส่วนที่ผู้ใช้ต้องจ่าย และนับรวมในวงเงินรัฐ 200 บาทต่อวัน", example: 20 },
+          },
+        },
         MissionCreateRequest: {
           type: "object",
           required: [
@@ -260,8 +270,17 @@ export const swaggerSpec = swaggerJSDoc({
       "/api/users/me/stamps": {
         get: {
           tags: ["District Stamp"],
-          summary: "ดู Stamp ที่สะสม",
+          summary: "ดู Stamp คงเหลือที่ยังใช้จ่ายหรือแลกรางวัลได้",
           security: [{ bearerAuth: [] }],
+          responses: okResponse(),
+        },
+      },
+      "/api/user/pay": {
+        post: {
+          tags: ["Citizen"],
+          summary: "ชำระเงินด้วยกระเป๋า สิทธิรัฐ และสแตมป์ (ร้านได้รับยอดเต็ม)",
+          security: [{ bearerAuth: [] }],
+          requestBody: jsonBody("CitizenPaymentRequest"),
           responses: okResponse(),
         },
       },

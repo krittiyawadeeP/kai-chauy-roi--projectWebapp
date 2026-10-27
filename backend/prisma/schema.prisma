@@ -146,6 +146,7 @@ model sales_transactions {
   Total_Amount            Decimal                   @db.Decimal(12, 2)
   User_Paid_Amount        Decimal                   @default(0.00) @db.Decimal(12, 2)
   Gov_Subsidized_Amount   Decimal                   @default(0.00) @db.Decimal(12, 2)
+  Stamp_Paid_Amount       Decimal                   @default(0.00) @db.Decimal(12, 2)
   Tx_Timestamp            DateTime                  @db.DateTime(0)
   District_ID             Int
   Status                  String                    @db.VarChar(30)
@@ -153,6 +154,7 @@ model sales_transactions {
   merchants               merchants                 @relation(fields: [Merchant_ID], references: [Mch_ID], map: "fk_transaction_merchant")
   users                   users                     @relation(fields: [User_ID], references: [User_ID], map: "fk_transaction_user")
   stamp_earn_transactions stamp_earn_transactions[]
+  stamp_spend_transactions stamp_spend_transactions[]
 
   @@index([District_ID], map: "fk_transaction_district")
   @@index([Merchant_ID], map: "fk_transaction_merchant")
@@ -169,6 +171,15 @@ model stamp_earn_transactions {
 
   @@id([User_Stamp_ID, Tx_ID])
   @@index([Tx_ID], map: "fk_stamp_earn_transaction")
+}
+
+model stamp_spend_transactions {
+  User_Stamp_ID      BigInt             @id
+  Tx_ID              BigInt
+  sales_transactions sales_transactions @relation(fields: [Tx_ID], references: [Tx_ID], onDelete: Restrict, map: "fk_stamp_spend_transaction")
+  user_stamps        user_stamps        @relation(fields: [User_Stamp_ID], references: [User_Stamp_ID], onDelete: Restrict, map: "fk_stamp_spend_user_stamp")
+
+  @@index([Tx_ID], map: "fk_stamp_spend_transaction")
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
@@ -199,6 +210,7 @@ model user_stamps {
   Qualifying_Amount       Decimal?                  @db.Decimal(12, 2)
   Earned_At               DateTime                  @db.DateTime(0)
   stamp_earn_transactions stamp_earn_transactions[]
+  stamp_spend_transactions stamp_spend_transactions?
   missions                missions?                 @relation(fields: [Mission_ID], references: [Mission_ID], map: "fk_user_stamp_mission")
   district_stamps         district_stamps           @relation(fields: [Stamp_ID], references: [Stamp_ID], map: "fk_user_stamp_stamp")
   users                   users                     @relation(fields: [User_ID], references: [User_ID], onDelete: Cascade, map: "fk_user_stamp_user")
