@@ -48,6 +48,8 @@ model districts {
   Dist_ID            Int                  @id @default(autoincrement())
   Dist_Name          String               @db.VarChar(100)
   Prov_ID            Int
+  Stamp_Min_Spend    Decimal              @default(150.00) @db.Decimal(12, 2)
+  Stamp_Reward_Count Int                  @default(1)
   district_stamps    district_stamps[]
   provinces          provinces            @relation(fields: [Prov_ID], references: [Prov_ID], map: "fk_district_province")
   merchants          merchants[]

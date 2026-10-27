@@ -4,6 +4,7 @@ import { requireAdmin } from "../lib/auth";
 import { badRequest, notFound, sendJson, toNumber } from "../lib/http";
 import { prisma } from "../lib/prisma";
 import { dashboardRoutes } from "../dashboard/dashboard.routes";
+import { missionHistoryRoutes } from '../dashboard/mission-history.routes';
 import { grantRoutes } from "../grants/grants.routes";
 import { policyRoutes } from "../policy/policy.routes";
 import { bangkokDate, eligibleMissionSlots, suggestMission, summarizeSales } from "../lib/sales-mission";
@@ -14,6 +15,7 @@ export const adminRoutes = Router();
 
 adminRoutes.use(requireAdmin);
 adminRoutes.use("/dashboard", dashboardRoutes);
+adminRoutes.use('/mission-history', missionHistoryRoutes);
 adminRoutes.use("/grants", grantRoutes);
 adminRoutes.use("/policy", policyRoutes);
 
@@ -157,47 +159,9 @@ adminRoutes.post('/merchants/:merchantId/mission-suggestion', async (req, res) =
   }
 });
 
-adminRoutes.post("/missions", async (req, res) => {
-  const {
-    Mission_Name,
-    Description,
-    Target_Merchant_ID,
-    Max_Recipients,
-    Start_DateTime,
-    End_DateTime,
-    Status,
-  } = req.body;
-
-  if (!Mission_Name || !Target_Merchant_ID || !Max_Recipients || !Start_DateTime || !End_DateTime) {
-    return badRequest(
-      res,
-      "Mission_Name, Target_Merchant_ID, Max_Recipients, Start_DateTime, and End_DateTime are required",
-    );
-  }
-
-  const start = new Date(Start_DateTime);
-  const end = new Date(End_DateTime);
-  if (!Number.isInteger(Target_Merchant_ID) || !Number.isInteger(Max_Recipients) || Max_Recipients < 1 ||
-      !Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end <= start) {
-    return badRequest(res, 'Invalid merchant, recipient limit or mission time');
-  }
-
-  const merchant = await prisma.merchants.findUnique({ where: { Mch_ID: Target_Merchant_ID }, select: { Mch_ID: true } });
-  if (!merchant) return notFound(res, 'Merchant not found');
-
-  const mission = await prisma.missions.create({
-    data: {
-      Mission_Name,
-      Description,
-      Target_Merchant_ID,
-      Max_Recipients,
-      Start_DateTime: start,
-      End_DateTime: end,
-      Status: Status ?? "ACTIVE",
-    },
-  });
-
-  sendJson(res, mission, 201);
+adminRoutes.post("/missions", (_req, res) => {
+  res.set('Allow', 'GET');
+  sendJson(res, { message: 'ภารกิจสร้างจากผลวิเคราะห์รายวันเท่านั้น' }, 405);
 });
 
 adminRoutes.get("/missions", async (_req, res) => {
@@ -293,18 +257,61 @@ adminRoutes.patch("/missions/:missionId", async (req, res) => {
   sendJson(res, mission);
 });
 
-adminRoutes.post("/stamps", async (req, res) => {
-  const { Stamp_Name, District_ID } = req.body;
+const stampDetails = {
+  districts: { include: { provinces: true } },
+  _count: { select: { user_stamps: true } },
+} as const;
 
-  if (!Stamp_Name || !District_ID) {
-    return badRequest(res, "Stamp_Name and District_ID are required");
+adminRoutes.get('/stamps', async (_req, res) => {
+  const districts = await prisma.districts.findMany({
+    include: {
+      provinces: true,
+      district_stamps: { orderBy: { Stamp_ID: 'asc' }, select: { Stamp_Name: true, _count: { select: { user_stamps: true } } } },
+    },
+    orderBy: [{ Prov_ID: 'asc' }, { Dist_Name: 'asc' }],
+  });
+  sendJson(res, districts.map(district => ({
+    districtId: district.Dist_ID,
+    districtName: district.Dist_Name,
+    provinceId: district.Prov_ID,
+    provinceName: district.provinces.Prov_Name,
+    stampName: district.district_stamps[0]?.Stamp_Name ?? `แสตมป์${district.Dist_Name}`,
+    minSpend: Number(district.Stamp_Min_Spend),
+    rewardCount: district.Stamp_Reward_Count,
+    issuedCount: district.district_stamps.reduce((total, stamp) => total + stamp._count.user_stamps, 0),
+  })));
+});
+
+adminRoutes.patch('/stamps/districts/:districtId', async (req, res) => {
+  const districtId = toNumber(req.params.districtId);
+  const { minSpend, rewardCount } = req.body ?? {};
+  if (!districtId || !Number.isSafeInteger(districtId) || districtId <= 0) return badRequest(res, 'รหัสอำเภอไม่ถูกต้อง');
+  if (typeof minSpend !== 'number' || !Number.isFinite(minSpend) || minSpend <= 0 || minSpend > 9999999999.99 || Math.abs(minSpend * 100 - Math.round(minSpend * 100)) > 0.0001) {
+    return badRequest(res, 'ยอดขั้นต่ำต้องมากกว่า 0 และมีทศนิยมไม่เกิน 2 ตำแหน่ง');
+  }
+  if (!Number.isSafeInteger(rewardCount) || rewardCount < 1 || rewardCount > 100) return badRequest(res, 'จำนวนแสตมป์ต้องเป็นจำนวนเต็ม 1–100 ดวง');
+  if (!await prisma.districts.findUnique({ where: { Dist_ID: districtId } })) return notFound(res, 'ไม่พบอำเภอ');
+  const district = await prisma.districts.update({
+    where: { Dist_ID: districtId }, data: { Stamp_Min_Spend: minSpend, Stamp_Reward_Count: rewardCount },
+  });
+  sendJson(res, { districtId: district.Dist_ID, minSpend: Number(district.Stamp_Min_Spend), rewardCount: district.Stamp_Reward_Count });
+});
+
+adminRoutes.post("/stamps", async (req, res) => {
+  const { Stamp_Name, District_ID } = req.body ?? {};
+  const name = typeof Stamp_Name === 'string' ? Stamp_Name.trim() : '';
+  if (!name || name.length > 200) return badRequest(res, 'ชื่อแสตมป์ต้องมีความยาว 1–200 ตัวอักษร');
+  if (!Number.isSafeInteger(District_ID) || District_ID <= 0) return badRequest(res, 'กรุณาเลือกอำเภอ / เขตที่ถูกต้อง');
+  if (!await prisma.districts.findUnique({ where: { Dist_ID: District_ID } })) {
+    return badRequest(res, 'ไม่พบอำเภอ / เขตที่เลือก');
   }
 
   const stamp = await prisma.district_stamps.create({
     data: {
-      Stamp_Name,
+      Stamp_Name: name,
       District_ID,
     },
+    include: stampDetails,
   });
 
   sendJson(res, stamp, 201);
@@ -313,20 +320,27 @@ adminRoutes.post("/stamps", async (req, res) => {
 adminRoutes.patch("/stamps/:stampId", async (req, res) => {
   const stampId = toNumber(req.params.stampId);
 
-  if (!stampId) {
+  if (!stampId || !Number.isSafeInteger(stampId) || stampId <= 0) {
     return badRequest(res, "Invalid stampId");
   }
 
-  const { Stamp_Name, District_ID } = req.body;
+  const current = await prisma.district_stamps.findUnique({ where: { Stamp_ID: stampId } });
+  if (!current) return notFound(res, 'ไม่พบแสตมป์');
+  const { Stamp_Name, District_ID } = req.body ?? {};
+  if (District_ID !== undefined && District_ID !== current.District_ID) {
+    return badRequest(res, 'ไม่สามารถย้ายอำเภอของแสตมป์ได้ กรุณาสร้างแสตมป์สำหรับอำเภอใหม่');
+  }
+  const name = Stamp_Name === undefined ? current.Stamp_Name : typeof Stamp_Name === 'string' ? Stamp_Name.trim() : '';
+  if (!name || name.length > 200) return badRequest(res, 'ชื่อแสตมป์ต้องมีความยาว 1–200 ตัวอักษร');
 
   const stamp = await prisma.district_stamps.update({
     where: {
       Stamp_ID: stampId,
     },
     data: {
-      Stamp_Name,
-      District_ID,
+      Stamp_Name: name,
     },
+    include: stampDetails,
   });
 
   sendJson(res, stamp);

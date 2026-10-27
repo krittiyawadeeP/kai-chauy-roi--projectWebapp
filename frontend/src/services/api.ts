@@ -47,10 +47,19 @@ async function request<T = unknown>(
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  const response = await fetch(url, {
-    ...options,
-    headers,
-  });
+  let response: Response;
+  for (let attempt = 0; ; attempt++) {
+    options.signal?.throwIfAborted();
+    try {
+      response = await fetch(url, { ...options, headers });
+      if (options.method !== 'GET' || attempt >= 2 || ![502, 503, 504].includes(response.status)) break;
+      await response.body?.cancel();
+    } catch (error) {
+      if (options.method !== 'GET' || attempt >= 2 || options.signal?.aborted || !(error instanceof TypeError)) throw error;
+    }
+    // Backend restarts briefly interrupt reads; never replay a write automatically.
+    await new Promise(resolve => setTimeout(resolve, 750 * (attempt + 1)));
+  }
 
   const contentType = response.headers.get('content-type') || '';
   const isJson = contentType.includes('application/json');

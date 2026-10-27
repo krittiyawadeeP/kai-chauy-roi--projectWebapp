@@ -7,6 +7,7 @@ import { merchantCategory } from "../lib/merchant-category";
 import { hashPin, validPin } from "../lib/pin";
 import { getCurrentPolicy } from '../policy/policy';
 import { awardMissionStamp } from '../lib/mission-stamp';
+import { awardPurchaseStamps } from '../lib/purchase-stamp';
 import { remainingDailySubsidy } from "../lib/daily-subsidy";
 
 export const merchantRoutes = Router();
@@ -407,7 +408,8 @@ merchantRoutes.post("/me/sales", requireMerchant, async (req: AuthRequest, res) 
       select: { Mission_ID: true },
     });
     const missionStamp = mission ? await awardMissionStamp(tx, mission.Mission_ID, sale) : null;
-    return { ...sale, earnedStamp: missionStamp?.created ? missionStamp.stamp : null };
+    const purchaseReward = await awardPurchaseStamps(tx, sale);
+    return { ...sale, earnedStamp: missionStamp?.created ? missionStamp.stamp : null, awardedStamp: purchaseReward.stamp, awardedStampCount: purchaseReward.count };
     }, { isolationLevel: 'ReadCommitted' });
 
     sendJson(res, transaction, 201);

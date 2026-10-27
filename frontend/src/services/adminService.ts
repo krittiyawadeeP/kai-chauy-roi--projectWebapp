@@ -1,5 +1,6 @@
 import { api } from './api';
 import type { Region } from '../../../shared/regions';
+import type { MissionHistoryReport } from '../../../shared/mission-history';
 
 export interface ProvinceMetrics {
   code: string; name: string; region: Region; registered: boolean;
@@ -77,18 +78,6 @@ export interface DailyMissionRow {
 
 export interface DailyMissionReport { analysisDate: string; rows: DailyMissionRow[] }
 
-export interface AdminMissionRecord {
-  Mission_ID: number;
-  Mission_Name: string;
-  Description: string | null;
-  Max_Recipients: number;
-  Start_DateTime: string;
-  End_DateTime: string;
-  Status: string;
-  merchants: { Shop_Name: string };
-  user_stamps: unknown[];
-}
-
 export interface PolicyRecord {
   Policy_ID: number | null;
   Gov_Pay_Ratio: string;
@@ -100,6 +89,10 @@ export interface PolicyRecord {
 }
 
 export interface RewardProvince { id: number; name: string; districtCount: number; requiredStampCount: number }
+export interface DistrictStampOverview {
+  districtId: number; districtName: string; provinceId: number; provinceName: string;
+  stampName: string; issuedCount: number; minSpend: number; rewardCount: number;
+}
 export interface AdminRewardRecord {
   Reward_ID: number; Reward_Name: string; Description: string | null; Reward_Type: string | null;
   Province_ID: number | null; Required_Stamp_Count: number; Image_URL: string | null;
@@ -111,11 +104,14 @@ export interface OtopRewardInput {
 }
 
 export const adminService = {
+  getStamps: () => api.get<DistrictStampOverview[]>('/admin/stamps'),
+  setStampRule: (districtId: number, data: { minSpend: number; rewardCount: number }) =>
+    api.patch<{ districtId: number; minSpend: number; rewardCount: number }>(`/admin/stamps/districts/${districtId}`, data),
   getMerchants: () => api.get<{ Mch_ID: number; Shop_Name: string; Category: string | null; districts?: { Dist_Name: string; Prov_ID: number; provinces?: { Prov_Name: string } } }[]>('/admin/merchants'),
   suggestSalesMission: (merchantId: number) => api.post<SalesMissionAnalysis>(`/admin/merchants/${merchantId}/mission-suggestion`),
   suggestDailySalesMission: (provinceId: number) => api.post<DailySalesMissionAnalysis>(`/admin/provinces/${provinceId}/daily-mission-suggestion`),
   getDailyMissionAnalyses: () => api.get<DailyMissionReport>('/admin/daily-mission-analyses'),
-  getMissions: () => api.get<AdminMissionRecord[]>('/admin/missions'),
+  getMissionHistory: (date: string, signal?: AbortSignal) => api.get<MissionHistoryReport>(`/admin/mission-history?date=${encodeURIComponent(date)}`, { signal }),
   getRewards: () => api.get<AdminRewardRecord[]>('/admin/rewards'),
   getRewardProvinces: () => api.get<RewardProvince[]>('/admin/rewards/provinces'),
   createOtopReward: (data: OtopRewardInput) => api.post<AdminRewardRecord>('/admin/rewards', data),
@@ -146,15 +142,6 @@ export const adminService = {
     Note?: string;
   }) => api.post<PolicyRecord>('/admin/policy', data),
 
-  createMission: (missionData: {
-    Target_Merchant_ID: number;
-    Mission_Name: string;
-    Description: string;
-    Max_Recipients: number;
-    Start_DateTime: string;
-    End_DateTime: string;
-    Status: 'ACTIVE';
-  }) => api.post('/admin/missions', missionData),
   updateMission: (missionId: number, data: {
     Mission_Name: string; Description: string; Max_Recipients: number;
     Start_DateTime: string; End_DateTime: string; Status: string;

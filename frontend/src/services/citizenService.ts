@@ -1,11 +1,14 @@
 import { api } from './api';
 
+export interface StampRule { minSpend: number; rewardCount: number; stampName: string }
+
 export interface MissionFilter {
   prov_id?: number;
   dist_id?: number;
 }
 
 export const citizenService = {
+  getStampRule: (districtId: number) => api.get<StampRule>(`/districts/${districtId}/stamp-rule`),
   getMissions: (params?: MissionFilter) => {
     const query = new URLSearchParams();
     if (params?.prov_id) query.set('prov_id', String(params.prov_id));
@@ -56,6 +59,7 @@ export const citizenService = {
       wallet: { walletId: number; userId: number; balance: number; updatedAt: string };
       grant: { grantId: number; userId: number; totalGrantAmount: number; remainingAmount: number };
       awardedStamp?: any;
+      awardedStampCount: number;
     }>('/user/pay', data);
   },
 

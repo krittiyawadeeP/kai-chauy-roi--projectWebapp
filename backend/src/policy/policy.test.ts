@@ -24,6 +24,7 @@ test('feature routes keep their URLs and admin guards; merchant sales use the gl
   let merchantCredits = 0;
   let allowPayment = true;
   let dailySubsidySpent = 0;
+  let issuedPurchaseStamps = 0;
   const spentStampIds = new Set<bigint>();
   const rewardRedemptions: any[] = [];
   let rewardRequired = 5;
@@ -66,14 +67,18 @@ test('feature routes keep their URLs and admin guards; merchant sales use the gl
       upsert: async ({ update }: any) => { merchantCredits += update.Balance.increment; },
     },
     merchants: { findUnique: async () => ({ Mch_ID: 1, Dist_ID: 99 }) },
-    user_stamps: { findMany: async () => Array.from({ length: 25 }, (_, index) => ({ User_Stamp_ID: BigInt(index + 1), Stamp_ID: 1, User_ID: 10, Earned_At: new Date(), Qualifying_Amount: null })).filter(stamp => !spentStampIds.has(stamp.User_Stamp_ID)) },
+    user_stamps: {
+      findMany: async () => Array.from({ length: 25 }, (_, index) => ({ User_Stamp_ID: BigInt(index + 1), Stamp_ID: 1, User_ID: 10, Earned_At: new Date(), Qualifying_Amount: null })).filter(stamp => !spentStampIds.has(stamp.User_Stamp_ID)),
+      create: async ({ data }: any) => { issuedPurchaseStamps++; assert.equal(data.stamp_earn_transactions.create.Tx_ID, 1n); return data; },
+    },
     stamp_redemptions: {
       findMany: async () => rewardRedemptions.map(redemption => ({ Stamp_ID: redemption.Stamp_ID, Quantity: redemption.Quantity, rewards: { Required_Stamp_Count: redemption.Required_Stamp_Count, Reward_Type: 'DISCOUNT' } })),
       create: async ({ data }: any) => { rewardRedemptions.push({ ...data, Required_Stamp_Count: rewardRequired }); return data; },
     },
     stamp_spend_transactions: { createMany: async ({ data }: any) => { for (const stamp of data) spentStampIds.add(stamp.User_Stamp_ID); } },
     missions: { findFirst: async () => null },
-    district_stamps: { findFirst: async () => null },
+    districts: { findUniqueOrThrow: async () => ({ Dist_ID: 99, Dist_Name: 'พระนคร', Stamp_Min_Spend: 150, Stamp_Reward_Count: 2 }) },
+    district_stamps: { findFirst: async () => ({ Stamp_ID: 1, Stamp_Name: 'แสตมป์พระนคร', District_ID: 99 }) },
   }));
   const server = app.listen(0, '127.0.0.1');
   await new Promise<void>(resolve => server.once('listening', resolve));
@@ -125,6 +130,8 @@ test('feature routes keep their URLs and admin guards; merchant sales use the gl
     const first = await sale.json() as any;
     assert.equal(first.Gov_Subsidized_Amount, 150);
     assert.equal(first.User_Paid_Amount, 50);
+    assert.equal(first.awardedStampCount, 2);
+    assert.equal(issuedPurchaseStamps, 2);
     assert.equal(walletDebits, 50);
     assert.equal(merchantCredits, 200);
     await request('/admin/policy', admin, { Gov_Pay_Ratio: 0.3, Grant_Amount: 1500, Note: 'ปรับนโยบายรอบถัดไป' });
@@ -138,6 +145,8 @@ test('feature routes keep their URLs and admin guards; merchant sales use the gl
     const citizenResult = await citizenPayment.json() as any;
     assert.equal(citizenResult.transaction.govSubsidizedAmount, 0);
     assert.equal(citizenResult.transaction.userPaidAmount, 100);
+    assert.equal(citizenResult.awardedStampCount, 0);
+    assert.equal(issuedPurchaseStamps, 4, 'a sub-threshold citizen payment does not issue stamps');
     assert.equal(merchantCredits, 500, 'citizen payment must credit the merchant wallet');
     dailySubsidySpent = 0;
     policy = { ...policy, Gov_Pay_Ratio: 0.6, User_Pay_Ratio: 0.4 };
@@ -163,6 +172,11 @@ test('feature routes keep their URLs and admin guards; merchant sales use the gl
     assert.equal((await request('/merchants/me/sales', merchant, { User_ID: 10, Total_Amount: 200, District_ID: 99 })).status, 400);
     assert.equal(merchantCredits, 600, 'failed payment must not credit the merchant');
     assert.equal(first.Gov_Subsidized_Amount, 150, 'historical transaction amounts stay unchanged');
+    allowPayment = true; dailySubsidySpent = 0;
+    const qualifying = await request('/user/pay', citizen, { Merchant_ID: 1, Total_Amount: 150, District_ID: 99 });
+    assert.equal(qualifying.status, 200);
+    assert.equal((await qualifying.json() as any).awardedStampCount, 2);
+    assert.equal(issuedPurchaseStamps, 6);
   } finally {
     [admin, merchant, government, citizen].forEach(destroySession);
     originals.reverse().forEach(restore => restore());

@@ -12,6 +12,7 @@ import { prisma } from "../lib/prisma";
 import { hashPin, validPin } from "../lib/pin";
 import { getCurrentPolicy } from '../policy/policy';
 import { awardMissionStamp } from '../lib/mission-stamp';
+import { awardPurchaseStamps } from '../lib/purchase-stamp';
 import { collectedDistrictCount, requiredDistrictStamps } from '../lib/otop-reward';
 import { remainingDailySubsidy } from "../lib/daily-subsidy";
 import { spendableStamps } from '../lib/spendable-stamps';
@@ -38,6 +39,20 @@ citizenRoutes.get("/districts", async (req, res) => {
   });
 
   sendJson(res, districts);
+});
+
+citizenRoutes.get('/districts/:districtId/stamp-rule', async (req, res) => {
+  const districtId = toNumber(req.params.districtId);
+  if (!districtId || !Number.isSafeInteger(districtId) || districtId <= 0) return badRequest(res, 'Invalid districtId');
+  const district = await prisma.districts.findUnique({
+    where: { Dist_ID: districtId },
+    include: { district_stamps: { orderBy: { Stamp_ID: 'asc' }, take: 1 } },
+  });
+  if (!district) return notFound(res, 'ไม่พบอำเภอ');
+  sendJson(res, {
+    minSpend: Number(district.Stamp_Min_Spend), rewardCount: district.Stamp_Reward_Count,
+    stampName: district.district_stamps[0]?.Stamp_Name ?? `แสตมป์${district.Dist_Name}`,
+  });
 });
 
 citizenRoutes.post("/user", async (req, res) => {
@@ -668,23 +683,7 @@ citizenRoutes.post("/user/pay", requireAuth, async (req: AuthRequest, res) => {
         create: { Merchant_ID: merchantId, Balance: totalAmount, Status: "ACTIVE" },
       });
 
-      const districtStamp = await tx.district_stamps.findFirst({
-        where: { District_ID: districtId },
-      });
-
-      let awardedStamp = null;
-      if (districtStamp) {
-        await tx.user_stamps.create({
-          data: {
-            User_ID: req.user!.userId,
-            Stamp_ID: districtStamp.Stamp_ID,
-            Earn_Source: "CO_PAY",
-            Qualifying_Amount: totalAmount,
-            Earned_At: new Date(),
-          },
-        });
-        awardedStamp = districtStamp;
-      }
+      const stampReward = await awardPurchaseStamps(tx, transaction);
 
       return {
         transaction: {
@@ -712,7 +711,8 @@ citizenRoutes.post("/user/pay", requireAuth, async (req: AuthRequest, res) => {
           totalGrantAmount: Number(updatedGrant.Total_Grant_Amount),
           remainingAmount: Number(updatedGrant.Remaining_Amount),
         },
-        awardedStamp,
+        awardedStamp: stampReward.stamp,
+        awardedStampCount: stampReward.count,
       };
     }, {
       isolationLevel: 'ReadCommitted',

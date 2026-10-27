@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Building2, LayoutDashboard, Landmark, FileText, Store, ChartNoAxesCombined, Gift, LogOut, ChevronRight, ArrowLeft } from 'lucide-react';
+import { Building2, LayoutDashboard, Landmark, FileText, Store, ChartNoAxesCombined, Gift, Stamp, LogOut, ChevronRight, ArrowLeft } from 'lucide-react';
 import { AdminLoginPage } from './AdminLoginPage';
 import { AdminPortalView } from './AdminPortalView';
 import { GeographicDashboard } from './GeographicDashboard';
@@ -9,12 +9,13 @@ import { authService } from '../../services/authService';
 import { useApp } from '../../context/AppContext';
 import './admin.css';
 
-type AdminTab = 'dashboard' | 'budget' | 'ai' | 'missions' | 'rewards' | 'merchants';
+type AdminTab = 'dashboard' | 'budget' | 'ai' | 'missions' | 'stamps' | 'rewards' | 'merchants';
 const navigation = [
   { key: 'dashboard', label: 'ภาพรวมเศรษฐกิจรายพื้นที่', icon: LayoutDashboard },
   { key: 'budget', label: 'นโยบายอัตราร่วมจ่าย', icon: Landmark },
   { key: 'ai', label: 'วิเคราะห์สถานการณ์ร้านค้า', icon: ChartNoAxesCombined },
-  { key: 'missions', label: 'จัดการภารกิจโครงการ', icon: FileText },
+  { key: 'missions', label: 'ประวัติและผลลัพธ์ภารกิจ', icon: FileText },
+  { key: 'stamps', label: 'แสตมป์รายอำเภอ', icon: Stamp },
   { key: 'rewards', label: 'จัดการของรางวัล OTOP', icon: Gift },
   { key: 'merchants', label: 'ทะเบียนร้านค้า', icon: Store },
 ] as const;

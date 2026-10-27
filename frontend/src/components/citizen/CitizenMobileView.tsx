@@ -302,7 +302,7 @@ export const CitizenMobileView: React.FC = () => {
                     {featuredAiShop ? `${featuredAiShop.merchantName} (${featuredAiShop.districtName})` : 'ร้านกาแฟโบราณลุงเปี๊ยก (ท่าน้ำนนท์)'}
                   </h4>
                   <p className="text-[11px] text-amber-800 font-medium mt-0.5 line-clamp-1">
-                    {featuredAiShop ? featuredAiShop.missionTitle : 'ซื้อครบ 150 บาท รับแสตมป์ของดีเมืองนนท์ทันที'}
+                    {featuredAiShop ? featuredAiShop.missionTitle : 'ซื้อครบตามเกณฑ์พื้นที่ รับแสตมป์ประจำอำเภอ'}
                   </p>
                   <p className="text-[10px] text-slate-400 mt-1">
                     {featuredAiShop ? `${featuredAiShop.criticalHours} • AI วิเคราะห์ฟื้นฟูร้านค้า` : 'ช่วงบ่าย 13:00 - 16:00 น. • จำกัด 10 สิทธิ์แรก'}
@@ -427,7 +427,7 @@ export const CitizenMobileView: React.FC = () => {
                       </div>
                       <div className="flex justify-between text-slate-600">
                         <span>เงื่อนไขรับแสตมป์:</span>
-                        <strong className="text-[#1769ed]">ซื้อครบ 150 บาท (สิทธิ์ 60/40)</strong>
+                        <strong className="text-[#1769ed]">ซื้อครบตามเกณฑ์อำเภอ (สิทธิ์ร่วมจ่าย)</strong>
                       </div>
                       <div className="flex justify-between text-slate-600">
                         <span>ช่วงเวลาเร่งด่วน:</span>

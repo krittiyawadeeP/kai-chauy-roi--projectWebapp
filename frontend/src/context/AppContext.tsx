@@ -77,7 +77,7 @@ interface AppContextType {
     merchantId: number;
     totalAmount: number;
     note?: string;
-  }) => Promise<{ success: boolean; message: string; earnedStamp?: DistrictStamp; tx?: SalesTransaction }>;
+  }) => Promise<{ success: boolean; message: string; earnedStamp?: DistrictStamp; earnedStampCount?: number; tx?: SalesTransaction }>;
   redeemReward: (rewardId: number) => { success: boolean; message: string; redemption?: StampRedemption };
   tradeStamp: (stampId: number, targetName: string) => { success: boolean; message: string };
   topupWallet: (amount: number) => void;
@@ -733,7 +733,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (res.awardedStamp) {
             awardedStamp = districtStamps.find(s => s.stampId === res.awardedStamp.Stamp_ID) || {
               stampId: res.awardedStamp.Stamp_ID,
-              stampName: res.awardedStamp.district_stamps?.Stamp_Name || 'แสตมป์ดิจิทัล',
+              stampName: res.awardedStamp.Stamp_Name || 'แสตมป์ดิจิทัล',
               distName: targetShop.address,
               distId: targetShop.distId,
               provId: targetShop.provId,
@@ -769,6 +769,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             success: true,
             message: `ชำระเงินสำเร็จ ฿${totalAmount.toLocaleString()} (คุณจ่าย ฿${newTx.userPaidAmount.toLocaleString()}, รัฐช่วยจ่าย ฿${newTx.govSubsidizedAmount.toLocaleString()})`,
             earnedStamp: awardedStamp,
+            earnedStampCount: res.awardedStampCount,
             tx: newTx,
           };
         }

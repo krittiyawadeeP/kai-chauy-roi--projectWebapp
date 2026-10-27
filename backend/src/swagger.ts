@@ -132,8 +132,20 @@ export const swaggerSpec = swaggerJSDoc({
           type: "object",
           required: ["Stamp_Name", "District_ID"],
           properties: {
-            Stamp_Name: { type: "string", example: "แสตมป์ปทุมวัน" },
+            Stamp_Name: { type: "string", minLength: 1, maxLength: 200, example: "แสตมป์ปทุมวัน" },
             District_ID: { type: "integer", example: 1 },
+          },
+        },
+        StampUpdateRequest: {
+          type: 'object',
+          required: ['Stamp_Name'],
+          properties: { Stamp_Name: { type: 'string', minLength: 1, maxLength: 200 } },
+        },
+        DistrictStampRuleRequest: {
+          type: 'object', required: ['minSpend', 'rewardCount'],
+          properties: {
+            minSpend: { type: 'number', minimum: 0.01, maximum: 9999999999.99, multipleOf: 0.01, example: 150 },
+            rewardCount: { type: 'integer', minimum: 1, maximum: 100, example: 1 },
           },
         },
         RewardCreateRequest: {
@@ -372,17 +384,18 @@ export const swaggerSpec = swaggerJSDoc({
         },
       },
       "/api/admin/missions": {
-        post: {
-          tags: ["Admin"],
-          summary: "สร้าง Mission",
-          security: [{ bearerAuth: [] }],
-          requestBody: jsonBody("MissionCreateRequest"),
-          responses: createdResponse(),
-        },
         get: {
           tags: ["Admin"],
           summary: "ดูรายการ Mission",
           security: [{ bearerAuth: [] }],
+          responses: okResponse(),
+        },
+      },
+      '/api/admin/mission-history': {
+        get: {
+          tags: ['Admin'], summary: 'ประวัติภารกิจจากผลวิเคราะห์ครบ 77 จังหวัด พร้อมเปรียบเทียบยอดขาย',
+          security: [{ bearerAuth: [] }],
+          parameters: [{ name: 'date', in: 'query', schema: { type: 'string', format: 'date' }, description: 'วันที่จัดภารกิจตามเวลาไทย ค่าเริ่มต้นวันนี้' }],
           responses: okResponse(),
         },
       },
@@ -404,6 +417,12 @@ export const swaggerSpec = swaggerJSDoc({
         },
       },
       "/api/admin/stamps": {
+        get: {
+          tags: ['Admin'],
+          summary: 'ทะเบียนแสตมป์ทุกอำเภอ รวมพื้นที่ที่ยังไม่มีการออกแสตมป์',
+          security: [{ bearerAuth: [] }],
+          responses: okResponse(),
+        },
         post: {
           tags: ["Admin"],
           summary: "เพิ่ม/สร้าง District Stamp",
@@ -415,11 +434,24 @@ export const swaggerSpec = swaggerJSDoc({
       "/api/admin/stamps/{stampId}": {
         patch: {
           tags: ["Admin"],
-          summary: "แก้ไข District Stamp",
+          summary: "แก้ไขชื่อ District Stamp โดยคงอำเภอเดิม",
           security: [{ bearerAuth: [] }],
           parameters: [pathParam("stampId")],
-          requestBody: jsonBody("StampCreateRequest"),
+          requestBody: jsonBody("StampUpdateRequest"),
           responses: okResponse("Stamp updated"),
+        },
+      },
+      '/api/admin/stamps/districts/{districtId}': {
+        patch: {
+          tags: ['Admin'], summary: 'ตั้งยอดซื้อขั้นต่ำต่อบิลและจำนวนแสตมป์ของอำเภอ มีผลกับบิลถัดไป',
+          security: [{ bearerAuth: [] }], parameters: [pathParam('districtId')],
+          requestBody: jsonBody('DistrictStampRuleRequest'), responses: okResponse(),
+        },
+      },
+      '/api/districts/{districtId}/stamp-rule': {
+        get: {
+          tags: ['Citizen'], summary: 'ดูเกณฑ์รับแสตมป์ปัจจุบันของอำเภอก่อนชำระเงิน',
+          parameters: [pathParam('districtId')], responses: okResponse(),
         },
       },
       "/api/admin/rewards": {

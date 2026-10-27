@@ -3,6 +3,7 @@ import confetti from 'canvas-confetti';
 import { useApp } from '../../context/AppContext';
 import { Merchant, DistrictStamp } from '../../types';
 import { Icon } from '../common/Icon';
+import { citizenService, type StampRule } from '../../services/citizenService';
 
 interface QRScannerModalProps {
   isOpen: boolean;
@@ -15,13 +16,15 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
   onClose,
   presetMerchantId
 }) => {
-  const { merchants, executePayment, wallet, userGrant, missions, districtStamps, topupWallet } = useApp();
+  const { merchants, executePayment, wallet, userGrant, topupWallet } = useApp();
 
   const [step, setStep] = useState<'scan' | 'confirm' | 'success'>('scan');
   const [selectedMerchant, setSelectedMerchant] = useState<Merchant | null>(null);
   const [amount, setAmount] = useState<number>(200);
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [awardedStamp, setAwardedStamp] = useState<DistrictStamp | null>(null);
+  const [awardedStampCount, setAwardedStampCount] = useState(0);
+  const [stampRule, setStampRule] = useState<StampRule | null>(null);
   const [cameraActive, setCameraActive] = useState<boolean>(false);
   const [isPaying, setIsPaying] = useState<boolean>(false);
   const [topupSuccess, setTopupSuccess] = useState<string>('');
@@ -33,6 +36,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
       setErrorMsg('');
       setTopupSuccess('');
       setIsPaying(false);
+      setAwardedStamp(null); setAwardedStampCount(0);
       if (presetMerchantId) {
         const m = merchants.find(item => item.mchId === presetMerchantId);
         if (m) {
@@ -53,6 +57,16 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
       setCameraActive(false);
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    let active = true;
+    setStampRule(null);
+    if (!isOpen || !selectedMerchant) return;
+    citizenService.getStampRule(selectedMerchant.distId)
+      .then(rule => { if (active) setStampRule(rule); })
+      .catch(() => { /* Payment still checks the current rule on the server. */ });
+    return () => { active = false; };
+  }, [isOpen, selectedMerchant?.distId]);
 
   if (!isOpen) return null;
 
@@ -92,21 +106,6 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
   const isBalanceEnough = wallet.balance >= userPays;
 
 
-  const matchingMission = selectedMerchant
-    ? missions.find(
-        m =>
-          m.status === 'active' &&
-          (m.targetMerchantId === selectedMerchant.mchId || m.targetDistId === selectedMerchant.distId) &&
-          amount >= m.minSpend
-      )
-    : null;
-
-  const previewStamp = matchingMission
-    ? districtStamps.find(s => s.distId === selectedMerchant?.distId)
-    : amount >= 150 && selectedMerchant
-    ? districtStamps.find(s => s.distId === selectedMerchant.distId)
-    : null;
-
   const handleConfirmPay = async () => {
     if (!selectedMerchant) return;
     setErrorMsg('');
@@ -125,9 +124,8 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
         return;
       }
 
-      if (res.earnedStamp) {
-        setAwardedStamp(res.earnedStamp);
-      }
+      setAwardedStamp(res.earnedStamp ?? null);
+      setAwardedStampCount(res.earnedStamp ? res.earnedStampCount ?? 1 : 0);
 
       setStep('success');
       confetti({
@@ -377,13 +375,14 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
             )}
 
             {/* Stamp bonus hint */}
-            {previewStamp && (
+            {stampRule && (
               <div className="rounded-xl bg-amber-50 p-2.5 border border-amber-200 flex items-center gap-2 text-xs text-amber-900">
                 <span className="grid size-7 place-items-center rounded-lg bg-amber-500 text-white shrink-0">
                   <Icon name="award" className="size-4" />
                 </span>
                 <span className="text-[11px] leading-tight">
-                  ยอดเกิน ฿150 รับ <strong className="font-bold">{previewStamp.stampName}</strong> ฟรี 1 ดวง
+                  ซื้อครบ ฿{stampRule.minSpend.toLocaleString('th-TH')} ต่อบิล รับ <strong className="font-bold">{stampRule.stampName}</strong> {stampRule.rewardCount} ดวง
+                  {amount < stampRule.minSpend && <span className="mt-1 block">ซื้อเพิ่มอีก ฿{(stampRule.minSpend - amount).toLocaleString('th-TH', { maximumFractionDigits: 2 })} เพื่อรับแสตมป์</span>}
                 </span>
               </div>
             )}
@@ -461,7 +460,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
                   className="size-11 rounded-xl object-cover border border-amber-300 shrink-0"
                 />
                 <div>
-                  <span className="text-[10px] font-bold text-amber-700">ได้รับแสตมป์ดิจิทัล!</span>
+                  <span className="text-[10px] font-bold text-amber-700">ได้รับแสตมป์ดิจิทัล {awardedStampCount} ดวง!</span>
                   <p className="text-xs font-bold text-slate-800">{awardedStamp.stampName}</p>
                 </div>
               </div>

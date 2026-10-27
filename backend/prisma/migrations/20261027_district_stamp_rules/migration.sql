@@ -1,0 +1,3 @@
+ALTER TABLE `districts`
+    ADD COLUMN `Stamp_Min_Spend` DECIMAL(12, 2) NOT NULL DEFAULT 150.00,
+    ADD COLUMN `Stamp_Reward_Count` INT NOT NULL DEFAULT 1;

@@ -187,12 +187,14 @@
 | :--- | :--- | :---: | :--- |
 | `GET` | `/api/admin/ai/analysis` | `requireAdmin` | ดูประวัติผลวิเคราะห์ AI ทั้งหมด |
 | `GET` | `/api/admin/merchants` | `requireAdmin` | ดูรายการร้านค้าทั้งหมดพร้อมสถานะยอดขายล่าสุด |
-| `POST` | `/api/admin/missions` | `requireAdmin` | สร้างภารกิจใหม่โดยอ้างอิงร้านค้าเป้าหมาย |
+| `GET` | `/api/admin/mission-history?date=YYYY-MM-DD` | `requireAdmin` | ประวัติภารกิจจากผลวิเคราะห์ที่ทับวันที่เลือกตามเวลาไทย ครบ 77 จังหวัด พร้อมผลเทียบยอดขายกับช่วงอ้างอิง |
 | `GET` | `/api/admin/missions` | `requireAdmin` | ดูรายการภารกิจทั้งหมดในระบบ |
 | `GET` | `/api/admin/missions/:id`| `requireAdmin` | ดูรายละเอียดภารกิจตาม ID |
 | `PATCH` | `/api/admin/missions/:id`| `requireAdmin` | แก้ไขข้อมูลภารกิจหรือปรับสถานะ |
 | `POST` | `/api/admin/rewards` | `requireAdmin` | เพิ่มรายการของรางวัลใหม่ |
 | `GET` | `/api/admin/rewards` | `requireAdmin` | ดูรายการของรางวัลทั้งหมด |
 | `POST` | `/api/admin/stamps` | `requireAdmin` | สร้างแสตมป์ประจำอำเภอใหม่ |
-| `GET` | `/api/admin/stamps` | `requireAdmin` | ดูรายการแสตมป์ประจำอำเภอทั้งหมด |
+| `GET` | `/api/admin/stamps` | `requireAdmin` | ดูทุกอำเภอ พร้อมยอดขั้นต่ำต่อบิล จำนวนดวงที่ให้ และยอดออกแสตมป์ |
+| `PATCH` | `/api/admin/stamps/districts/:districtId` | `requireAdmin` | ตั้ง `{ minSpend, rewardCount }` รายอำเภอ: ยอดขั้นต่ำมากกว่า 0 ทศนิยมไม่เกิน 2 ตำแหน่ง จำนวนดวงเป็นจำนวนเต็ม 1–100 |
+| `GET` | `/api/districts/:districtId/stamp-rule` | Public | ดู `{ minSpend, rewardCount, stampName }` ก่อนชำระเงิน |
 | `GET` | `/api/admin/redemptions` | `requireAdmin` | ดูรายการคำขอแลกรางวัลเพื่ออนุมัติหรือจัดส่ง |

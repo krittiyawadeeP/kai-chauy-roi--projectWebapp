@@ -98,7 +98,7 @@ export const CitizenServicesHubPage: React.FC<CitizenServicesHubPageProps> = ({
         {
           id: 'community_missions',
           name: 'ภารกิจกระตุ้นเศรษฐกิจชุมชน',
-          detail: `ทำภารกิจซื้อสินค้าขั้นต่ำ ฿150 เพื่อรับแสตมป์ดิจิทัลฟรี`,
+          detail: 'ซื้อสินค้าตามเงื่อนไขภารกิจเพื่อรับแสตมป์ดิจิทัล',
           icon: 'flame' as IconName,
           badge: `${missions.length} ภารกิจ`,
           color: 'from-rose-500 to-red-600',

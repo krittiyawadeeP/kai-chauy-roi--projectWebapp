@@ -52,7 +52,7 @@ frontnd/src/
 │   └── admin/               # หน้าจอฝั่งผู้ดูแลระบบ/ภาครัฐ
 │       ├── AdminDashboard.tsx       # แดชบอร์ดภาพรวมผลกระทบเชิงเศรษฐกิจ
 │       ├── AiAnalysisPage.tsx       # แดชบอร์ดวิเคราะห์ยอดขายและชี้เป้าร้านค้า
-│       ├── MissionManagementPage.tsx# ฟอร์มสร้าง Dynamic Mission จากร้าน AI
+│       ├── AdminMissionsPanel.tsx  # ประวัติรายวัน 77 จังหวัดและแดชบอร์ดผลยอดขาย
 │       └── RewardManagementPage.tsx # จัดการรายการของรางวัลและสต็อก
 ├── context/                 # React Context สำหรับ Global State
 │   ├── AuthContext.tsx      # เก็บสถานะการ Login, Token, User Role
@@ -101,7 +101,7 @@ flowchart TD
     CheckRole -->|Admin| AdmFlow["🏛️ Admin Route Group"]
     AdmFlow --> A1["/admin/dashboard (สถิติโครงการ)"]
     AdmFlow --> A2["/admin/ai-analysis (ตรวจจับยอดขายต่ำ)"]
-    AdmFlow --> A3["/admin/missions (สร้าง Dynamic Mission)"]
+    AdmFlow --> A3["ประวัติภารกิจรายวัน 77 จังหวัดและผลยอดขาย"]
     AdmFlow --> A4["/admin/rewards (จัดการของรางวัล)"]
 ```
 
@@ -193,7 +193,7 @@ flowchart TD
 * แสดงชื่อร้านค้าและอำเภอ
 * แสดงอัตราส่วน **Sales Ratio** (เช่น `0.65x ต่ำกว่าค่าเฉลี่ย 35%`)
 * สถานะ **Badge**: สีแดงกระพริบ `[LOW SALES - ต้องการกระตุ้น]`
-* ปุ่มด่วน **"สร้าง Mission กระตุ้นยอดขายทันที"**: เมื่อคลิกจะเปิด Modal ฟอร์มสร้างภารกิจโดยกรอก `Target_Merchant_ID` ให้อัตโนมัติ
+* ภารกิจสร้างจากผลวิเคราะห์รายวันโดยอัตโนมัติ เจ้าหน้าที่เปิดดูผลวิเคราะห์และแก้รายละเอียดได้ ส่วนหน้าประวัติเลือกวันที่จัดเพื่อดูทั้ง 77 จังหวัด พร้อมแดชบอร์ดเปรียบเทียบยอดขายของร้านเดิมกับช่วงอ้างอิง ไม่มีฟอร์มสร้างภารกิจเอง
 
 ---
 
