@@ -77,6 +77,8 @@ interface AppContextType {
     merchantId: number;
     totalAmount: number;
     note?: string;
+    pin?: string;
+    stampCount?: number;
   }) => Promise<{ success: boolean; message: string; earnedStamp?: DistrictStamp; earnedStampCount?: number; tx?: SalesTransaction }>;
   redeemReward: (rewardId: number) => { success: boolean; message: string; redemption?: StampRedemption };
   tradeStamp: (stampId: number, targetName: string) => { success: boolean; message: string };
@@ -303,13 +305,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const mappedUser: User = {
           userId: Number(userRes.User_ID),
           citizenId: userRes.Citizen_ID,
-          name: userRes.Phone ? `คุณ (${userRes.Phone})` : 'ประชาชนผู้ใช้สิทธิ์',
+          name: userRes.Name || (userRes.Phone ? `คุณ (${userRes.Phone})` : 'ประชาชนผู้ใช้สิทธิ์'),
           role: 'citizen',
           phone: userRes.Phone,
           provId: Number(userRes.Province_ID || 1),
           distId: Number(userRes.Dist_ID || 101),
           status: 'approved',
           registeredAt: new Date().toISOString(),
+          hasPin: Boolean(userRes.hasPin || userRes.Pin_Hash),
         };
         setCurrentUser(mappedUser);
         setIsAuthenticated(true);
@@ -386,6 +389,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         distId: Number(dbUser.Dist_ID || 101),
         status: 'approved',
         registeredAt: new Date().toISOString().replace('T', ' ').substring(0, 19),
+        hasPin: Boolean(dbUser.hasPin || dbUser.Pin_Hash),
       };
 
       setUsers(prev => [mappedUser, ...prev.filter(u => u.userId !== mappedUser.userId)]);
@@ -690,11 +694,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const executePayment = async ({
     merchantId,
     totalAmount,
-    note
+    note,
+    pin,
+    stampCount,
   }: {
     merchantId: number;
     totalAmount: number;
     note?: string;
+    pin?: string;
+    stampCount?: number;
   }) => {
     const targetShop = merchants.find(m => m.mchId === merchantId);
     if (!targetShop) {
@@ -713,10 +721,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const govShare = Math.min(requestedGovShare, remainingDaily, userGrant.remainingAmount);
     const userShare = (Math.round(totalAmount * 100) - Math.round(govShare * 100)) / 100;
 
-    if (wallet.balance < userShare) {
+    const stampDiscount = stampCount || 0;
+    const finalUserShare = Math.max(0, Math.round((userShare - stampDiscount) * 100) / 100);
+
+    if (wallet.balance < finalUserShare) {
       return {
         success: false,
-        message: `ยอดเงินในกระเป๋าไม่เพียงพอ (ต้องการ ${userShare.toLocaleString()} บาท มีอยู่ ${wallet.balance.toLocaleString()} บาท) กรุณาเติมเงิน`
+        message: `ยอดเงินในกระเป๋าไม่เพียงพอ (ต้องการ ฿${finalUserShare.toLocaleString()} บาท มีอยู่ ฿${wallet.balance.toLocaleString()} บาท) กรุณาเติมเงิน`
       };
     }
 
@@ -734,6 +745,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           Merchant_ID: merchantId,
           Total_Amount: totalAmount,
           District_ID: targetShop.distId,
+          Pin: pin,
+          Stamp_Count: stampCount || 0,
         });
 
         if (res && res.transaction) {
@@ -804,13 +817,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Deduct balances (local fallback)
     setWallet(prev => ({
       ...prev,
-      balance: Math.round((prev.balance - userShare) * 100) / 100,
+      balance: Math.round((prev.balance - finalUserShare) * 100) / 100,
       updatedAt: new Date().toISOString()
     }));
 
+    if (stampDiscount > 0) {
+      setUserStamps(prev => {
+        let remainingToDeduct = stampDiscount;
+        return prev.map(s => {
+          if (remainingToDeduct <= 0) return s;
+          const deduct = Math.min(s.count, remainingToDeduct);
+          remainingToDeduct -= deduct;
+          return { ...s, count: s.count - deduct };
+        }).filter(s => s.count > 0);
+      });
+    }
+
     setUserGrant(prev => ({
       ...prev,
-      remainingAmount: Math.round((prev.remainingAmount - govShare) * 100) / 100
+      remainingAmount: Math.round((prev.remainingAmount - (govShare + stampDiscount)) * 100) / 100
     }));
 
     // Update merchant sales

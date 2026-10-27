@@ -53,7 +53,15 @@ export const citizenService = {
     return api.post<{ message: string; wallet: { walletId: number; userId: number; balance: number; updatedAt: string } }>('/user/topup', { amount });
   },
 
-  pay: (data: { Merchant_ID: number; Total_Amount: number; District_ID?: number }) => {
+  verifyPin: (Pin: string) => {
+    return api.post<{ valid: boolean; message: string }>('/user/verify-pin', { Pin });
+  },
+
+  setPin: (Pin: string) => {
+    return api.post<{ success: boolean; message: string }>('/user/set-pin', { Pin });
+  },
+
+  pay: (data: { Merchant_ID: number; Total_Amount: number; District_ID?: number; Pin?: string; Stamp_Count?: number }) => {
     return api.post<{
       transaction: any;
       wallet: { walletId: number; userId: number; balance: number; updatedAt: string };
@@ -65,5 +73,9 @@ export const citizenService = {
 
   getMyTransactions: () => {
     return api.get<any[]>('/user/me/transactions');
+  },
+
+  getStampsHistory: () => {
+    return api.get<any[]>('/users/me/stamps/history');
   },
 };

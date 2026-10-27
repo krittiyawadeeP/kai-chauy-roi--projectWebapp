@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Merchant } from '../../types';
 import { authService } from '../../services/authService';
-import { ApiError } from '../../services/api';
+import { ApiError, authStorage } from '../../services/api';
 import { merchantService } from '../../services/merchantService';
+import { citizenService } from '../../services/citizenService';
+import { PinPad } from '../../components/common/PinPad';
 import { StoreMapPickerModal } from '../../components/merchant/StoreMapPickerModal';
 import { ApiProvince, ApiDistrict, geoService } from '../../services/geoService';
 
@@ -29,6 +31,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
   const [authRole, setAuthRole] = useState<'citizen' | 'merchant'>(defaultRole);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+
+  // PIN flow states after citizen login
+  const [pinModalMode, setPinModalMode] = useState<'none' | 'verify' | 'setup'>('none');
+  const [pendingUser, setPendingUser] = useState<any>(null);
+  const [pinError, setPinError] = useState<string>('');
+  const [pinLoading, setPinLoading] = useState<boolean>(false);
 
   // Citizen Login fields
   const [citizenId, setCitizenId] = useState('1100703611736');
@@ -115,13 +123,16 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         if (response.user.Role !== 'USER') {
           throw new Error(`บัญชีนี้ไม่ใช่บัญชีประชาชน (Role ในระบบ: ${response.user.Role})`);
         }
-        const res = loginCitizen(response.user.Citizen_ID, response.user.Phone, response.user);
-        await refreshCitizenData();
-        setNotice(res.message);
-        setTimeout(() => {
-          setNotice('');
-          onSuccess('citizen');
-        }, 600);
+        
+        // Save pending user and trigger PIN verification/setup
+        setPendingUser(response.user);
+        const hasPin = Boolean(response.hasPin || response.user.hasPin || response.user.Pin_Hash);
+        setPinError('');
+        if (hasPin) {
+          setPinModalMode('verify');
+        } else {
+          setPinModalMode('setup');
+        }
       } else {
         const cleanRegId = regCitizenId.replace(/\D/g, '');
         const cleanRegPhone = regPhone.replace(/\D/g, '');
@@ -147,10 +158,12 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           return;
         }
 
+        const isSixDigits = /^\d{6}$/.test(regPassword);
         const response = await authService.register({
           Citizen_ID: cleanRegId,
           Phone: cleanRegPhone,
           Password: regPassword,
+          Pin: isSixDigits ? regPassword : undefined,
           Name: regName.trim(),
           Province_ID: regProvId,
           Role: 'USER',
@@ -173,6 +186,48 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       );
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handlePinVerify = async (enteredPin: string) => {
+    if (!pendingUser) return;
+    setPinLoading(true);
+    setPinError('');
+    try {
+      await citizenService.verifyPin(enteredPin);
+      loginCitizen(pendingUser.Citizen_ID, pendingUser.Phone, pendingUser);
+      await refreshCitizenData();
+      setPinModalMode('none');
+      setNotice('ยืนยันรหัส PIN สำเร็จ ยินดีต้อนรับเข้าสู่ระบบ');
+      setTimeout(() => {
+        setNotice('');
+        onSuccess('citizen');
+      }, 500);
+    } catch (err: any) {
+      setPinError(err?.message || 'รหัส PIN ไม่ถูกต้อง กรุณาลองใหม่อีกครั้ง');
+    } finally {
+      setPinLoading(false);
+    }
+  };
+
+  const handlePinSetup = async (enteredPin: string) => {
+    if (!pendingUser) return;
+    setPinLoading(true);
+    setPinError('');
+    try {
+      await citizenService.setPin(enteredPin);
+      loginCitizen(pendingUser.Citizen_ID, pendingUser.Phone, { ...pendingUser, hasPin: true });
+      await refreshCitizenData();
+      setPinModalMode('none');
+      setNotice('ตั้งรหัส PIN 6 หลักสำเร็จ ยินดีต้อนรับเข้าสู่ระบบ');
+      setTimeout(() => {
+        setNotice('');
+        onSuccess('citizen');
+      }, 500);
+    } catch (err: any) {
+      setPinError(err?.message || 'ตั้งรหัส PIN ไม่สำเร็จ กรุณาลองใหม่');
+    } finally {
+      setPinLoading(false);
     }
   };
 
@@ -401,38 +456,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
               {isLogin ? (
                 /* Citizen Login */
                 <form onSubmit={handleCitizenSubmit} className="space-y-3.5">
-                  {/* Quick Seeded DB Accounts Helper */}
-                  <div className="p-3 rounded-2xl bg-blue-50/70 border border-blue-200/80 space-y-2">
-                    <span className="text-[10px] text-blue-700 font-bold block">
-                      ⚡ บัญชีประชาชนในฐานข้อมูล Cloud MySQL (กดเพื่อกรอกอัตโนมัติ):
-                    </span>
-                    <div className="grid grid-cols-2 gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCitizenId('1100703611736');
-                          setCitizenPassword('123456');
-                          setErrorNotice('');
-                        }}
-                        className="p-2 rounded-xl bg-white border border-blue-200 hover:border-blue-400 text-left transition-all cursor-pointer text-xs"
-                      >
-                        <strong className="block text-[#1769ed] truncate text-[11px]">ผู้ใช้ทดสอบ 1</strong>
-                        <span className="text-[9px] text-slate-500 font-mono block">1100703611736 (123456)</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setCitizenId('2222222222222');
-                          setCitizenPassword('password456');
-                          setErrorNotice('');
-                        }}
-                        className="p-2 rounded-xl bg-white border border-blue-200 hover:border-blue-400 text-left transition-all cursor-pointer text-xs"
-                      >
-                        <strong className="block text-[#1769ed] truncate text-[11px]">ผู้ใช้ทดสอบ 2</strong>
-                        <span className="text-[9px] text-slate-500 font-mono block">2222222222222 (password456)</span>
-                      </button>
-                    </div>
-                  </div>
+
 
                   <div className="pt-1">
                     <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -587,26 +611,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
               {isLogin ? (
                 /* Merchant Login */
                 <form onSubmit={handleMerchantSubmit} className="space-y-3.5">
-                  {/* Quick Seeded DB Merchant Helper */}
-                  <div className="p-3 rounded-2xl bg-teal-50/70 border border-teal-200/80 space-y-2">
-                    <span className="text-[10px] text-teal-800 font-bold block">
-                      ⚡ บัญชีร้านค้าในฐานข้อมูล Cloud MySQL (กดเพื่อกรอกอัตโนมัติ):
-                    </span>
-                    <div className="grid grid-cols-1 gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setMerchantPhone('0618700517');
-                          setMerchantPassword('123456');
-                          setErrorNotice('');
-                        }}
-                        className="p-2 rounded-xl bg-white border border-teal-200 hover:border-teal-400 text-left transition-all cursor-pointer text-xs"
-                      >
-                        <strong className="block text-[#115e59] truncate text-[11px]">ร้านค้าตัวอย่าง (User 12)</strong>
-                        <span className="text-[9px] text-slate-500 font-mono block">เบอร์: 0618700517 | รหัสผ่าน: 123456</span>
-                      </button>
-                    </div>
-                  </div>
+
 
                   <div className="pt-1">
                     <label className="block text-xs font-bold text-slate-700 mb-1">
@@ -814,6 +819,37 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           setMchDistId(loc.districtId);
         }}
       />
+
+      {/* Citizen PIN Verification / Setup Modal */}
+      {pinModalMode !== 'none' && (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-[#07162d]/80 p-4 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-[340px] rounded-[32px] bg-white p-6 shadow-2xl overflow-hidden border border-slate-100">
+            <PinPad
+              title={pinModalMode === 'verify' ? 'ใส่รหัส PIN 6 หลัก' : 'ตั้งรหัส PIN 6 หลักใหม่'}
+              subtitle={
+                pinModalMode === 'verify'
+                  ? 'กรุณากรอกรหัส PIN เพื่อยืนยันเข้าใช้งาน'
+                  : 'ตั้งรหัส PIN เพื่อใช้ยืนยันการจ่ายเงินร้านค้า'
+              }
+              error={pinError}
+              loading={pinLoading}
+              onComplete={async (enteredPin) => {
+                if (pinModalMode === 'verify') {
+                  await handlePinVerify(enteredPin);
+                } else {
+                  await handlePinSetup(enteredPin);
+                }
+              }}
+              onCancel={() => {
+                setPinModalMode('none');
+                setPendingUser(null);
+                setPinError('');
+                authStorage.removeToken();
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };

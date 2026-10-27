@@ -9,7 +9,7 @@ import {
 } from "../lib/auth";
 import { badRequest, notFound, sendJson, toNumber } from "../lib/http";
 import { prisma } from "../lib/prisma";
-import { hashPin, validPin } from "../lib/pin";
+import { hashPin, validPin, verifyPin } from "../lib/pin";
 import { getCurrentPolicy } from '../policy/policy';
 import { awardMissionStamp } from '../lib/mission-stamp';
 import { awardPurchaseStamps } from '../lib/purchase-stamp';
@@ -193,7 +193,11 @@ citizenRoutes.post("/login", async (req, res) => {
 
   sendJson(res, {
     token,
-    user,
+    user: {
+      ...user,
+      hasPin: !!user.Pin_Hash,
+    },
+    hasPin: !!user.Pin_Hash,
     merchant,
     wallet: user.wallets,
     grant: user.user_grants?.[0],
@@ -226,7 +230,53 @@ citizenRoutes.get("/user/me", requireAuth, async (req: AuthRequest, res) => {
     return notFound(res, "User not found");
   }
 
-  sendJson(res, user);
+  sendJson(res, {
+    ...user,
+    hasPin: !!user.Pin_Hash,
+  });
+});
+
+citizenRoutes.post("/user/verify-pin", requireAuth, async (req: AuthRequest, res) => {
+  const { Pin } = req.body;
+  if (!Pin || typeof Pin !== "string") {
+    return badRequest(res, "กรุณากรอกรหัส PIN");
+  }
+
+  const user = await prisma.users.findUnique({
+    where: { User_ID: req.user!.userId },
+    select: { User_ID: true, Pin_Hash: true },
+  });
+
+  if (!user) {
+    return notFound(res, "ไม่พบข้อมูลผู้ใช้");
+  }
+
+  if (!user.Pin_Hash) {
+    return sendJson(res, { valid: false, hasPin: false, message: "ยังไม่ได้ตั้งรหัส PIN" }, 400);
+  }
+
+  const isValid = verifyPin(Pin, user.Pin_Hash);
+  if (!isValid) {
+    return sendJson(res, { valid: false, hasPin: true, message: "รหัส PIN ไม่ถูกต้อง" }, 400);
+  }
+
+  return sendJson(res, { valid: true, message: "รหัส PIN ถูกต้อง" });
+});
+
+citizenRoutes.post("/user/set-pin", requireAuth, async (req: AuthRequest, res) => {
+  const { Pin } = req.body;
+  if (!validPin(Pin)) {
+    return badRequest(res, "รหัส PIN ต้องเป็นตัวเลข 6 หลัก");
+  }
+
+  await prisma.users.update({
+    where: { User_ID: req.user!.userId },
+    data: {
+      Pin_Hash: hashPin(Pin),
+    },
+  });
+
+  return sendJson(res, { success: true, message: "ตั้งรหัส PIN 6 หลักสำเร็จ" });
 });
 
 citizenRoutes.get("/user/:userId", async (req, res) => {
@@ -667,7 +717,7 @@ citizenRoutes.post("/user/topup", requireAuth, async (req: AuthRequest, res) => 
 
 // POST /user/pay
 citizenRoutes.post("/user/pay", requireAuth, async (req: AuthRequest, res) => {
-  const { Merchant_ID, Total_Amount, District_ID, Stamp_Count = 0 } = req.body;
+  const { Merchant_ID, Total_Amount, District_ID, Stamp_Count = 0, Pin } = req.body;
   const inputAmount = Number(Total_Amount);
   const totalAmount = Number(inputAmount.toFixed(2));
   const merchantId = Number(Merchant_ID);
@@ -683,6 +733,16 @@ citizenRoutes.post("/user/pay", requireAuth, async (req: AuthRequest, res) => {
   try {
     const policy = await getCurrentPolicy();
     const result = await prisma.$transaction(async (tx) => {
+      const userRecord = await tx.users.findUnique({
+        where: { User_ID: req.user!.userId },
+        select: { Pin_Hash: true },
+      });
+      if (userRecord?.Pin_Hash) {
+        if (!Pin || !verifyPin(String(Pin), userRecord.Pin_Hash)) {
+          throw new Error("รหัส PIN 6 หลักไม่ถูกต้อง");
+        }
+      }
+
       const dailySubsidy = await remainingDailySubsidy(tx, req.user!.userId);
       const merchant = await tx.merchants.findUnique({ where: { Mch_ID: merchantId } });
       if (!merchant || merchant.Dist_ID !== districtId) throw new Error("Invalid merchant or district");

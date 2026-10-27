@@ -6,12 +6,21 @@ import { CitizenQrModal } from './CitizenQrModal';
 import { CitizenStatementScreen } from './CitizenStatementScreen';
 import { CitizenRegistrationModal } from './CitizenRegistrationModal';
 import { StampRedeemModal } from './StampRedeemModal';
-import { StampTradeModal } from './StampTradeModal';
 import { AuthModal } from '../auth/AuthModal';
 import { StoreMapPickerModal } from '../merchant/StoreMapPickerModal';
 import { Reward, DistrictStamp } from '../../types';
 
-export const CitizenMobileView: React.FC = () => {
+export interface CitizenMobileViewProps {
+  activeTab?: 'home' | 'missions' | 'wallet';
+  onTabChange?: (tab: 'home' | 'missions' | 'wallet') => void;
+  onOpenPassport?: () => void;
+}
+
+export const CitizenMobileView: React.FC<CitizenMobileViewProps> = ({
+  activeTab: controlledTab,
+  onTabChange,
+  onOpenPassport,
+}) => {
   const {
     currentUser,
     wallet,
@@ -30,15 +39,18 @@ export const CitizenMobileView: React.FC = () => {
   const featuredAiShop = aiTargetShops.length > 0 ? aiTargetShops[0] : null;
 
   const [currentScreen, setCurrentScreen] = useState<'home' | 'statement'>('home');
-  const [activeTab, setActiveTab] = useState<'home' | 'missions' | 'wallet'>('home');
+  const [internalTab, setInternalTab] = useState<'home' | 'missions' | 'wallet'>(controlledTab || 'home');
+  const activeTab = controlledTab ?? internalTab;
+  const setActiveTab = (tab: 'home' | 'missions' | 'wallet') => {
+    setInternalTab(tab);
+    onTabChange?.(tab);
+  };
   const [scannerOpen, setScannerOpen] = useState(false);
   const [selectedMerchantIdForScan, setSelectedMerchantIdForScan] = useState<number | undefined>();
   const [showMyQr, setShowMyQr] = useState(false);
   const [registrationModalOpen, setRegistrationModalOpen] = useState(false);
   const [redeemModalOpen, setRedeemModalOpen] = useState(false);
   const [selectedReward, setSelectedReward] = useState<Reward | null>(null);
-  const [tradeModalOpen, setTradeModalOpen] = useState(false);
-  const [selectedStampForTrade, setSelectedStampForTrade] = useState<DistrictStamp | null>(null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [mapModalShopId, setMapModalShopId] = useState<number | null>(null);
 
@@ -74,6 +86,13 @@ export const CitizenMobileView: React.FC = () => {
   if (currentScreen === 'statement') {
     return <CitizenStatementScreen onBack={() => setCurrentScreen('home')} />;
   }
+
+  const DAILY_SUBSIDY_LIMIT = 200;
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todayGovSpent = transactions
+    .filter(t => t.userId === currentUser.userId && t.status === 'completed' && String(t.txTimestamp).startsWith(todayStr))
+    .reduce((sum, t) => sum + (Number(t.govSubsidizedAmount) || 0), 0);
+  const remainingDaily = Math.max(0, DAILY_SUBSIDY_LIMIT - todayGovSpent);
 
   return (
     <div className="pb-28">
@@ -131,13 +150,23 @@ export const CitizenMobileView: React.FC = () => {
         <div className="relative rounded-[22px] bg-white p-5 shadow-[0_12px_35px_rgba(22,68,150,.13)]">
           <div className="flex items-start justify-between">
             <div>
-              <p className="text-xs font-medium text-slate-500">วงเงินสิทธิรัฐช่วยจ่ายคงเหลือ </p>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <p className="text-xs font-medium text-slate-500">วงเงินสิทธิรัฐช่วยจ่ายคงเหลือ</p>
+                <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
+                  รัฐช่วยสูงสุด ฿200/วัน
+                </span>
+              </div>
               <p className="mt-1 text-[28px] font-bold tracking-tight text-[#123b84]">
                 ฿ {Number(userGrant?.remainingAmount || 0).toLocaleString('th-TH', { minimumFractionDigits: 2 })}
               </p>
             </div>
-            <div className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-600">
-              ใช้งานได้
+            <div className="text-right shrink-0">
+              <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-600 inline-block">
+                ใช้งานได้
+              </span>
+              <span className="block text-[10px] text-slate-400 mt-1 font-medium">
+                วันนี้เหลือช่วย: <strong className="text-emerald-700 font-mono font-bold">฿{remainingDaily}</strong>
+              </span>
             </div>
           </div>
 
@@ -152,7 +181,7 @@ export const CitizenMobileView: React.FC = () => {
 
           <div className="mt-2.5 flex justify-between text-[11px] text-slate-400">
             <span>ใช้ไปแล้ว ฿{(Number(userGrant?.totalGrantAmount || 0) - Number(userGrant?.remainingAmount || 0)).toLocaleString()}</span>
-            <span>วงเงินรวม ฿{Number(userGrant?.totalGrantAmount || 0).toLocaleString()}</span>
+            <span>รัฐออกให้ 60% (สูงสุด ฿200/วัน)</span>
           </div>
 
           {/* Wallet Balance Box */}
@@ -186,15 +215,19 @@ export const CitizenMobileView: React.FC = () => {
             <button
               key={item.label}
               onClick={item.onClick}
-              className="rounded-2xl bg-white px-2 py-4 text-center shadow-[0_5px_20px_rgba(31,65,120,.07)] transition active:scale-95 border border-slate-100/60"
+              className="group rounded-[22px] bg-white px-2 py-4 text-center shadow-[0_6px_22px_rgba(20,50,110,0.07)] hover:shadow-[0_10px_28px_rgba(20,50,110,0.12)] transition-all duration-200 active:scale-95 border border-slate-100/80 cursor-pointer flex flex-col items-center justify-between"
             >
               <span
-                className={`mx-auto grid size-12 place-items-center rounded-2xl action-${item.color}`}
+                className={`mx-auto grid size-12 place-items-center rounded-2xl action-${item.color} shadow-xs group-hover:scale-105 transition-transform duration-200`}
               >
                 <Icon name={item.icon} className="size-6" />
               </span>
-              <span className="mt-3 block text-sm font-bold text-slate-800">{item.label}</span>
-              <span className="mt-0.5 block text-[10px] text-slate-400">{item.detail}</span>
+              <span className="mt-2.5 block text-xs font-black text-slate-800 leading-snug group-hover:text-blue-600 transition-colors">
+                {item.label}
+              </span>
+              <span className="mt-0.5 block text-[10px] text-slate-400 font-medium">
+                {item.detail}
+              </span>
             </button>
           ))}
         </div>
@@ -553,9 +586,20 @@ export const CitizenMobileView: React.FC = () => {
                 </p>
                 <h3 className="font-extrabold text-base">สมุดสะสมแสตมป์ชุมชน</h3>
               </div>
-              <div className="text-right">
-                <span className="text-[11px] text-blue-200">สะสมแล้ว</span>
-                <p className="text-xl font-black text-amber-300">{totalUserStamps} ดวง</p>
+              <div className="flex items-center gap-2">
+                {onOpenPassport && (
+                  <button
+                    type="button"
+                    onClick={onOpenPassport}
+                    className="px-2.5 py-1 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-black text-[11px] shadow-sm transition-all flex items-center gap-1 cursor-pointer border border-amber-300/60"
+                  >
+                    <span>📖 เปิดดูสมุดฉบับเต็ม</span>
+                  </button>
+                )}
+                <div className="text-right">
+                  <span className="text-[10px] text-blue-200 block leading-tight">สะสมแล้ว</span>
+                  <p className="text-base font-black text-amber-300 leading-tight">{totalUserStamps} ดวง</p>
+                </div>
               </div>
             </div>
 
@@ -580,20 +624,10 @@ export const CitizenMobileView: React.FC = () => {
                     <p className="text-xs font-bold text-white line-clamp-1">{stamp.stampName}</p>
                     <span className="text-[10px] text-blue-200">{stamp.distName}</span>
                     {has && (
-                      <div className="mt-2 flex items-center gap-1 w-full">
-                        <span className="flex-1 py-0.5 text-[10px] font-bold bg-amber-400 text-slate-900 rounded-md">
+                      <div className="mt-2 w-full">
+                        <span className="block w-full py-0.5 text-[10px] font-bold bg-amber-400 text-slate-900 rounded-md shadow-xs">
                           มี {count} ดวง
                         </span>
-                        <button
-                          onClick={() => {
-                            setSelectedStampForTrade(stamp);
-                            setTradeModalOpen(true);
-                          }}
-                          className="p-1 rounded-md bg-white/20 hover:bg-white/30 text-white"
-                          title="แลกเปลี่ยนแสตมป์"
-                        >
-                          <Icon name="repeat" className="size-3" />
-                        </button>
                       </div>
                     )}
                   </div>
@@ -674,12 +708,6 @@ export const CitizenMobileView: React.FC = () => {
         isOpen={redeemModalOpen}
         onClose={() => setRedeemModalOpen(false)}
         reward={selectedReward}
-      />
-
-      <StampTradeModal
-        isOpen={tradeModalOpen}
-        onClose={() => setTradeModalOpen(false)}
-        stamp={selectedStampForTrade}
       />
 
       <StoreMapPickerModal

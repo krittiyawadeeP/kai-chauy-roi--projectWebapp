@@ -18,6 +18,7 @@ export interface User {
   role: Role;
   phone: string;
   password?: string;
+  hasPin?: boolean;
   merchantId?: number;
   provId: number;
   distId?: number;

@@ -67,7 +67,8 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
     currentMerchant,
     setCurrentMerchant,
     transactions,
-    refreshMerchantData
+    refreshMerchantData,
+    logout
   } = useApp();
 
   const [qrModalOpen, setQrModalOpen] = useState(false);
@@ -164,22 +165,15 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
               <p className="text-lg font-bold leading-tight">ร้านค้าถุงเงินไทย</p>
             </div>
           </div>
-          {/* <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5">
             <button
-              onClick={() => setAuthModalOpen(true)}
-              className="px-2.5 py-1 rounded-full bg-white/20 hover:bg-white/30 text-[11px] font-bold text-white flex items-center gap-1 backdrop-blur-xs transition-colors"
+              onClick={() => logout()}
+              className="px-2.5 py-1 rounded-full bg-white/20 hover:bg-white/30 text-[11px] font-bold text-white flex items-center gap-1 backdrop-blur-xs transition-colors cursor-pointer"
             >
-              <Icon name="user" className="size-3" />
-              <span>เข้าสู่ระบบ</span>
+              <Icon name="logout" className="size-3" />
+              <span>ออกจากระบบ</span>
             </button>
-            <button
-              onClick={() => setProfileSettingsOpen(true)}
-              className="relative grid size-8 place-items-center rounded-full bg-white/15 hover:bg-white/25 transition-colors"
-              title="ตั้งค่าร้านค้า"
-            >
-              <Icon name="shop" className="size-4" />
-            </button>
-          </div> */}
+          </div>
         </div>
 
         <div className="relative mt-7 flex items-end justify-between">

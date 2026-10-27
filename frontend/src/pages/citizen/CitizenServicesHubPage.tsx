@@ -11,6 +11,8 @@ interface CitizenServicesHubPageProps {
   onOpenProfile: () => void;
   onOpenMap: (shopId?: number) => void;
   onGoToTab: (tab: 'home' | 'missions' | 'wallet') => void;
+  onOpenPassport?: () => void;
+  onOpenRewards?: () => void;
 }
 
 export const CitizenServicesHubPage: React.FC<CitizenServicesHubPageProps> = ({
@@ -22,6 +24,8 @@ export const CitizenServicesHubPage: React.FC<CitizenServicesHubPageProps> = ({
   onOpenProfile,
   onOpenMap,
   onGoToTab,
+  onOpenPassport,
+  onOpenRewards,
 }) => {
   const { currentUser, wallet, userGrant, transactions, userStamps, missions, aiTargetShops, logout } = useApp();
   const [searchQuery, setSearchQuery] = useState('');
@@ -132,7 +136,7 @@ export const CitizenServicesHubPage: React.FC<CitizenServicesHubPageProps> = ({
           color: 'from-blue-700 to-indigo-800',
           textColor: 'text-blue-700',
           bgLight: 'bg-blue-50',
-          onClick: () => onGoToTab('wallet'),
+          onClick: onOpenPassport || (() => onGoToTab('wallet')),
         },
         {
           id: 'redeem_otop',
@@ -143,7 +147,7 @@ export const CitizenServicesHubPage: React.FC<CitizenServicesHubPageProps> = ({
           color: 'from-purple-600 to-pink-600',
           textColor: 'text-purple-600',
           bgLight: 'bg-purple-50',
-          onClick: () => onGoToTab('wallet'),
+          onClick: onOpenRewards || (() => onGoToTab('wallet')),
         },
         {
           id: 'my_vouchers',

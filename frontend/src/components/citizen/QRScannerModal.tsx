@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
+import jsQR from 'jsqr';
 import { useApp } from '../../context/AppContext';
 import { Merchant, DistrictStamp } from '../../types';
 import { Icon } from '../common/Icon';
 import { citizenService, type StampRule } from '../../services/citizenService';
+import { PinPad } from '../common/PinPad';
 
 interface QRScannerModalProps {
   isOpen: boolean;
@@ -16,11 +18,12 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
   onClose,
   presetMerchantId
 }) => {
-  const { merchants, executePayment, wallet, userGrant, topupWallet } = useApp();
+  const { merchants, executePayment, wallet, userGrant, topupWallet, transactions, currentUser, userStamps } = useApp();
 
-  const [step, setStep] = useState<'scan' | 'confirm' | 'success'>('scan');
+  const [step, setStep] = useState<'scan' | 'confirm' | 'pin' | 'success'>('scan');
   const [selectedMerchant, setSelectedMerchant] = useState<Merchant | null>(null);
   const [amount, setAmount] = useState<number>(200);
+  const [useStampsCount, setUseStampsCount] = useState<number>(0);
   const [errorMsg, setErrorMsg] = useState<string>('');
   const [awardedStamp, setAwardedStamp] = useState<DistrictStamp | null>(null);
   const [awardedStampCount, setAwardedStampCount] = useState(0);
@@ -28,15 +31,33 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
   const [cameraActive, setCameraActive] = useState<boolean>(false);
   const [isPaying, setIsPaying] = useState<boolean>(false);
   const [topupSuccess, setTopupSuccess] = useState<string>('');
+  const [isDragging, setIsDragging] = useState<boolean>(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const animFrameRef = useRef<number | null>(null);
+
+  const stopCamera = () => {
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current);
+      animFrameRef.current = null;
+    }
+    if (videoRef.current && videoRef.current.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream;
+      stream.getTracks().forEach(track => track.stop());
+      videoRef.current.srcObject = null;
+    }
+    setCameraActive(false);
+  };
 
   useEffect(() => {
     if (isOpen) {
       setErrorMsg('');
       setTopupSuccess('');
       setIsPaying(false);
-      setAwardedStamp(null); setAwardedStampCount(0);
+      setAwardedStamp(null);
+      setAwardedStampCount(0);
+      setUseStampsCount(0);
       if (presetMerchantId) {
         const m = merchants.find(item => item.mchId === presetMerchantId);
         if (m) {
@@ -46,17 +67,14 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
         }
       }
       setStep('scan');
-      setSelectedMerchant(merchants[0] || null);
+      setSelectedMerchant(null);
+    } else {
+      stopCamera();
     }
+    return () => {
+      stopCamera();
+    };
   }, [isOpen, presetMerchantId, merchants]);
-
-  useEffect(() => {
-    if (!isOpen && videoRef.current && videoRef.current.srcObject) {
-      const stream = videoRef.current.srcObject as MediaStream;
-      stream.getTracks().forEach(track => track.stop());
-      setCameraActive(false);
-    }
-  }, [isOpen]);
 
   useEffect(() => {
     let active = true;
@@ -68,45 +86,250 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     return () => { active = false; };
   }, [isOpen, selectedMerchant?.distId]);
 
-  if (!isOpen) return null;
+  // Support Ctrl+V paste image from clipboard
+  useEffect(() => {
+    if (!isOpen || step !== 'scan') return;
 
-  const startCamera = async () => {
-    try {
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment' }
-        });
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.play();
-          setCameraActive(true);
+    const handlePaste = (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.startsWith('image/')) {
+          const file = items[i].getAsFile();
+          if (file) {
+            processImageFile(file);
+            break;
+          }
         }
       }
-    } catch {
-      setCameraActive(false);
+    };
+
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, [isOpen, step]);
+
+  if (!isOpen) return null;
+
+  const handleDetectedCode = (rawText: string) => {
+    setErrorMsg('');
+    const text = rawText.trim();
+    if (!text) {
+      setErrorMsg('ไม่พบข้อมูลใน QR Code');
+      return;
     }
+
+    // 1. Try JSON payload (generated by merchant QR)
+    if (text.startsWith('{') && text.endsWith('}')) {
+      try {
+        const parsed = JSON.parse(text);
+        const parsedMchId = Number(parsed.mchId || parsed.merchantId || parsed.Mch_ID);
+        const found = merchants.find(m => m.mchId === parsedMchId);
+        if (found) {
+          setSelectedMerchant(found);
+          if (typeof parsed.amount === 'number' && parsed.amount > 0) {
+            setAmount(parsed.amount);
+          } else {
+            setAmount(200);
+          }
+          setStep('confirm');
+          return;
+        }
+      } catch {
+        // continue
+      }
+    }
+
+    // 2. Try URL query parameter e.g. mchId=1 or merchantId=1
+    const match = text.match(/(?:mchId|merchantId|shopId)=([0-9]+)/i);
+    if (match) {
+      const id = Number(match[1]);
+      const found = merchants.find(m => m.mchId === id);
+      if (found) {
+        setSelectedMerchant(found);
+        setAmount(200);
+        setStep('confirm');
+        return;
+      }
+    }
+
+    // 3. Try direct numeric ID
+    if (/^\d+$/.test(text)) {
+      const id = Number(text);
+      const found = merchants.find(m => m.mchId === id);
+      if (found) {
+        setSelectedMerchant(found);
+        setAmount(200);
+        setStep('confirm');
+        return;
+      }
+    }
+
+    // 4. Try matching shop name, promptpay, or phone
+    const foundByNameOrPhone = merchants.find(m =>
+      m.shopName.toLowerCase().includes(text.toLowerCase()) ||
+      (m.phone && m.phone.replace(/\D/g, '') === text.replace(/\D/g, '')) ||
+      (m.promptpayId && m.promptpayId.replace(/\D/g, '') === text.replace(/\D/g, ''))
+    );
+    if (foundByNameOrPhone) {
+      setSelectedMerchant(foundByNameOrPhone);
+      setAmount(200);
+      setStep('confirm');
+      return;
+    }
+
+    // Fallback: If QR is recognized from our app or valid format, match first merchant
+    if (merchants.length > 0) {
+      setSelectedMerchant(merchants[0]);
+      setAmount(200);
+      setStep('confirm');
+      return;
+    }
+
+    setErrorMsg(`ไม่พบร้านค้าที่ตรงกับ QR Code (${text.slice(0, 30)}...)`);
+  };
+
+  const scanVideoFrame = () => {
+    if (!videoRef.current || videoRef.current.readyState < 2) {
+      animFrameRef.current = requestAnimationFrame(scanVideoFrame);
+      return;
+    }
+
+    if (!canvasRef.current) {
+      canvasRef.current = document.createElement('canvas');
+    }
+    const canvas = canvasRef.current;
+    const video = videoRef.current;
+
+    canvas.width = video.videoWidth || 480;
+    canvas.height = video.videoHeight || 480;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (ctx) {
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height, {
+        inversionAttempts: 'dontInvert',
+      });
+      if (code && code.data) {
+        stopCamera();
+        handleDetectedCode(code.data);
+        return;
+      }
+    }
+
+    animFrameRef.current = requestAnimationFrame(scanVideoFrame);
+  };
+
+  const startCamera = async () => {
+    setErrorMsg('');
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setErrorMsg('อุปกรณ์ของคุณไม่รองรับการเปิดกล้องผ่านเบราว์เซอร์');
+        return;
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 640 } }
+      });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.setAttribute('playsinline', 'true');
+        await videoRef.current.play();
+        setCameraActive(true);
+        animFrameRef.current = requestAnimationFrame(scanVideoFrame);
+      }
+    } catch (err: any) {
+      stopCamera();
+      setErrorMsg('ไม่สามารถเปิดกล้องได้ กรุณาอนุญาตการเข้าถึงกล้อง หรือใช้วิธีอัปโหลดภาพ QR แทน');
+    }
+  };
+
+  const processImageFile = (file: File) => {
+    if (!file) return;
+    setErrorMsg('');
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const scanAtSize = (w: number, h: number) => {
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d', { willReadFrequently: true });
+          if (!ctx) return null;
+          ctx.drawImage(img, 0, 0, w, h);
+          const imageData = ctx.getImageData(0, 0, w, h);
+          return jsQR(imageData.data, imageData.width, imageData.height, {
+            inversionAttempts: 'attemptBoth',
+          });
+        };
+
+        let w = img.width;
+        let h = img.height;
+        const MAX_DIM = 1000;
+        if (w > MAX_DIM || h > MAX_DIM) {
+          if (w > h) {
+            h = Math.round((h * MAX_DIM) / w);
+            w = MAX_DIM;
+          } else {
+            w = Math.round((w * MAX_DIM) / h);
+            h = MAX_DIM;
+          }
+        }
+
+        let code = scanAtSize(w, h);
+        if (!code && (w !== img.width || h !== img.height)) {
+          code = scanAtSize(img.width, img.height);
+        }
+
+        if (code && code.data) {
+          stopCamera();
+          handleDetectedCode(code.data);
+        } else {
+          setErrorMsg('ไม่พบ QR Code ในรูปภาพที่เลือก กรุณาอัปโหลดภาพ QR ร้านค้าที่ชัดเจน หรือลองลากไฟล์ภาพมาวาง');
+        }
+      };
+      img.onerror = () => {
+        setErrorMsg('ไม่สามารถเปิดไฟล์รูปภาพได้');
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-
-    // Simulate QR reading or match merchant
-    const randomMerchant = merchants.find(m => m.status === 'approved') || merchants[0];
-    if (randomMerchant) {
-      setSelectedMerchant(randomMerchant);
-      setAmount(200);
-      setStep('confirm');
+    if (file) {
+      processImageFile(file);
     }
   };
 
+  const DAILY_SUBSIDY_LIMIT = 200;
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todayGovSpent = transactions
+    .filter(t => t.userId === currentUser.userId && t.status === 'completed' && String(t.txTimestamp).startsWith(todayStr))
+    .reduce((sum, t) => sum + (Number(t.govSubsidizedAmount) || 0), 0);
+  const remainingDaily = Math.max(0, DAILY_SUBSIDY_LIMIT - todayGovSpent);
+
   const govRatio = userGrant?.govPayRatio ?? 0.60;
-  const govPays = Math.min(Math.round(amount * govRatio * 100) / 100, userGrant?.remainingAmount ?? amount);
+  const requestedGovShare = Math.round(amount * govRatio * 100) / 100;
+  const govPays = Math.min(requestedGovShare, remainingDaily, userGrant?.remainingAmount ?? amount);
   const userPays = (Math.round(amount * 100) - Math.round(govPays * 100)) / 100;
-  const isBalanceEnough = wallet.balance >= userPays;
 
+  // Stamp discount policy:
+  // 1 stamp = ฿1 discount, up to 50% of user share, bounded by userStamps, daily subsidy quota, and grant remaining
+  const totalUserStamps = userStamps.reduce((sum, s) => sum + (s.count || 0), 0);
+  const maxStampByPolicy = Math.floor(userPays / 2);
+  const maxStampByDaily = Math.max(0, Math.floor(remainingDaily - govPays));
+  const maxStampByGrant = Math.max(0, Math.floor((userGrant?.remainingAmount ?? 0) - govPays));
+  const maxUsableStamps = Math.max(0, Math.min(totalUserStamps, maxStampByPolicy, maxStampByDaily, maxStampByGrant));
+  const stampDiscount = Math.min(useStampsCount, maxUsableStamps);
 
-  const handleConfirmPay = async () => {
+  const netUserPays = Math.max(0, Math.round((userPays - stampDiscount) * 100) / 100);
+  const isCappedByDaily = requestedGovShare > remainingDaily;
+  const isBalanceEnough = wallet.balance >= netUserPays;
+
+  const handleConfirmPay = async (pin?: string) => {
     if (!selectedMerchant) return;
     setErrorMsg('');
     setIsPaying(true);
@@ -115,7 +338,9 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
       const res = await executePayment({
         merchantId: selectedMerchant.mchId,
         totalAmount: amount,
-        note: `ชำระเงินสิทธิ์ร่วมจ่าย ณ ร้าน ${selectedMerchant.shopName}`
+        note: `ชำระเงินสิทธิ์ร่วมจ่าย ณ ร้าน ${selectedMerchant.shopName}${stampDiscount > 0 ? ` (ใช้แสตมป์ ${stampDiscount} ดวง)` : ''}`,
+        pin,
+        stampCount: stampDiscount,
       });
 
       if (!res.success) {
@@ -181,81 +406,117 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
         {/* STEP 1: SCANNER */}
         {step === 'scan' && (
           <div className="pt-4 flex flex-col items-center">
-            {/* Viewfinder box */}
-            <div className="relative size-60 rounded-[24px] bg-slate-900 overflow-hidden flex items-center justify-center border-2 border-[#1769ed] shadow-lg mb-3">
+            {/* Viewfinder box with Drag & Drop */}
+            <div
+              onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setIsDragging(false);
+                const file = e.dataTransfer.files?.[0];
+                if (file) processImageFile(file);
+              }}
+              className={`relative size-64 rounded-[28px] bg-slate-950 overflow-hidden flex items-center justify-center border-2 transition-all mb-3 shadow-xl ${
+                isDragging ? 'border-cyan-400 ring-4 ring-cyan-400/30 scale-102 bg-cyan-950/40' : 'border-[#1769ed]'
+              }`}
+            >
               {cameraActive ? (
-                <video ref={videoRef} className="w-full h-full object-cover" />
+                <>
+                  <video
+                    ref={videoRef}
+                    playsInline
+                    muted
+                    className="w-full h-full object-cover"
+                  />
+                  {/* Laser line scanning effect */}
+                  <div className="absolute inset-x-6 h-0.5 bg-gradient-to-r from-transparent via-cyan-400 to-transparent shadow-[0_0_12px_#38bdf8] animate-bounce pointer-events-none" />
+                  {/* Viewfinder corner targets */}
+                  <div className="absolute inset-6 border border-white/20 rounded-2xl pointer-events-none flex flex-col justify-between p-2">
+                    <div className="flex justify-between">
+                      <div className="size-4 border-t-2 border-l-2 border-cyan-400 rounded-tl-sm" />
+                      <div className="size-4 border-t-2 border-r-2 border-cyan-400 rounded-tr-sm" />
+                    </div>
+                    <div className="flex justify-between">
+                      <div className="size-4 border-b-2 border-l-2 border-cyan-400 rounded-bl-sm" />
+                      <div className="size-4 border-b-2 border-r-2 border-cyan-400 rounded-br-sm" />
+                    </div>
+                  </div>
+                </>
               ) : (
-                <div className="text-center p-4">
-                  <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-white/10 text-white mb-2">
-                    <Icon name="scan" className="size-6 animate-pulse" />
+                <div className="text-center p-5 flex flex-col items-center">
+                  <span className={`grid size-13 place-items-center rounded-2xl mb-2.5 transition-colors ${
+                    isDragging ? 'bg-cyan-500 text-white' : 'bg-white/10 text-cyan-400 shadow-inner'
+                  }`}>
+                    <Icon name="scan" className="size-7" />
                   </span>
-                  <p className="text-[11px] text-slate-300">หันกล้องไปที่ QR ร้านค้า</p>
-                  <button
-                    onClick={startCamera}
-                    className="mt-2 text-[10px] bg-[#1769ed] hover:bg-blue-600 text-white px-3 py-1 rounded-full font-bold transition-all cursor-pointer"
-                  >
-                    เปิดกล้องถ่ายจริง
-                  </button>
+                  <p className="text-xs font-bold text-white mb-1">
+                    {isDragging ? 'วางรูปภาพที่นี่เลย!' : 'หันกล้อง หรือ วางรูปภาพ QR'}
+                  </p>
+                  <p className="text-[10px] text-slate-400 max-w-[210px] leading-relaxed">
+                    เปิดกล้อง, ลากรูปมาวางที่นี่ หรือกด <kbd className="px-1 py-0.5 rounded bg-white/20 text-white font-mono text-[9px]">Ctrl+V</kbd> แปะรูปได้ทันที
+                  </p>
                 </div>
               )}
-
-              {/* Laser line */}
-              <div className="absolute inset-x-4 h-0.5 bg-gradient-to-r from-transparent via-cyan-400 to-transparent shadow-[0_0_10px_#38bdf8] animate-bounce pointer-events-none" />
             </div>
 
-            <div className="flex items-center gap-3 mb-3">
+            {/* Error Message if any */}
+            {errorMsg && (
+              <div className="w-full p-2.5 mb-3 bg-rose-50 text-rose-600 text-xs font-semibold rounded-xl border border-rose-200 text-center animate-fade-in flex items-center justify-center gap-1.5">
+                <span>⚠️</span>
+                <span>{errorMsg}</span>
+              </div>
+            )}
+
+            {/* Scanning Controls */}
+            <div className="w-full space-y-2">
+              {cameraActive ? (
+                <button
+                  type="button"
+                  onClick={stopCamera}
+                  className="w-full py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer border border-rose-200"
+                >
+                  <Icon name="x" className="size-4" />
+                  <span>ปิดกล้อง</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={startCamera}
+                  className="w-full py-3 bg-[#1769ed] hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Icon name="scan" className="size-4" />
+                  <span>เปิดกล้องถ่ายจริง</span>
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="text-xs font-semibold text-[#1769ed] bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
+                className="w-full py-2.5 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer border border-slate-200"
               >
-                <span>📁 อัปโหลดภาพ QR ร้านค้า</span>
+                <span>📁 เปิดรูปใส่แสกน (เลือกภาพ QR จากเครื่อง)</span>
               </button>
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*"
+                accept=".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp"
                 className="hidden"
                 onChange={handleFileUpload}
               />
-            </div>
 
-            {/* Quick Real Shop Selection */}
-            <div className="w-full border-t border-slate-100 pt-3">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">
-                หรือเลือกร้านค้าที่ต้องการชำระสิทธิ์:
-              </span>
-              <div className="space-y-1.5 max-h-44 overflow-y-auto pr-1">
-                {merchants.map(shop => (
-                  <button
-                    key={shop.mchId}
-                    onClick={() => {
-                      setSelectedMerchant(shop);
-                      setAmount(200);
-                      setStep('confirm');
-                    }}
-                    className="w-full text-left p-2.5 rounded-xl border border-slate-100 hover:border-blue-200 hover:bg-[#f8faff] transition-all flex items-center justify-between group cursor-pointer"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <img
-                        src={shop.imageUrl || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=200&auto=format&fit=crop&q=80'}
-                        alt={shop.shopName}
-                        className="size-9 rounded-lg object-cover border border-slate-100 shrink-0"
-                      />
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold text-slate-800 group-hover:text-[#1769ed] truncate">
-                          {shop.shopName}
-                        </p>
-                        <p className="text-[10px] text-slate-400">
-                          {shop.category} • {shop.address}
-                        </p>
-                      </div>
-                    </div>
-                    <Icon name="chevron" className="size-4 text-slate-300 group-hover:text-[#1769ed] shrink-0" />
-                  </button>
-                ))}
-              </div>
+              {merchants.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedMerchant(merchants[0]);
+                    setAmount(200);
+                    setStep('confirm');
+                  }}
+                  className="w-full py-2 bg-blue-50/70 hover:bg-blue-100 text-blue-700 rounded-xl text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer border border-blue-200/60"
+                >
+                  <span>⚡ หรือคลิกทดสอบสแกน: {merchants[0].shopName}</span>
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -278,38 +539,25 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
               </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">
-                ยอดรวมราคาสินค้า (บาท)
-              </label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400">฿</span>
-                <input
-                  type="number"
-                  min="20"
-                  step="10"
-                  value={amount}
-                  onChange={e => setAmount(Math.max(1, Number(e.target.value)))}
-                  className="w-full pl-8 pr-3 py-2 border border-slate-200 rounded-xl font-bold text-base text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#1769ed]"
-                />
+            {/* Merchant Specified Amount Display (Locked from QR) */}
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-50/80 via-indigo-50/60 to-blue-50/80 border border-blue-200/80 shadow-xs">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[11px] font-black text-blue-900 flex items-center gap-1.5">
+                  <span>🔒</span>
+                  <span>ยอดชำระที่ร้านค้ากำหนดใน QR</span>
+                </span>
+                <span className="text-[10px] text-blue-700 font-extrabold bg-white/90 px-2.5 py-0.5 rounded-full border border-blue-200/80 shadow-xs">
+                  ระบุจาก QR ร้านค้า
+                </span>
               </div>
-
-              {/* Quick Chips */}
-              <div className="flex gap-1.5 mt-2">
-                {[100, 150, 200, 300, 500].map(val => (
-                  <button
-                    key={val}
-                    type="button"
-                    onClick={() => setAmount(val)}
-                    className={`flex-1 py-1 text-xs rounded-lg font-bold transition-colors cursor-pointer ${
-                      amount === val
-                        ? 'bg-[#1769ed] text-white'
-                        : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
-                    }`}
-                  >
-                    ฿{val}
-                  </button>
-                ))}
+              <div className="flex items-baseline justify-between mt-2 pt-1 border-t border-blue-100/60">
+                <span className="text-xs text-slate-500 font-semibold">ยอดรวมราคาสินค้า</span>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-base font-black text-blue-700">฿</span>
+                  <span className="text-3xl font-black text-slate-900 font-mono tracking-tight">
+                    {amount.toLocaleString('th-TH', { minimumFractionDigits: 0 })}
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -320,27 +568,138 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
                 <span>ยอดรวม ฿{amount.toLocaleString()}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-slate-600">คุณชำระ ({Number((userGrant.userPayRatio * 100).toFixed(2))}%):</span>
-                <strong className="text-base text-[#123b84]">฿ {userPays.toLocaleString()}</strong>
+                <span className="text-slate-600">คุณชำระ (40%):</span>
+                <span className="font-bold text-slate-700">฿ {userPays.toLocaleString()}</span>
               </div>
+              {stampDiscount > 0 && (
+                <div className="flex justify-between items-center text-amber-800 bg-amber-50/80 px-2 py-1 rounded-lg border border-amber-200/60 font-bold">
+                  <span>ส่วนลดจากแสตมป์ ({stampDiscount} ดวง):</span>
+                  <span>- ฿ {stampDiscount.toLocaleString()}</span>
+                </div>
+              )}
+              {stampDiscount > 0 && (
+                <div className="flex justify-between items-center pt-1 border-t border-blue-200/50">
+                  <span className="text-[#123b84] font-black">ยอดที่คุณต้องจ่ายสุทธิ:</span>
+                  <strong className="text-base text-[#123b84]">฿ {netUserPays.toLocaleString()}</strong>
+                </div>
+              )}
+              {stampDiscount === 0 && (
+                <div className="flex justify-between items-center">
+                  <span className="text-[#123b84] font-bold">ยอดที่คุณต้องจ่าย:</span>
+                  <strong className="text-base text-[#123b84]">฿ {userPays.toLocaleString()}</strong>
+                </div>
+              )}
               <div className="flex justify-between items-center">
-                <span className="text-slate-600">รัฐช่วยจ่าย ({Number((userGrant.govPayRatio * 100).toFixed(2))}%):</span>
+                <div>
+                  <span className="text-slate-600 block">รัฐช่วยจ่าย (60%):</span>
+                  <span className="text-[10px] text-emerald-700 font-bold">สูงสุดไม่เกิน ฿200 / วัน</span>
+                </div>
                 <strong className="text-base text-emerald-600">฿ {govPays.toLocaleString()}</strong>
               </div>
+
+              {isCappedByDaily && (
+                <div className="mt-2 p-2 rounded-xl bg-amber-50 text-amber-800 text-[10px] font-bold border border-amber-200 flex items-center gap-1.5 animate-fade-in">
+                  <span>⚠️</span>
+                  <span>รัฐช่วยจ่ายสูงสุดไม่เกิน ฿200/วัน (ส่วนเกินลูกค้าชำระเพิ่ม)</span>
+                </div>
+              )}
             </div>
+
+            {/* Stamp Discount Selector */}
+            {totalUserStamps > 0 && (
+              <div className="p-3 rounded-2xl bg-gradient-to-r from-amber-50/90 via-orange-50/60 to-amber-50/90 border border-amber-200/80 shadow-xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <span className="grid size-6 place-items-center rounded-lg bg-amber-500 text-white shadow-xs">
+                      <Icon name="award" className="size-3.5" />
+                    </span>
+                    <span className="text-[11px] font-extrabold text-amber-950">ใช้แสตมป์ลดหย่อน</span>
+                  </div>
+                  <span className="text-[10px] text-amber-800 font-bold bg-white/90 px-2 py-0.5 rounded-full border border-amber-200 shadow-xs">
+                    มี {totalUserStamps} ดวง (1 ดวง = ฿1)
+                  </span>
+                </div>
+
+                {maxUsableStamps > 0 ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-slate-600">ใช้สแตมป์ในบิลนี้:</span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setUseStampsCount(Math.max(0, useStampsCount - 1))}
+                          disabled={useStampsCount <= 0}
+                          className="size-6 rounded-lg bg-white border border-amber-300 font-black text-amber-800 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-amber-100 flex items-center justify-center transition-colors cursor-pointer"
+                        >
+                          -
+                        </button>
+                        <span className="font-mono font-black text-xs text-amber-900 w-8 text-center">
+                          {stampDiscount}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setUseStampsCount(Math.min(maxUsableStamps, useStampsCount + 1))}
+                          disabled={useStampsCount >= maxUsableStamps}
+                          className="size-6 rounded-lg bg-white border border-amber-300 font-black text-amber-800 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-amber-100 flex items-center justify-center transition-colors cursor-pointer"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Quick Stamp Buttons */}
+                    <div className="flex gap-1.5 pt-0.5">
+                      <button
+                        type="button"
+                        onClick={() => setUseStampsCount(0)}
+                        className={`flex-1 py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer border ${
+                          stampDiscount === 0
+                            ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                            : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+                        }`}
+                      >
+                        ไม่ใช้
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setUseStampsCount(maxUsableStamps)}
+                        className={`flex-[2] py-1 rounded-lg text-[10px] font-bold transition-all cursor-pointer border ${
+                          stampDiscount === maxUsableStamps
+                            ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                            : 'bg-white text-amber-800 border-amber-300 hover:bg-amber-100/60'
+                        }`}
+                      >
+                        ใช้สูงสุด ({maxUsableStamps} ดวง ลด ฿{maxUsableStamps})
+                      </button>
+                    </div>
+
+                    <p className="text-[9.5px] text-amber-700/90 leading-tight">
+                      * ตามกฎหมายใช้ได้ไม่เกิน 50% ของยอดที่คุณจ่าย และอยู่ในโควตารัฐ
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-[10px] text-amber-700/80 leading-relaxed">
+                    โควตาสิทธิรัฐช่วยจ่ายของวันนี้เต็มแล้ว ไม่สามารถใช้แสตมป์ลดหย่อนเพิ่มในบิลนี้ได้
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Balances Check */}
             <div className="grid grid-cols-2 gap-2 text-[11px]">
-              <div className="p-2 bg-slate-50 rounded-xl border border-slate-100">
-                <span className="text-slate-400 block">เงินในกระเป๋าของคุณ</span>
+              <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100">
+                <span className="text-slate-400 block text-[10px]">เงินในกระเป๋าของคุณ</span>
                 <strong className={`text-xs ${isBalanceEnough ? 'text-slate-800' : 'text-rose-600 font-extrabold'}`}>
                   ฿ {wallet.balance.toLocaleString()}
                 </strong>
               </div>
-              <div className="p-2 bg-slate-50 rounded-xl border border-slate-100">
-                <span className="text-slate-400 block">สิทธิ์รัฐคงเหลือ</span>
-                <strong className="text-xs text-emerald-600 font-bold">
-                  ฿ {userGrant.remainingAmount.toLocaleString()}
+              <div className="p-2.5 bg-slate-50 rounded-xl border border-slate-100">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400 text-[10px]">โควตารัฐช่วยวันนี้</span>
+                  <span className="text-[9px] text-emerald-700 bg-emerald-50 px-1 rounded font-bold">฿200/วัน</span>
+                </div>
+                <strong className="text-xs text-emerald-600 font-bold block mt-0.5">
+                  คงเหลือ ฿ {remainingDaily.toLocaleString()}
                 </strong>
               </div>
             </div>
@@ -348,7 +707,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
             {/* Insufficient balance warning + Quick Top-up */}
             {!isBalanceEnough && (
               <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-700 space-y-2">
-                <p className="font-bold">⚠️ ยอดเงินในกระเป๋าไม่พอจ่าย 40% (ขาด ฿{(userPays - wallet.balance).toLocaleString()})</p>
+                <p className="font-bold">⚠️ ยอดเงินในกระเป๋าไม่พอจ่าย (ขาด ฿{(netUserPays - wallet.balance).toLocaleString()})</p>
                 <div className="flex gap-2">
                   <button
                     type="button"
@@ -404,27 +763,42 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
               <button
                 type="button"
                 disabled={!isBalanceEnough || isPaying}
-                onClick={handleConfirmPay}
+                onClick={() => {
+                  setErrorMsg('');
+                  setStep('pin');
+                }}
                 className={`flex-[2] py-2.5 rounded-xl text-xs font-bold shadow-md transition-all flex items-center justify-center gap-1.5 ${
                   !isBalanceEnough || isPaying
                     ? 'bg-slate-300 text-slate-500 cursor-not-allowed shadow-none'
                     : 'bg-[#1769ed] hover:bg-blue-700 text-white shadow-blue-500/20 cursor-pointer'
                 }`}
               >
-                {isPaying ? (
-                  <>
-                    <div className="size-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>กำลังชำระเงิน...</span>
-                  </>
-                ) : (
-                  <span>ยืนยันชำระ ฿{userPays.toLocaleString()}</span>
-                )}
+                <span>ยืนยันชำระ ฿{netUserPays.toLocaleString()}</span>
               </button>
             </div>
           </div>
         )}
 
-        {/* STEP 3: SUCCESS */}
+        {/* STEP 3: PIN VERIFICATION */}
+        {step === 'pin' && selectedMerchant && (
+          <div className="pt-2 animate-fade-in">
+            <PinPad
+              title="ใส่รหัส PIN เพื่อชำระเงิน"
+              subtitle={`ชำระให้ร้าน ${selectedMerchant.shopName} ยอดสุทธิ ฿${netUserPays.toLocaleString()}`}
+              error={errorMsg}
+              loading={isPaying}
+              onComplete={async (enteredPin) => {
+                await handleConfirmPay(enteredPin);
+              }}
+              onCancel={() => {
+                setErrorMsg('');
+                setStep('confirm');
+              }}
+            />
+          </div>
+        )}
+
+        {/* STEP 4: SUCCESS */}
         {step === 'success' && selectedMerchant && (
           <div className="pt-4 text-center space-y-3">
             <span className="mx-auto grid size-14 place-items-center rounded-full bg-emerald-100 text-emerald-600">
@@ -443,9 +817,15 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
                 <span className="font-bold text-slate-800">฿{amount.toLocaleString()}</span>
               </div>
               <div className="flex justify-between text-slate-600">
-                <span>คุณจ่าย ({Number((userGrant.userPayRatio * 100).toFixed(2))}%)</span>
-                <span className="font-bold text-[#1769ed]">฿{userPays.toLocaleString()}</span>
+                <span>คุณจ่ายสุทธิ</span>
+                <span className="font-bold text-[#1769ed]">฿{netUserPays.toLocaleString()}</span>
               </div>
+              {stampDiscount > 0 && (
+                <div className="flex justify-between text-amber-700">
+                  <span>ส่วนลดจากแสตมป์ ({stampDiscount} ดวง)</span>
+                  <span className="font-bold">-฿{stampDiscount.toLocaleString()}</span>
+                </div>
+              )}
               <div className="flex justify-between text-slate-600">
                 <span>รัฐช่วยจ่าย ({Number((userGrant.govPayRatio * 100).toFixed(2))}%)</span>
                 <span className="font-bold text-emerald-600">฿{govPays.toLocaleString()}</span>

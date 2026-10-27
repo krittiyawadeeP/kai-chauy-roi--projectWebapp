@@ -11,11 +11,11 @@ import { AuthPage } from './pages/auth/AuthPage';
 // Citizen Pages & Views
 import { CitizenServicesHubPage } from './pages/citizen/CitizenServicesHubPage';
 import { CitizenProfilePage } from './pages/citizen/CitizenProfilePage';
+import { CitizenRewardsPage } from './pages/citizen/CitizenRewardsPage';
 import { CitizenStatementScreen } from './components/citizen/CitizenStatementScreen';
 import { CitizenQrModal } from './components/citizen/CitizenQrModal';
 import { StoreMapPickerModal } from './components/merchant/StoreMapPickerModal';
 
-// Modals
 import { QRScannerModal } from './components/citizen/QRScannerModal';
 import { QRGeneratorModal } from './components/merchant/QRGeneratorModal';
 import { CitizenRegistrationModal } from './components/citizen/CitizenRegistrationModal';
@@ -23,6 +23,7 @@ import { CitizenProfileModal } from './components/citizen/CitizenProfileModal';
 import { MyVouchersModal } from './components/citizen/MyVouchersModal';
 import { AuthModal } from './components/auth/AuthModal';
 import { MerchantProfileSettingsModal } from './components/merchant/MerchantProfileSettingsModal';
+import { StampPassportModal } from './components/citizen/StampPassportModal';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 
 const AppContent: React.FC = () => {
@@ -38,6 +39,7 @@ const AppContent: React.FC = () => {
   } = useApp();
 
   const [activeNav, setActiveNav] = useState('หน้าหลัก');
+  const [citizenTab, setCitizenTab] = useState<'home' | 'missions' | 'wallet'>('home');
   const [globalScannerOpen, setGlobalScannerOpen] = useState(false);
   const [globalStatusOpen, setGlobalStatusOpen] = useState(false);
   const [globalQrGenOpen, setGlobalQrGenOpen] = useState(false);
@@ -47,6 +49,7 @@ const AppContent: React.FC = () => {
   const [globalVouchersOpen, setGlobalVouchersOpen] = useState(false);
   const [globalQrOpen, setGlobalQrOpen] = useState(false);
   const [globalStatementOpen, setGlobalStatementOpen] = useState(false);
+  const [globalPassportOpen, setGlobalPassportOpen] = useState(false);
   const [globalShopMapId, setGlobalShopMapId] = useState<number | null>(null);
 
   useEffect(() => {
@@ -71,7 +74,9 @@ const AppContent: React.FC = () => {
     } else if (label === 'ยอดขาย') {
       // Navigates directly to dedicated full page
     } else if (label === 'ของรางวัล' || label === 'คูปอง') {
-      setGlobalVouchersOpen(true);
+      setActiveNav('ของรางวัล');
+      setGlobalStatementOpen(false);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } else if (label === 'สถานะ' || label === 'สิทธิ์ 60/40') {
       setGlobalStatusOpen(true);
     } else if (label === 'ออกจากระบบ') {
@@ -97,6 +102,8 @@ const AppContent: React.FC = () => {
       setGlobalStatementOpen(false);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else if (label === 'หน้าหลัก') {
+      setActiveNav('หน้าหลัก');
+      setCitizenTab('home');
       setGlobalStatementOpen(false);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else if (label === 'ปักหมุดร้าน' || label === 'พิกัด') {
@@ -144,22 +151,7 @@ const AppContent: React.FC = () => {
           <div className="w-24 h-4 bg-black rounded-full" />
         </div>
 
-        {/* Top Sticky Bar: Role Switcher & Feature Shortcuts */}
-        <RoleSwitcherBar
-          role={role}
-          currentUser={currentUser}
-          currentMerchant={currentMerchant}
-          isAuthenticated={isAuthenticated}
-          onSelectRole={handleRoleSelect}
-          onReset={resetAllData}
-          onOpenAuth={() => setGlobalAuthOpen(true)}
-          onLogout={logout}
-          onOpenWallet={() => setActiveNav('ถุงเงิน')}
-          onOpenRevenue={() => setActiveNav('ยอดขาย')}
-          onOpenProfile={() => setGlobalProfileOpen(true)}
-          onOpenMap={() => setGlobalMapOpen(true)}
-          onOpenStatus={() => setGlobalStatusOpen(true)}
-        />
+
 
         {/* Dynamic Active Role View from Pages */}
         <div className="flex-1 flex flex-col">
@@ -167,6 +159,12 @@ const AppContent: React.FC = () => {
             <>
               {globalStatementOpen ? (
                 <CitizenStatementScreen onBack={() => setGlobalStatementOpen(false)} />
+              ) : activeNav === 'ของรางวัล' ? (
+                <CitizenRewardsPage
+                  onBack={() => setActiveNav('หน้าหลัก')}
+                  onOpenPassport={() => setGlobalPassportOpen(true)}
+                  onOpenVouchers={() => setGlobalVouchersOpen(true)}
+                />
               ) : activeNav === 'บริการทั้งหมด' ? (
                 <CitizenServicesHubPage
                   onOpenScanner={() => setGlobalScannerOpen(true)}
@@ -175,9 +173,16 @@ const AppContent: React.FC = () => {
                   onOpenStatus={() => setGlobalStatusOpen(true)}
                   onOpenVouchers={() => setGlobalVouchersOpen(true)}
                   onOpenProfile={() => setActiveNav('โปรไฟล์')}
-                  onOpenMap={(shopId) => setGlobalShopMapId(shopId || 1)}
-                  onGoToTab={() => {
+                  onOpenPassport={() => setGlobalPassportOpen(true)}
+                  onOpenRewards={() => setActiveNav('ของรางวัล')}
+                  onOpenMap={(shopId) => {
+                    setGlobalShopMapId(shopId || 1);
+                    setGlobalMapOpen(true);
+                  }}
+                  onGoToTab={(tab) => {
+                    setCitizenTab(tab);
                     setActiveNav('หน้าหลัก');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
                 />
               ) : activeNav === 'โปรไฟล์' ? (
@@ -187,10 +192,20 @@ const AppContent: React.FC = () => {
                   onOpenStatus={() => setGlobalStatusOpen(true)}
                   onOpenVouchers={() => setGlobalVouchersOpen(true)}
                   onOpenMyQr={() => setGlobalQrOpen(true)}
-                  onGoToTab={(tab) => setActiveNav(tab)}
+                  onGoToTab={(tab) => {
+                    if (tab === 'missions' || tab === 'wallet' || tab === 'home') {
+                      setCitizenTab(tab);
+                    }
+                    setActiveNav('หน้าหลัก');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
                 />
               ) : (
-                <CitizenMobilePage />
+                <CitizenMobilePage
+                  activeTab={citizenTab}
+                  onTabChange={setCitizenTab}
+                  onOpenPassport={() => setGlobalPassportOpen(true)}
+                />
               )}
             </>
           )}
@@ -245,6 +260,20 @@ const AppContent: React.FC = () => {
       <CitizenQrModal
         isOpen={globalQrOpen}
         onClose={() => setGlobalQrOpen(false)}
+      />
+
+      <StampPassportModal
+        isOpen={globalPassportOpen}
+        onClose={() => setGlobalPassportOpen(false)}
+        onGoToRewards={() => {
+          setGlobalPassportOpen(false);
+          setActiveNav('ของรางวัล');
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+        onOpenMapWithDistrict={(_distId) => {
+          setGlobalPassportOpen(false);
+          setGlobalMapOpen(true);
+        }}
       />
 
       {/* Global Merchant Modals */}
