@@ -311,7 +311,7 @@ export const MerchantProfileSettingsModal: React.FC<MerchantProfileSettingsModal
       <StoreMapPickerModal
         isOpen={mapPickerOpen}
         onClose={() => setMapPickerOpen(false)}
-        initialLocation={lat != null && lng != null ? { lat, lng } : undefined}
+        initialLocation={lat != null && lng != null ? { lat, lng, provinceId, districtId } : undefined}
         onLocationSelect={(loc) => {
           setProvinceId(loc.provinceId);
           setDistrictId(loc.districtId);

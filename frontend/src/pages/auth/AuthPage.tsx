@@ -812,7 +812,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       <StoreMapPickerModal
         isOpen={mapPickerOpen}
         onClose={() => setMapPickerOpen(false)}
-        initialLocation={mchPinLocation ? { lat: mchPinLocation.lat, lng: mchPinLocation.lng } : undefined}
+        initialLocation={mchPinLocation || undefined}
         onLocationSelect={(loc) => {
           setMchPinLocation(loc);
           setMchProvId(loc.provinceId);
