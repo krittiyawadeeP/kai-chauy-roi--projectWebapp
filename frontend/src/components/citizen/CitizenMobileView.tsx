@@ -36,7 +36,9 @@ export const CitizenMobileView: React.FC<CitizenMobileViewProps> = ({
     logout
   } = useApp();
 
-  const featuredAiShop = aiTargetShops.length > 0 ? aiTargetShops[0] : null;
+  const localAiShops = aiTargetShops.filter(shop => shop.provinceId === undefined || shop.provinceId === currentUser.provId);
+  const featuredAiShop = localAiShops.length > 0 ? localAiShops[0] : null;
+  const generalMissions = missions.filter(mission => !mission.isAiMission);
 
   const [currentScreen, setCurrentScreen] = useState<'home' | 'statement'>('home');
   const [internalTab, setInternalTab] = useState<'home' | 'missions' | 'wallet'>(controlledTab || 'home');
@@ -250,7 +252,7 @@ export const CitizenMobileView: React.FC<CitizenMobileViewProps> = ({
               activeTab === 'missions' ? 'bg-white text-[#123b84] shadow-xs' : 'hover:text-slate-900'
             }`}
           >
-            ภารกิจ AI ({missions.length + aiTargetShops.length})
+            ภารกิจ ({generalMissions.length + localAiShops.length})
           </button>
           <button
             onClick={() => setActiveTab('wallet')}
@@ -407,7 +409,7 @@ export const CitizenMobileView: React.FC<CitizenMobileViewProps> = ({
       {activeTab === 'missions' && (
         <section className="px-4 pt-5 space-y-4">
           {/* Section 1: AI Target Missions */}
-          {aiTargetShops.length > 0 && (
+          {localAiShops.length > 0 && (
             <div className="space-y-3">
               <div className="flex items-center justify-between bg-gradient-to-r from-amber-500 to-amber-600 text-white p-3.5 rounded-[22px] shadow-sm">
                 <div className="flex items-center gap-2">
@@ -416,16 +418,16 @@ export const CitizenMobileView: React.FC<CitizenMobileViewProps> = ({
                   </span>
                   <div>
                     <h3 className="font-extrabold text-sm">ภารกิจชี้เป้าฟื้นฟูร้านค้าจาก AI</h3>
-                    <p className="text-[11px] text-amber-100">ช่วยอุดหนุนร้านที่ AI ชี้เป้าเพื่อรับแสตมป์ทันที</p>
+                    <p className="text-[11px] text-amber-100">ซื้อในช่วงเวลาที่กำหนด รับแสตมป์ของอำเภอที่ร้านตั้งอยู่</p>
                   </div>
                 </div>
                 <span className="text-xs font-bold bg-white text-amber-700 px-2.5 py-1 rounded-full shadow-xs">
-                  {aiTargetShops.length} ร้าน
+                  {localAiShops.length} ร้าน
                 </span>
               </div>
 
               <div className="space-y-3">
-                {aiTargetShops.map((shop) => (
+                {localAiShops.map((shop) => (
                   <div
                     key={shop.analysisId}
                     className="rounded-[22px] bg-white p-4 border border-amber-200/70 shadow-sm space-y-3"
@@ -450,6 +452,7 @@ export const CitizenMobileView: React.FC<CitizenMobileViewProps> = ({
                         <p className="text-[11px] text-slate-500 mt-0.5">
                           📍 {shop.districtName} จังหวัด{shop.provinceName}
                         </p>
+                        {shop.campaignStart && shop.campaignEnd && <p className="text-[11px] text-slate-500">{new Date(shop.campaignStart).toLocaleDateString('th-TH', { timeZone: 'Asia/Bangkok' })}–{new Date(new Date(shop.campaignEnd).getTime() - 1).toLocaleDateString('th-TH', { timeZone: 'Asia/Bangkok' })}</p>}
                       </div>
                     </div>
 
@@ -460,12 +463,13 @@ export const CitizenMobileView: React.FC<CitizenMobileViewProps> = ({
                       </div>
                       <div className="flex justify-between text-slate-600">
                         <span>เงื่อนไขรับแสตมป์:</span>
-                        <strong className="text-[#1769ed]">ซื้อครบตามเกณฑ์อำเภอ (สิทธิ์ร่วมจ่าย)</strong>
+                        <strong className="text-[#1769ed]">ซื้อในช่วงภารกิจ ไม่มียอดขั้นต่ำ</strong>
                       </div>
                       <div className="flex justify-between text-slate-600">
                         <span>ช่วงเวลาเร่งด่วน:</span>
                         <strong className="text-emerald-700">{shop.criticalHours}</strong>
                       </div>
+                      <p className="text-[11px] text-slate-500">รับแสตมป์ AI ได้สูงสุด {shop.dailyStampLimit ?? 1} ดวงต่อคนต่อวัน รวมทุกร้านที่มีภารกิจ · ช่วงเวลาจากข้อมูลบิล ไม่ใช่เวลาทำการที่ร้านยืนยัน</p>
                     </div>
 
                     <div className="flex gap-2">
@@ -501,15 +505,15 @@ export const CitizenMobileView: React.FC<CitizenMobileViewProps> = ({
               <p className="text-[11px] text-slate-500">ซื้อสินค้าตามเงื่อนไขเพื่อรับสิทธิและแสตมป์ดิจิทัล</p>
             </div>
             <span className="text-xs font-bold text-[#1769ed] bg-blue-50 px-2.5 py-1 rounded-full">
-              {missions.length} ภารกิจ
+              {generalMissions.length} ภารกิจ
             </span>
           </div>
 
           <div className="space-y-3">
-            {missions.map(ms => {
+            {generalMissions.map(ms => {
               const merchant = merchants.find(shop => shop.mchId === ms.targetMerchantId);
               const stamp = districtStamps.find(s => s.distId === (merchant?.distId ?? ms.targetDistId));
-              const progress = Math.min(100, (ms.currentRecipients / ms.maxRecipients) * 100);
+              const progress = ms.maxRecipients ? Math.min(100, (ms.currentRecipients / ms.maxRecipients) * 100) : 0;
               return (
                 <div
                   key={ms.missionId}
@@ -539,20 +543,20 @@ export const CitizenMobileView: React.FC<CitizenMobileViewProps> = ({
                     </div>
                     <div className="flex justify-between text-slate-600">
                       <span>ยอดซื้อขั้นต่ำ:</span>
-                      <strong className="text-[#1769ed]">฿ {ms.minSpend} บาท (ใช้สิทธิ์ 60/40 ได้)</strong>
+                      <strong className="text-[#1769ed]">{ms.minSpend == null ? 'ไม่มียอดขั้นต่ำ' : `฿ ${ms.minSpend} บาท (ใช้สิทธิ์ 60/40 ได้)`}</strong>
                     </div>
                     <div className="flex justify-between text-slate-600">
                       <span>สิทธิ์คงเหลือ:</span>
                       <strong className="text-emerald-600">
-                        {ms.maxRecipients - ms.currentRecipients} / {ms.maxRecipients} คน
+                        {ms.maxRecipients == null ? 'ไม่จำกัด' : `${Math.max(0, ms.maxRecipients - ms.currentRecipients)} / ${ms.maxRecipients} คน`}
                       </strong>
                     </div>
-                    <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden mt-1">
+                    {ms.maxRecipients != null && <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden mt-1">
                       <div
                         className="bg-gradient-to-r from-[#1769ed] to-amber-500 h-1.5 rounded-full"
                         style={{ width: `${progress}%` }}
                       />
-                    </div>
+                    </div>}
                   </div>
 
                   <button

@@ -78,6 +78,13 @@ export interface DailyMissionRow {
 
 export interface DailyMissionReport { analysisDate: string; rows: DailyMissionRow[] }
 
+export interface WeeklyAiMission {
+  id: number; merchantId: number; name: string; description: string | null; shopName: string; provinceName: string; districtName: string;
+  start: string; end: string; dailyStartMinute: number; dailyEndMinute: number; recipients: number; status: string; dailyStampLimit: number | null;
+  evidence: { ratio?: number; recentDaily?: number; referenceDaily?: number; hourlySales?: { hour: number; averageRevenue: number; daysWithSales: number }[] } | null;
+}
+export interface WeeklyAiMissionReport { weeks: string[]; selectedWeek: string | null; missions: WeeklyAiMission[] }
+
 export interface PolicyRecord {
   Policy_ID: number | null;
   Gov_Pay_Ratio: string;
@@ -100,18 +107,43 @@ export interface AdminRewardRecord {
 }
 export interface OtopRewardInput {
   Reward_Name: string; Description: string; Province_ID: number; Image_URL: string;
-  Source_URL: string; Reward_Type: 'OTOP_PRODUCT'; Status: string;
+  Source_URL: string; Reward_Type: 'OTOP_PRODUCT'; Status: string; Required_Stamp_Count: number;
+}
+
+export interface AdminMerchantRecord {
+  Mch_ID: number; User_ID: number; Shop_Name: string; Owner_Name: string | null; Category: string | null;
+  Dist_ID: number; Lat: number | string | null; Lng: number | string | null;
+  users: { User_ID: number; Name: string | null; Phone: string };
+  districts: { Dist_ID: number; Dist_Name: string; Prov_ID: number; provinces: { Prov_ID: number; Prov_Name: string } };
+  income: { totalRevenue: number; monthRevenue: number; transactionCount: number; lastSaleAt: string | null };
+}
+export interface AdminMerchantInput {
+  Shop_Name: string; Owner_Name: string | null; Category: string | null; Dist_ID: number; Lat: number | null; Lng: number | null;
+}
+
+export interface AdminUserRecord {
+  User_ID: number; Name: string | null; Phone: string; Role: string; Subsidy_Eligible: boolean;
+  accountType: 'USER' | 'MERCHANT';
+  merchants: { Mch_ID: number; Shop_Name: string; Owner_Name: string | null }[];
 }
 
 export const adminService = {
+  getUsers: () => api.get<AdminUserRecord[]>('/admin/users'),
+  updateUser: (id: number, data: { Password?: string; Pin?: string; Subsidy_Eligible?: boolean }) =>
+    api.patch<Pick<AdminUserRecord, 'User_ID' | 'Subsidy_Eligible'>>(`/admin/users/${id}`, data),
   getStamps: () => api.get<DistrictStampOverview[]>('/admin/stamps'),
   setStampRule: (districtId: number, data: { minSpend: number; rewardCount: number }) =>
     api.patch<{ districtId: number; minSpend: number; rewardCount: number }>(`/admin/stamps/districts/${districtId}`, data),
-  getMerchants: () => api.get<{ Mch_ID: number; Shop_Name: string; Category: string | null; districts?: { Dist_Name: string; Prov_ID: number; provinces?: { Prov_Name: string } } }[]>('/admin/merchants'),
+  getMerchants: () => api.get<AdminMerchantRecord[]>('/admin/merchants'),
+  updateMerchant: (id: number, data: AdminMerchantInput) => api.patch<Omit<AdminMerchantRecord, 'income'>>(`/admin/merchants/${id}`, data),
   suggestSalesMission: (merchantId: number) => api.post<SalesMissionAnalysis>(`/admin/merchants/${merchantId}/mission-suggestion`),
   suggestDailySalesMission: (provinceId: number) => api.post<DailySalesMissionAnalysis>(`/admin/provinces/${provinceId}/daily-mission-suggestion`),
   getDailyMissionAnalyses: () => api.get<DailyMissionReport>('/admin/daily-mission-analyses'),
-  getMissionHistory: (date: string, signal?: AbortSignal) => api.get<MissionHistoryReport>(`/admin/mission-history?date=${encodeURIComponent(date)}`, { signal }),
+  getWeeklyAiMissions: (week?: string) => api.get<WeeklyAiMissionReport>(`/admin/weekly-ai-missions${week ? `?week=${encodeURIComponent(week)}` : ''}`),
+  refreshWeeklyAiMissions: () => api.post<{ created: number }>('/admin/weekly-ai-missions/refresh'),
+  getAiMissionPolicy: () => api.get<{ dailyStampLimit: number; updatedAt: string | null }>('/admin/ai-mission-policy'),
+  setAiMissionPolicy: (dailyStampLimit: number) => api.post<{ dailyStampLimit: number; updatedAt: string }>('/admin/ai-mission-policy', { dailyStampLimit }),
+  getMissionHistory: (date?: string, signal?: AbortSignal) => api.get<MissionHistoryReport>(`/admin/mission-history${date ? `?date=${encodeURIComponent(date)}` : ''}`, { signal }),
   getRewards: () => api.get<AdminRewardRecord[]>('/admin/rewards'),
   getRewardProvinces: () => api.get<RewardProvince[]>('/admin/rewards/provinces'),
   createOtopReward: (data: OtopRewardInput) => api.post<AdminRewardRecord>('/admin/rewards', data),
@@ -143,8 +175,9 @@ export const adminService = {
   }) => api.post<PolicyRecord>('/admin/policy', data),
 
   updateMission: (missionId: number, data: {
-    Mission_Name: string; Description: string; Max_Recipients: number;
-    Start_DateTime: string; End_DateTime: string; Status: string;
+    Mission_Name?: string; Description?: string; Max_Recipients?: number | null;
+    Start_DateTime?: string; End_DateTime?: string; Status?: string;
+    Daily_Start_Minute?: number; Daily_End_Minute?: number;
   }) => api.patch(`/admin/missions/${missionId}`, data),
 
   createReward: (rewardData: {

@@ -1,0 +1,1 @@
+ALTER TABLE `users` ADD COLUMN `Subsidy_Eligible` BOOLEAN NOT NULL DEFAULT true;

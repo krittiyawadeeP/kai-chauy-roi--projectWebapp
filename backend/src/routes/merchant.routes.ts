@@ -8,7 +8,8 @@ import { hashPin, validPin } from "../lib/pin";
 import { getCurrentPolicy } from '../policy/policy';
 import { awardMissionStamp } from '../lib/mission-stamp';
 import { awardPurchaseStamps } from '../lib/purchase-stamp';
-import { remainingDailySubsidy } from "../lib/daily-subsidy";
+import { remainingDailySubsidy, SUBSIDY_REVOKED_MESSAGE } from "../lib/daily-subsidy";
+import { hashPassword, validPassword } from '../lib/password';
 
 export const merchantRoutes = Router();
 
@@ -19,7 +20,7 @@ merchantRoutes.post("/register", async (req, res) => {
   }
   if (!/^\d{13}$/.test(String(Citizen_ID))) return badRequest(res, "Citizen_ID must contain 13 digits");
   if (!/^\d{9,15}$/.test(String(Phone).replace(/\D/g, ""))) return badRequest(res, "Phone number is invalid");
-  if (String(Password).length < 6) return badRequest(res, "Password must be at least 6 characters");
+  if (!validPassword(String(Password).trim())) return badRequest(res, "Password must be 6–128 characters");
   if (Pin !== undefined && !validPin(Pin)) return badRequest(res, "Pin must contain exactly 6 digits");
   if (User_Name !== undefined && (typeof User_Name !== "string" || !User_Name.trim() || User_Name.length > 200)) return badRequest(res, "User_Name must be 1-200 characters");
   if (Owner_Name !== undefined && (typeof Owner_Name !== "string" || !Owner_Name.trim() || Owner_Name.length > 200)) return badRequest(res, "Owner_Name must be 1-200 characters");
@@ -44,7 +45,7 @@ merchantRoutes.post("/register", async (req, res) => {
         data: {
           Citizen_ID: String(Citizen_ID),
           Phone: String(Phone).replace(/\D/g, ""),
-          Password: String(Password),
+          Password: hashPassword(String(Password).trim()),
           Name: User_Name?.trim(),
           Pin_Hash: Pin === undefined ? undefined : hashPin(Pin),
           Province_ID: provinceId,
@@ -398,22 +399,27 @@ merchantRoutes.post("/me/sales", requireMerchant, async (req: AuthRequest, res) 
       create: { Merchant_ID: merchant.Mch_ID, Balance: totalAmount, Status: "ACTIVE" },
     });
 
-    const mission = await tx.missions.findFirst({
+    const missions = await tx.missions.findMany({
       where: {
         Target_Merchant_ID: merchant.Mch_ID,
         Status: { in: ['ACTIVE', 'active', 'OPEN', 'open'] },
         Start_DateTime: { lte: sale.Tx_Timestamp }, End_DateTime: { gte: sale.Tx_Timestamp },
       },
-      orderBy: { Mission_ID: 'asc' },
+      orderBy: { Mission_ID: 'desc' },
       select: { Mission_ID: true },
     });
-    const missionStamp = mission ? await awardMissionStamp(tx, mission.Mission_ID, sale) : null;
+    let missionStamp = null;
+    for (const mission of missions) {
+      missionStamp = await awardMissionStamp(tx, mission.Mission_ID, sale);
+      if (missionStamp) break;
+    }
     const purchaseReward = await awardPurchaseStamps(tx, sale);
     return { ...sale, earnedStamp: missionStamp?.created ? missionStamp.stamp : null, awardedStamp: purchaseReward.stamp, awardedStampCount: purchaseReward.count };
     }, { isolationLevel: 'ReadCommitted' });
 
     sendJson(res, transaction, 201);
   } catch (error) {
+    if (error instanceof Error && error.message === SUBSIDY_REVOKED_MESSAGE) return sendJson(res, { message: SUBSIDY_REVOKED_MESSAGE }, 403);
     if (error instanceof Error && error.message === "INSUFFICIENT_WALLET_BALANCE") return badRequest(res, "Customer wallet balance is insufficient");
     if (error instanceof Error && error.message === "GRANT_BALANCE_CHANGED") return badRequest(res, "Customer grant balance changed; retry the sale");
     throw error;

@@ -57,6 +57,31 @@ test('compares completed sales against same weekday and hours, using the same co
   assert.equal(report.summary.actualTransactions, 2);
 });
 
+test('weekly AI history counts only its daily active hours and keeps unlimited quota', () => {
+  const weekly = missionFixture({
+    Start_DateTime: new Date('2026-10-25T17:00:00Z'), End_DateTime: new Date('2026-11-01T17:00:00Z'),
+    Campaign_Week_Start: new Date('2026-10-26T00:00:00Z'), Daily_Start_Minute: 720, Daily_End_Minute: 840,
+    Max_Recipients: null, daily_mission_analysis: null,
+    merchants: { Shop_Name: 'ร้านตัวอย่าง', districts: { provinces: { Prov_Name: 'Bangkok' } } },
+  });
+  const report = buildMissionHistory('2026-10-27', [weekly], [
+    sale('2026-10-27T05:00:00Z', 100), sale('2026-10-27T07:00:00Z', 900),
+    sale('2026-10-26T05:00:00Z', 400), sale('2026-10-28T05:00:00Z', 800),
+    sale('2026-10-20T05:00:00Z', 100), sale('2026-10-13T05:00:00Z', 100),
+  ], [], new Date('2026-10-28T08:00:00Z'));
+  const entry = entries(report)[0];
+  assert.equal(entry.quota, null);
+  assert.equal(entry.performance.actualRevenue, 100);
+  assert.equal(entry.performance.baselineRevenue, 100);
+  assert.equal(entry.phase, 'FINISHED', 'a completed day can be compared while its weekly campaign is still running');
+  assert.equal(report.summary.recordedRevenue, 100);
+  assert.equal(report.hourlySales[12].revenue, 100);
+  assert.equal(report.hourlySales[12].mission, true);
+  assert.equal(report.hourlySales[13].mission, true);
+  assert.equal(report.hourlySales[14].mission, false);
+  assert.equal(report.hourlySales[14].revenue, 900, 'the chart includes other hours for context');
+});
+
 test('sparse historical evidence stays unknown while zero recorded mission sales can be measured', () => {
   const references = [sale('2026-10-13T04:00:00Z', 100), sale('2026-10-06T04:00:00Z', 100)];
   const sparse = buildMissionHistory('2026-10-20', [missionFixture()], references.slice(0, 1), [], now);
@@ -96,16 +121,53 @@ test('excludes reference windows with promotions and avoids double-counting over
   assert.equal(overlap.summary.missionCount, 2);
   assert.equal(overlap.summary.comparableCount, 0);
   assert.equal(overlap.summary.actualRevenue, null);
+  assert.equal(overlap.summary.recordedRevenue, 500);
+  assert.equal(overlap.summary.recordedTransactions, 1);
 });
 
 test('upcoming, running, and cancelled missions never report a completed uplift', () => {
   for (const [at, expected] of [['2026-10-20T02:59:59Z', 'UPCOMING'], ['2026-10-20T04:00:00Z', 'RUNNING']] as const) {
     const report = buildMissionHistory('2026-10-20', [missionFixture()], [], [], new Date(at));
     assert.equal(entries(report)[0].phase, expected);
-    assert.equal(entries(report)[0].performance.actualRevenue, null);
+    assert.equal(entries(report)[0].performance.actualRevenue, expected === 'RUNNING' ? 0 : null);
     assert.equal(report.summary.comparableCount, 0);
   }
   const cancelled = buildMissionHistory('2026-10-20', [missionFixture({ Status: 'CANCELLED' })], [], [], now);
   assert.equal(entries(cancelled)[0].phase, 'CANCELLED');
   assert.equal(cancelled.summary.finishedCount, 0);
+});
+
+test('ongoing plan overview shows accrued sales and stamps and excludes closed, ended, and future plans', () => {
+  const current = missionFixture({
+    Start_DateTime: new Date('2026-10-25T17:00:00Z'), End_DateTime: new Date('2026-11-01T17:00:00Z'),
+    Campaign_Week_Start: new Date('2026-10-26T00:00:00Z'), Daily_Start_Minute: 720, Daily_End_Minute: 840,
+  });
+  const report = buildMissionHistory('2026-10-28', [current,
+    { ...current, Mission_ID: 2, Status: 'INACTIVE' },
+    { ...current, Mission_ID: 3, Start_DateTime: new Date('2026-10-29T00:00:00Z') },
+    { ...current, Mission_ID: 4, End_DateTime: new Date('2026-10-27T00:00:00Z') },
+  ], [
+    sale('2026-10-26T05:00:00Z', 100), sale('2026-10-27T06:00:00Z', 200),
+    sale('2026-10-28T05:00:00Z', 300), sale('2026-10-28T06:00:00Z', 999),
+    sale('2026-10-25T05:00:00Z', 999),
+  ], [], new Date('2026-10-28T05:30:00Z'), 'plan');
+  assert.equal(report.scope, 'plan');
+  assert.equal(report.summary.missionCount, 1);
+  assert.equal(report.summary.stampsIssued, 12);
+  assert.equal(report.summary.recordedRevenue, 600);
+  assert.equal(report.summary.recordedTransactions, 3);
+  assert.equal(entries(report)[0].performance.actualRevenue, 600);
+  assert.equal(report.hourlySales.length, 24);
+  assert.equal(report.hourlySales[12].revenue, 400);
+  assert.equal(report.hourlySales[13].revenue, 200);
+  assert.equal(report.summary.comparableCount, 0);
+});
+
+test('selected-day history keeps recorded facts for retired plans without claiming a completed comparison', () => {
+  const report = buildMissionHistory('2026-10-20', [missionFixture({ Status: 'INACTIVE' })], [sale('2026-10-20T04:00:00Z', 250)], [], now);
+  assert.equal(report.summary.stampsIssued, 12);
+  assert.equal(report.summary.recordedRevenue, 250);
+  assert.equal(report.hourlySales[11].revenue, 250);
+  assert.equal(entries(report)[0].phase, 'CANCELLED');
+  assert.equal(report.summary.comparableCount, 0);
 });

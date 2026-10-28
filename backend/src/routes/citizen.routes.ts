@@ -13,8 +13,9 @@ import { hashPin, validPin, verifyPin } from "../lib/pin";
 import { getCurrentPolicy } from '../policy/policy';
 import { awardMissionStamp } from '../lib/mission-stamp';
 import { awardPurchaseStamps } from '../lib/purchase-stamp';
-import { collectedDistrictCount, requiredDistrictStamps } from '../lib/otop-reward';
-import { remainingDailySubsidy } from "../lib/daily-subsidy";
+import { collectedDistrictCount } from '../lib/otop-reward';
+import { remainingDailySubsidy, SUBSIDY_REVOKED_MESSAGE } from "../lib/daily-subsidy";
+import { hashPassword, validPassword, verifyPassword } from '../lib/password';
 import { spendableStamps } from '../lib/spendable-stamps';
 
 export const citizenRoutes = Router();
@@ -71,8 +72,8 @@ citizenRoutes.post("/user", async (req, res) => {
   if (cleanPhone.length < 9 || cleanPhone.length > 15) {
     return badRequest(res, "หมายเลขโทรศัพท์ไม่ถูกต้อง");
   }
-  if (String(Password).length < 6) {
-    return badRequest(res, "รหัสผ่านต้องมีความยาวอย่างน้อย 6 ตัวอักษร");
+  if (!validPassword(String(Password).trim())) {
+    return badRequest(res, "รหัสผ่านต้องมีความยาว 6–128 ตัวอักษร");
   }
   if (Name !== undefined && (typeof Name !== "string" || !Name.trim() || Name.length > 200)) {
     return badRequest(res, "Name must be 1-200 characters");
@@ -97,7 +98,7 @@ citizenRoutes.post("/user", async (req, res) => {
       data: {
         Citizen_ID: cleanCitizenId,
         Phone: cleanPhone,
-        Password: String(Password),
+        Password: hashPassword(String(Password).trim()),
         Name: Name?.trim(),
         Pin_Hash: Pin === undefined ? undefined : hashPin(Pin),
         Province_ID: Province_ID ? Number(Province_ID) : undefined,
@@ -169,7 +170,7 @@ citizenRoutes.post("/login", async (req, res) => {
     },
   });
 
-  if (!user || user.Password !== rawPass) {
+  if (!user || !verifyPassword(rawPass, user.Password)) {
     return sendJson(res, { message: "เบอร์โทรศัพท์/เลขบัตรประชาชน หรือรหัสผ่านไม่ถูกต้อง" }, 401);
   }
 
@@ -341,8 +342,8 @@ citizenRoutes.patch("/user/:userId/password", requireAuth, async (req: AuthReque
     return badRequest(res, "Invalid userId");
   }
 
-  if (!oldPassword || !newPassword) {
-    return badRequest(res, "oldPassword and newPassword are required");
+  if (typeof oldPassword !== 'string' || !oldPassword || !validPassword(newPassword)) {
+    return badRequest(res, "รหัสผ่านใหม่ต้องมีความยาว 6–128 ตัวอักษร");
   }
 
   if (req.user!.userId !== userId && req.user!.role !== "ADMIN") {
@@ -359,7 +360,7 @@ citizenRoutes.patch("/user/:userId/password", requireAuth, async (req: AuthReque
     return notFound(res, "User not found");
   }
 
-  if (user.Password !== oldPassword) {
+  if (!verifyPassword(oldPassword, user.Password)) {
     return sendJson(res, { message: "Old password is incorrect" }, 401);
   }
 
@@ -368,7 +369,7 @@ citizenRoutes.patch("/user/:userId/password", requireAuth, async (req: AuthReque
       User_ID: userId,
     },
     data: {
-      Password: newPassword,
+      Password: hashPassword(newPassword),
     },
   });
 
@@ -408,14 +409,17 @@ citizenRoutes.get("/district-stamps", async (_req, res) => {
 
 // GET /missions
 citizenRoutes.get("/missions", async (_req, res) => {
+  const now = new Date();
   const missions = await prisma.missions.findMany({
     where: {
       Status: {
         in: ["ACTIVE", "active", "OPEN", "open"],
       },
+      End_DateTime: { gt: now },
     },
     include: {
       merchants: true,
+      _count: { select: { user_stamps: true } },
     },
     orderBy: {
       Start_DateTime: "desc",
@@ -429,9 +433,12 @@ citizenRoutes.get("/missions", async (_req, res) => {
     targetMerchantId: m.Target_Merchant_ID,
     targetMerchantName: m.merchants?.Shop_Name || "ร้านค้าชุมชน",
     targetDistId: m.merchants?.Dist_ID || 1,
-    minSpend: 150,
-    maxRecipients: m.Max_Recipients || 100,
-    currentRecipients: 5,
+    minSpend: m.Campaign_Week_Start ? null : 150,
+    maxRecipients: m.Max_Recipients,
+    currentRecipients: m._count.user_stamps,
+    isAiMission: Boolean(m.Campaign_Week_Start),
+    dailyStartMinute: m.Daily_Start_Minute,
+    dailyEndMinute: m.Daily_End_Minute,
     rewardStampId: 1,
     startDateTime: m.Start_DateTime.toISOString(),
     endDateTime: m.End_DateTime.toISOString(),
@@ -478,7 +485,7 @@ citizenRoutes.post("/missions/:missionId/complete", requireAuth, async (req: Aut
   const sale = await prisma.sales_transactions.findUnique({ where: { Tx_ID: BigInt(transactionId) } });
   if (!sale || sale.User_ID !== req.user!.userId) return notFound(res, 'Qualifying sale not found');
   const result = await prisma.$transaction(tx => awardMissionStamp(tx, missionId, sale), { isolationLevel: 'ReadCommitted' });
-  if (!result) return badRequest(res, 'Sale does not meet the mission conditions or all places are taken');
+  if (!result) return badRequest(res, 'Sale does not meet the mission conditions or the daily stamp limit has been reached');
   sendJson(res, result.stamp, result.created ? 201 : 200);
 });
 
@@ -486,14 +493,15 @@ citizenRoutes.post("/missions/:missionId/complete", requireAuth, async (req: Aut
 citizenRoutes.get("/users/me/stamps", requireAuth, async (req: AuthRequest, res) => {
   const stamps = await spendableStamps(prisma, req.user!.userId);
 
-  // Group by Stamp_ID
-  const stampMap = new Map<number, { count: number; first: typeof stamps[0] }>();
+  // Keep mission and purchase stamps distinct while grouping counts by district stamp.
+  const stampMap = new Map<string, { count: number; first: typeof stamps[0] }>();
   for (const s of stamps) {
-    const existing = stampMap.get(s.Stamp_ID);
+    const key = `${s.Stamp_ID}:${s.Earn_Source}`;
+    const existing = stampMap.get(key);
     if (existing) {
       existing.count += 1;
     } else {
-      stampMap.set(s.Stamp_ID, { count: 1, first: s });
+      stampMap.set(key, { count: 1, first: s });
     }
   }
 
@@ -503,8 +511,8 @@ citizenRoutes.get("/users/me/stamps", requireAuth, async (req: AuthRequest, res)
     stampId: first.Stamp_ID,
     count,
     earnedAt: first.Earned_At.toISOString().replace("T", " ").substring(0, 19),
-    earnSource: "spend_150",
-    qualifyingAmount: Number(first.Qualifying_Amount || 150),
+    earnSource: first.Earn_Source === 'AI_MISSION' || first.Earn_Source === 'MISSION' ? 'mission' : 'spend_150',
+    qualifyingAmount: Number(first.Qualifying_Amount ?? 0),
   }));
 
   sendJson(res, formatted);
@@ -581,8 +589,8 @@ citizenRoutes.post("/stamp-redemptions", requireAuth, async (req: AuthRequest, r
         include: { district_stamps: { include: { districts: true } } },
       });
       const eligible = stamps.filter(stamp => stamp.district_stamps.districts.Prov_ID === reward.Province_ID);
-      if (!districtCount || collectedDistrictCount(stamps, reward.Province_ID!) < requiredDistrictStamps(districtCount)) {
-        return { error: `At least ${requiredDistrictStamps(districtCount)} different district stamps are required` };
+      if (!districtCount || collectedDistrictCount(stamps, reward.Province_ID!) < reward.Required_Stamp_Count) {
+        return { error: `At least ${reward.Required_Stamp_Count} different district stamps are required` };
       }
       return { redemption: await tx.stamp_redemptions.create({
         data: { User_ID: userId, Reward_ID: rewardId, Stamp_ID: eligible[0].Stamp_ID, Quantity: 1, Status: 'REQUESTED', Redeemed_At: new Date() },
@@ -820,6 +828,15 @@ citizenRoutes.post("/user/pay", requireAuth, async (req: AuthRequest, res) => {
         create: { Merchant_ID: merchantId, Balance: totalAmount, Status: "ACTIVE" },
       });
 
+      const activeMissions = await tx.missions.findMany({
+        where: { Target_Merchant_ID: merchantId, Status: { in: ['ACTIVE', 'active', 'OPEN', 'open'] }, Start_DateTime: { lte: transaction.Tx_Timestamp }, End_DateTime: { gt: transaction.Tx_Timestamp } },
+        orderBy: { Mission_ID: 'desc' }, select: { Mission_ID: true },
+      });
+      let missionStamp = null;
+      for (const mission of activeMissions) {
+        missionStamp = await awardMissionStamp(tx, mission.Mission_ID, transaction);
+        if (missionStamp) break;
+      }
       const stampReward = await awardPurchaseStamps(tx, transaction);
 
       return {
@@ -850,6 +867,7 @@ citizenRoutes.post("/user/pay", requireAuth, async (req: AuthRequest, res) => {
         },
         awardedStamp: stampReward.stamp,
         awardedStampCount: stampReward.count,
+        earnedStamp: missionStamp?.created ? missionStamp.stamp : null,
       };
     }, {
       isolationLevel: 'ReadCommitted',
@@ -859,6 +877,7 @@ citizenRoutes.post("/user/pay", requireAuth, async (req: AuthRequest, res) => {
 
     sendJson(res, result);
   } catch (err: any) {
+    if (err.message === SUBSIDY_REVOKED_MESSAGE) return sendJson(res, { message: SUBSIDY_REVOKED_MESSAGE }, 403);
     return badRequest(res, err.message || "การชำระเงินไม่สำเร็จ");
   }
 });

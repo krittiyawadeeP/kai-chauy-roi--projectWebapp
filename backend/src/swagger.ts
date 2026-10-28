@@ -375,12 +375,52 @@ export const swaggerSpec = swaggerJSDoc({
           responses: okResponse(),
         },
       },
+      '/api/admin/users': {
+        get: {
+          tags: ['Admin'], summary: 'ทะเบียนผู้ใช้งาน แยกประชาชนและเจ้าของร้าน พร้อมข้อมูลร้านที่ผูกกับบัญชี',
+          security: [{ bearerAuth: [] }], responses: okResponse(),
+        },
+      },
+      '/api/admin/users/{userId}': {
+        patch: {
+          tags: ['Admin'], summary: 'ตั้งรหัสผ่าน/PIN ใหม่ และตัดหรือคืนสิทธิ์ซื้อ 60/40 รายบัญชี',
+          description: 'เปลี่ยนรหัสผ่านหรือ PIN แล้วเซสชันเดิมของบัญชีจะถูกยกเลิก สถานะสิทธิ์ใช้กับการซื้อสินค้าของบัญชีเท่านั้น ไม่กระทบการรับชำระของร้าน',
+          security: [{ bearerAuth: [] }], parameters: [pathParam('userId')],
+          requestBody: { required: true, content: { 'application/json': { schema: {
+            type: 'object', minProperties: 1, additionalProperties: false,
+            properties: {
+              Password: { type: 'string', minLength: 6, maxLength: 128, writeOnly: true },
+              Pin: { type: 'string', pattern: '^[0-9]{6}$', writeOnly: true },
+              Subsidy_Eligible: { type: 'boolean', description: 'สิทธิ์ซื้อสินค้า 60/40 ของบัญชี' },
+            },
+          } } } },
+          responses: okResponse('Account access updated'),
+        },
+      },
       "/api/admin/merchants": {
         get: {
           tags: ["Admin"],
-          summary: "ดูรายการร้านค้าเพื่อเลือกร้านค้าเป้าหมาย",
+          summary: "ทะเบียนร้านค้าพร้อมเจ้าของ รายได้จากบิลสำเร็จสะสม และรายได้เดือนนี้ตามเวลาไทย",
           security: [{ bearerAuth: [] }],
           responses: okResponse(),
+        },
+      },
+      '/api/admin/merchants/{merchantId}': {
+        patch: {
+          tags: ['Admin'], summary: 'แก้ไขข้อมูลร้านค้าและชื่อเจ้าของ', security: [{ bearerAuth: [] }],
+          parameters: [pathParam('merchantId')],
+          requestBody: { required: true, content: { 'application/json': { schema: {
+            type: 'object', minProperties: 1, additionalProperties: false,
+            properties: {
+              Shop_Name: { type: 'string', minLength: 1, maxLength: 200 },
+              Owner_Name: { type: 'string', nullable: true, maxLength: 200 },
+              Category: { type: 'string', nullable: true, description: 'ประเภทสินค้าเป็นภาษาไทย' },
+              Dist_ID: { type: 'integer', minimum: 1 },
+              Lat: { type: 'number', nullable: true, minimum: -90, maximum: 90 },
+              Lng: { type: 'number', nullable: true, minimum: -180, maximum: 180 },
+            },
+          } } } },
+          responses: okResponse('Merchant updated'),
         },
       },
       "/api/admin/missions": {
@@ -393,9 +433,12 @@ export const swaggerSpec = swaggerJSDoc({
       },
       '/api/admin/mission-history': {
         get: {
-          tags: ['Admin'], summary: 'ประวัติภารกิจจากผลวิเคราะห์ครบ 77 จังหวัด พร้อมเปรียบเทียบยอดขาย',
+          tags: ['Admin'], summary: 'ภาพรวมแผนภารกิจที่ดำเนินอยู่และผลรายวัน พร้อมแสตมป์ที่แจกและกราฟรายชั่วโมง',
           security: [{ bearerAuth: [] }],
-          parameters: [{ name: 'date', in: 'query', schema: { type: 'string', format: 'date' }, description: 'วันที่จัดภารกิจตามเวลาไทย ค่าเริ่มต้นวันนี้' }],
+          parameters: [
+            { name: 'date', in: 'query', schema: { type: 'string', format: 'date' }, description: 'ระบุวันที่เพื่อดูเฉพาะข้อมูลวันนั้นตามเวลาไทย หากไม่ระบุจะแสดงแผนที่กำลังดำเนินอยู่' },
+            { name: 'scope', in: 'query', schema: { type: 'string', enum: ['plan', 'day'] }, description: 'เลือกภาพรวมแผนหรือรายวัน ค่าเริ่มต้นเป็น day เมื่อระบุ date และ plan เมื่อไม่ระบุ date' },
+          ],
           responses: okResponse(),
         },
       },

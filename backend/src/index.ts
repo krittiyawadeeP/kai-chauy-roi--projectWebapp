@@ -6,7 +6,7 @@ import swaggerUi from "swagger-ui-express";
 
 import { apiRouter } from "./routes";
 import { swaggerSpec } from "./swagger";
-import { startDailyMissionScheduler } from "./lib/daily-mission-job";
+import { startWeeklyMissionScheduler } from "./lib/weekly-mission-job";
 
 dotenv.config({ path: ".env.local" });
 
@@ -29,5 +29,5 @@ app.listen(PORT, (error?: Error) => {
     process.exit(1);
   }
   console.log(`Backend running at http://localhost:${PORT}`);
-  startDailyMissionScheduler();
+  startWeeklyMissionScheduler();
 });

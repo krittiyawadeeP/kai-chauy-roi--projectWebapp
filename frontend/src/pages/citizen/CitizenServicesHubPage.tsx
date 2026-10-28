@@ -28,6 +28,7 @@ export const CitizenServicesHubPage: React.FC<CitizenServicesHubPageProps> = ({
   onOpenRewards,
 }) => {
   const { currentUser, wallet, userGrant, transactions, userStamps, missions, aiTargetShops, logout } = useApp();
+  const localAiShopCount = aiTargetShops.filter(shop => shop.provinceId === undefined || shop.provinceId === currentUser.provId).length;
   const [searchQuery, setSearchQuery] = useState('');
 
   const totalUserStamps = userStamps.reduce((acc, curr) => acc + curr.count, 0);
@@ -91,9 +92,9 @@ export const CitizenServicesHubPage: React.FC<CitizenServicesHubPageProps> = ({
         {
           id: 'ai_target',
           name: 'ภารกิจชี้เป้าฟื้นฟูร้านค้าจาก AI',
-          detail: `AI วิเคราะห์ ${aiTargetShops.length} ร้านค้าที่มียอดขายชะลอตัวเพื่อรับการอุดหนุน`,
+          detail: `AI วิเคราะห์ ${localAiShopCount} ร้านค้าที่มียอดขายชะลอตัวในจังหวัดของคุณ`,
           icon: 'sparkle' as IconName,
-          badge: `${aiTargetShops.length} ร้านเป้าหมาย`,
+          badge: `${localAiShopCount} ร้านเป้าหมาย`,
           color: 'from-amber-500 to-amber-700',
           textColor: 'text-amber-600',
           bgLight: 'bg-amber-50',

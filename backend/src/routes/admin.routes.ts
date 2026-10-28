@@ -1,6 +1,6 @@
 import { Router } from "express";
 
-import { requireAdmin } from "../lib/auth";
+import { requireAdmin, revokeUserSessions } from "../lib/auth";
 import { badRequest, notFound, sendJson, toNumber } from "../lib/http";
 import { prisma } from "../lib/prisma";
 import { dashboardRoutes } from "../dashboard/dashboard.routes";
@@ -10,6 +10,10 @@ import { policyRoutes } from "../policy/policy.routes";
 import { bangkokDate, eligibleMissionSlots, suggestMission, summarizeSales } from "../lib/sales-mission";
 import { completedBangkokDay } from "../lib/daily-mission-job";
 import { requiredDistrictStamps } from '../lib/otop-reward';
+import { hourlySales, runWeeklyMissionAnalysis } from '../lib/weekly-mission-job';
+import { merchantCategory } from '../lib/merchant-category';
+import { hashPassword, validPassword } from '../lib/password';
+import { hashPin, validPin } from '../lib/pin';
 
 export const adminRoutes = Router();
 
@@ -18,6 +22,117 @@ adminRoutes.use("/dashboard", dashboardRoutes);
 adminRoutes.use('/mission-history', missionHistoryRoutes);
 adminRoutes.use("/grants", grantRoutes);
 adminRoutes.use("/policy", policyRoutes);
+
+adminRoutes.get('/users', async (_req, res) => {
+  const users = await prisma.users.findMany({
+    where: { Role: { in: ['USER', 'MERCHANT'] } },
+    select: {
+      User_ID: true, Name: true, Phone: true, Role: true, Subsidy_Eligible: true,
+      merchants: { select: { Mch_ID: true, Shop_Name: true, Owner_Name: true } },
+    },
+    orderBy: { User_ID: 'desc' },
+  });
+  sendJson(res, users.map(user => ({ ...user, accountType: user.Role.toUpperCase() === 'MERCHANT' || user.merchants.length ? 'MERCHANT' : 'USER' })));
+});
+
+adminRoutes.patch('/users/:userId', async (req, res) => {
+  const userId = Number(req.params.userId);
+  const body = req.body;
+  const allowed = ['Password', 'Pin', 'Subsidy_Eligible'];
+  if (!Number.isInteger(userId) || userId < 1 || userId > 2_147_483_647 || !body || typeof body !== 'object' || Array.isArray(body) ||
+      !Object.keys(body).length || Object.keys(body).some(key => !allowed.includes(key))) return badRequest(res, 'ข้อมูลบัญชีไม่ถูกต้อง');
+  const { Password, Pin, Subsidy_Eligible } = body;
+  if (Password !== undefined && !validPassword(Password)) return badRequest(res, 'รหัสผ่านต้องยาว 6–128 ตัวอักษร และไม่มีช่องว่างหัวท้าย');
+  if (Pin !== undefined && !validPin(Pin)) return badRequest(res, 'PIN ต้องเป็นตัวเลข 6 หลัก');
+  if (Subsidy_Eligible !== undefined && typeof Subsidy_Eligible !== 'boolean') return badRequest(res, 'สถานะสิทธิ์ 60/40 ไม่ถูกต้อง');
+  const current = await prisma.users.findUnique({ where: { User_ID: userId }, select: { User_ID: true, Role: true } });
+  if (!current || !['USER', 'MERCHANT'].includes(current.Role.toUpperCase())) return notFound(res, 'ไม่พบบัญชีประชาชนหรือเจ้าของร้าน');
+  const user = await prisma.users.update({
+    where: { User_ID: userId },
+    data: { Password: Password === undefined ? undefined : hashPassword(Password), Pin_Hash: Pin === undefined ? undefined : hashPin(Pin), Subsidy_Eligible },
+    select: { User_ID: true, Subsidy_Eligible: true },
+  });
+  if (Password !== undefined || Pin !== undefined) revokeUserSessions(userId);
+  sendJson(res, user);
+});
+
+adminRoutes.get('/ai-mission-policy', async (_req, res) => {
+  const current = await prisma.ai_mission_policy.findFirst({ orderBy: [{ Effective_From: 'desc' }, { Policy_ID: 'desc' }] });
+  sendJson(res, { dailyStampLimit: current?.Daily_Stamp_Limit ?? 1, updatedAt: current?.Effective_From ?? null });
+});
+
+adminRoutes.get('/weekly-ai-missions', async (req, res) => {
+  const weeks = await prisma.missions.findMany({
+    where: { Campaign_Week_Start: { not: null } },
+    distinct: ['Campaign_Week_Start'],
+    select: { Campaign_Week_Start: true },
+    orderBy: { Campaign_Week_Start: 'desc' },
+    take: 12,
+  });
+  const availableWeeks = weeks.map(row => row.Campaign_Week_Start!.toISOString().slice(0, 10));
+  const requestedWeek = req.query.week;
+  if (requestedWeek !== undefined && (typeof requestedWeek !== 'string' || !availableWeeks.includes(requestedWeek))) {
+    return badRequest(res, 'Unknown campaign week');
+  }
+  const selectedWeek = requestedWeek ?? availableWeeks[0] ?? null;
+  const missions = await prisma.missions.findMany({
+    where: selectedWeek ? { Campaign_Week_Start: new Date(`${selectedWeek}T00:00:00.000Z`) } : { Mission_ID: -1 },
+    include: { merchants: { include: { districts: { include: { provinces: true } } } }, _count: { select: { user_stamps: true } } },
+    orderBy: [{ Start_DateTime: 'asc' }, { Mission_ID: 'asc' }],
+  });
+  const missingCharts = missions.filter(mission => !Array.isArray((mission.Selection_Evidence as { hourlySales?: unknown } | null)?.hourlySales));
+  const charts = new Map<number, ReturnType<typeof hourlySales>>();
+  if (selectedWeek && missingCharts.length) {
+    const monday = new Date(`${selectedWeek}T00:00:00+07:00`);
+    const periods = new Map(missingCharts.map(mission => {
+      const savedEnd = (mission.Selection_Evidence as { periodEnd?: string } | null)?.periodEnd;
+      const end = savedEnd ? new Date(savedEnd) : mission.Start_DateTime > monday
+        ? new Date(`${bangkokDate(mission.Start_DateTime)}T00:00:00+07:00`)
+        : new Date(monday.getTime() - 86_400_000);
+      return [mission.Mission_ID, { start: new Date(end.getTime() - 14 * 86_400_000), end }] as const;
+    }));
+    const rows = await prisma.sales_transactions.findMany({
+      where: { Merchant_ID: { in: [...new Set(missingCharts.map(mission => mission.Target_Merchant_ID))] }, Status: { in: ['COMPLETED', 'completed'] }, Tx_Timestamp: { gte: new Date(Math.min(...[...periods.values()].map(period => period.start.getTime()))), lt: new Date(Math.max(...[...periods.values()].map(period => period.end.getTime()))) } },
+      select: { Merchant_ID: true, Tx_Timestamp: true, Total_Amount: true },
+    });
+    const salesByMerchant = new Map<number, typeof rows>();
+    for (const row of rows) salesByMerchant.set(row.Merchant_ID, [...(salesByMerchant.get(row.Merchant_ID) ?? []), row]);
+    for (const mission of missingCharts) {
+      const period = periods.get(mission.Mission_ID)!;
+      charts.set(mission.Mission_ID, hourlySales((salesByMerchant.get(mission.Target_Merchant_ID) ?? []).filter(sale => sale.Tx_Timestamp >= period.start && sale.Tx_Timestamp < period.end)));
+    }
+  }
+  sendJson(res, { weeks: availableWeeks, selectedWeek, missions: missions.map(mission => ({
+    id: mission.Mission_ID, merchantId: mission.Target_Merchant_ID, name: mission.Mission_Name, description: mission.Description,
+    shopName: mission.merchants.Shop_Name, provinceName: mission.merchants.districts.provinces.Prov_Name,
+    districtName: mission.merchants.districts.Dist_Name, start: mission.Start_DateTime, end: mission.End_DateTime,
+    dailyStartMinute: mission.Daily_Start_Minute, dailyEndMinute: mission.Daily_End_Minute,
+    recipients: mission._count.user_stamps, status: mission.Status, dailyStampLimit: mission.Ai_Daily_Stamp_Limit,
+    evidence: { ...(mission.Selection_Evidence && typeof mission.Selection_Evidence === 'object' && !Array.isArray(mission.Selection_Evidence) ? mission.Selection_Evidence : {}), hourlySales: (mission.Selection_Evidence as { hourlySales?: unknown } | null)?.hourlySales ?? charts.get(mission.Mission_ID) ?? [] },
+  })) });
+});
+
+adminRoutes.post('/weekly-ai-missions/refresh', async (_req, res) => {
+  try {
+    const created = await runWeeklyMissionAnalysis(new Date(), true);
+    sendJson(res, { created });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Analysis failed';
+    sendJson(res, { message }, message === 'Analysis is already running' ? 409 : message === 'No merchants qualify for a new analysis' ? 422 : 500);
+  }
+});
+
+adminRoutes.post('/ai-mission-policy', async (req, res) => {
+  const limit = req.body?.dailyStampLimit;
+  if (!Number.isInteger(limit) || limit < 1 || limit > 2_147_483_647) return badRequest(res, 'dailyStampLimit must be a positive integer');
+  const adminReq = req as import('../lib/auth').AuthRequest;
+  const policy = await prisma.$transaction(async tx => {
+    const saved = await tx.ai_mission_policy.create({ data: { Daily_Stamp_Limit: limit, Created_By: adminReq.user!.userId } });
+    await tx.missions.updateMany({ where: { Campaign_Week_Start: { not: null }, Status: { in: ['ACTIVE', 'active', 'OPEN', 'open'] }, End_DateTime: { gt: new Date() } }, data: { Ai_Daily_Stamp_Limit: limit } });
+    return saved;
+  });
+  sendJson(res, { dailyStampLimit: policy.Daily_Stamp_Limit, updatedAt: policy.Effective_From }, 201);
+});
 
 adminRoutes.get("/ai/analysis", async (_req, res) => {
   const analysis = await prisma.ai_sales_analysis.findMany({
@@ -32,21 +147,64 @@ adminRoutes.get("/ai/analysis", async (_req, res) => {
   sendJson(res, analysis);
 });
 
-adminRoutes.get("/merchants", async (_req, res) => {
-  const merchants = await prisma.merchants.findMany({
-    include: {
-      districts: { include: { provinces: true } },
-      users: true,
-      ai_sales_analysis: {
-        orderBy: {
-          Analyzed_At: "desc",
-        },
-        take: 1,
-      },
-    },
-  });
+const merchantDetails = {
+  districts: { include: { provinces: true } },
+  users: { select: { User_ID: true, Name: true, Phone: true } },
+} as const;
 
-  sendJson(res, merchants);
+adminRoutes.get('/merchants', async (_req, res) => {
+  const now = new Date();
+  const monthStart = new Date(`${bangkokDate(now).slice(0, 7)}-01T00:00:00+07:00`);
+  const [merchants, totals, monthly] = await Promise.all([
+    prisma.merchants.findMany({ include: merchantDetails, orderBy: { Mch_ID: 'desc' } }),
+    prisma.sales_transactions.groupBy({
+      by: ['Merchant_ID'], where: { Status: { in: ['COMPLETED', 'completed'] }, Tx_Timestamp: { lt: now } },
+      _sum: { Total_Amount: true }, _count: { _all: true }, _max: { Tx_Timestamp: true },
+    }),
+    prisma.sales_transactions.groupBy({
+      by: ['Merchant_ID'], where: { Status: { in: ['COMPLETED', 'completed'] }, Tx_Timestamp: { gte: monthStart, lt: now } },
+      _sum: { Total_Amount: true },
+    }),
+  ]);
+  const byMerchant = new Map(totals.map(row => [row.Merchant_ID, row]));
+  const monthlyByMerchant = new Map(monthly.map(row => [row.Merchant_ID, row]));
+  sendJson(res, merchants.map(merchant => {
+    const total = byMerchant.get(merchant.Mch_ID);
+    return { ...merchant, income: {
+      totalRevenue: Number(total?._sum.Total_Amount ?? 0),
+      monthRevenue: Number(monthlyByMerchant.get(merchant.Mch_ID)?._sum.Total_Amount ?? 0),
+      transactionCount: total?._count._all ?? 0,
+      lastSaleAt: total?._max.Tx_Timestamp ?? null,
+    } };
+  }));
+});
+
+adminRoutes.patch('/merchants/:merchantId', async (req, res) => {
+  const merchantId = Number(req.params.merchantId);
+  if (!Number.isSafeInteger(merchantId) || merchantId < 1 || merchantId > 2_147_483_647) return badRequest(res, 'รหัสร้านค้าไม่ถูกต้อง');
+  const body = req.body;
+  const fields = ['Shop_Name', 'Owner_Name', 'Category', 'Dist_ID', 'Lat', 'Lng'];
+  if (!body || typeof body !== 'object' || Array.isArray(body) || !Object.keys(body).length || Object.keys(body).some(key => !fields.includes(key))) {
+    return badRequest(res, 'ข้อมูลร้านค้าไม่ถูกต้อง');
+  }
+  const { Shop_Name, Owner_Name, Category, Dist_ID, Lat, Lng } = body;
+  const category = merchantCategory(Category);
+  if (Shop_Name !== undefined && (typeof Shop_Name !== 'string' || !Shop_Name.trim() || Shop_Name.length > 200) ||
+      Owner_Name !== undefined && Owner_Name !== null && (typeof Owner_Name !== 'string' || Owner_Name.length > 200) ||
+      Category !== undefined && category === undefined ||
+      Dist_ID !== undefined && (!Number.isSafeInteger(Dist_ID) || Dist_ID < 1 || Dist_ID > 2_147_483_647) ||
+      Lat !== undefined && Lat !== null && (typeof Lat !== 'number' || !Number.isFinite(Lat) || Lat < -90 || Lat > 90) ||
+      Lng !== undefined && Lng !== null && (typeof Lng !== 'number' || !Number.isFinite(Lng) || Lng < -180 || Lng > 180)) {
+    return badRequest(res, 'กรุณาตรวจชื่อร้าน เจ้าของ ประเภท พื้นที่ และพิกัด');
+  }
+  if (!await prisma.merchants.findUnique({ where: { Mch_ID: merchantId }, select: { Mch_ID: true } })) return notFound(res, 'ไม่พบร้านค้า');
+  if (Dist_ID !== undefined && !await prisma.districts.findUnique({ where: { Dist_ID }, select: { Dist_ID: true } })) return badRequest(res, 'ไม่พบอำเภอ / เขตที่เลือก');
+  const merchant = await prisma.merchants.update({
+    where: { Mch_ID: merchantId },
+    data: { Shop_Name: Shop_Name?.trim(), Owner_Name: Owner_Name === undefined ? undefined : Owner_Name?.trim() || null, Category: category, Dist_ID, Lat, Lng },
+    include: merchantDetails,
+  });
+  sendJson(res, merchant);
 });
 
 adminRoutes.get('/daily-mission-analyses', async (_req, res) => {
@@ -217,6 +375,8 @@ adminRoutes.patch("/missions/:missionId", async (req, res) => {
     Start_DateTime,
     End_DateTime,
     Status,
+    Daily_Start_Minute,
+    Daily_End_Minute,
   } = req.body;
 
   const current = await prisma.missions.findUnique({ where: { Mission_ID: missionId } });
@@ -225,9 +385,12 @@ adminRoutes.patch("/missions/:missionId", async (req, res) => {
   const end = End_DateTime === undefined ? current.End_DateTime : new Date(End_DateTime);
   if ((Mission_Name !== undefined && (typeof Mission_Name !== 'string' || !Mission_Name.trim() || Mission_Name.length > 200)) ||
       (Description !== undefined && typeof Description !== 'string') ||
-      (Max_Recipients !== undefined && (!Number.isInteger(Max_Recipients) || Max_Recipients < 1)) ||
+      (Max_Recipients !== undefined && (!Number.isInteger(Max_Recipients) || Max_Recipients < 1 || Boolean(current.Campaign_Week_Start))) ||
       (Target_Merchant_ID !== undefined && (!Number.isInteger(Target_Merchant_ID) || Target_Merchant_ID < 1)) ||
       (Status !== undefined && (typeof Status !== 'string' || !Status.trim() || Status.length > 30)) ||
+      (Daily_Start_Minute !== undefined && (!Number.isInteger(Daily_Start_Minute) || Daily_Start_Minute < 0 || Daily_Start_Minute >= 1440)) ||
+      (Daily_End_Minute !== undefined && (!Number.isInteger(Daily_End_Minute) || Daily_End_Minute < 1 || Daily_End_Minute > 1440)) ||
+      (current.Campaign_Week_Start && (Daily_End_Minute ?? current.Daily_End_Minute ?? 0) <= (Daily_Start_Minute ?? current.Daily_Start_Minute ?? 0)) ||
       !Number.isFinite(start.getTime()) || !Number.isFinite(end.getTime()) || end <= start) {
     return badRequest(res, 'Invalid mission details');
   }
@@ -251,6 +414,8 @@ adminRoutes.patch("/missions/:missionId", async (req, res) => {
       Start_DateTime: Start_DateTime === undefined ? undefined : start,
       End_DateTime: End_DateTime === undefined ? undefined : end,
       Status,
+      Daily_Start_Minute,
+      Daily_End_Minute,
     },
   });
 
@@ -378,12 +543,15 @@ async function rewardInput(body: Record<string, unknown>, current?: { Reward_Nam
       (type === 'OTOP_PRODUCT' && (!Number.isInteger(provinceId) || !provinceId))) return null;
   const districtCount = type === 'OTOP_PRODUCT' ? await prisma.districts.count({ where: { Prov_ID: provinceId! } }) : 0;
   if (type === 'OTOP_PRODUCT' && !districtCount) return null;
-  const required = type === 'OTOP_PRODUCT' ? requiredDistrictStamps(districtCount) : (body.Required_Stamp_Count ?? current?.Required_Stamp_Count);
-  if (!Number.isInteger(Number(required)) || Number(required) < 1) return null;
+  const required = body.Required_Stamp_Count === undefined
+    ? current?.Required_Stamp_Count ?? (type === 'OTOP_PRODUCT' ? requiredDistrictStamps(districtCount) : undefined)
+    : body.Required_Stamp_Count;
+  if (typeof required !== 'number' || !Number.isInteger(required) || required < 1 || required > 2_147_483_647 ||
+      (type === 'OTOP_PRODUCT' && required > districtCount)) return null;
   return {
     Reward_Name: name.trim(), Reward_Type: type as string | null | undefined,
     Description: body.Description as string | null | undefined,
-    Required_Stamp_Count: Number(required), Status: (body.Status ?? current?.Status ?? 'ACTIVE') as string,
+    Required_Stamp_Count: required, Status: (body.Status ?? current?.Status ?? 'ACTIVE') as string,
     Province_ID: type === 'OTOP_PRODUCT' ? provinceId : null,
     Image_URL: (body.Image_URL || null) as string | null,
     Source_URL: (sourceUrl || null) as string | null,

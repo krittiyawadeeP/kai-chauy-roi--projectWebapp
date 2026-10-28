@@ -23,6 +23,7 @@ test('feature routes keep their URLs and admin guards; merchant sales use the gl
   let walletDebits = 0;
   let merchantCredits = 0;
   let allowPayment = true;
+  let eligible = true;
   let dailySubsidySpent = 0;
   let issuedPurchaseStamps = 0;
   const spentStampIds = new Set<bigint>();
@@ -31,7 +32,7 @@ test('feature routes keep their URLs and admin guards; merchant sales use the gl
   replace(prisma.grant_policy, 'findFirst', async () => policy);
   replace(prisma.grant_policy, 'findMany', async () => [policy]);
   replace(prisma.grant_policy, 'create', async ({ data }: any) => { policy = { Policy_ID: policy.Policy_ID + 1, ...data }; return policy; });
-  replace(prisma.merchants, 'findFirst', async () => ({ Mch_ID: 1, Dist_ID: 99 }));
+  replace(prisma.merchants, 'findFirst', async () => ({ Mch_ID: 1, User_ID: 2, Dist_ID: 99 }));
   replace(prisma.merchants, 'findMany', async () => [
     { Mch_ID: 1, Shop_Name: 'ร้านตัวอย่าง', Category: null, Lat: '13.7563', Lng: '100.5018', districts: { Dist_ID: 99, Dist_Name: 'พระนคร', provinces: { Prov_ID: 1, Prov_Name: 'Bangkok' } } },
     { Mch_ID: 2, Shop_Name: 'ร้านไม่มีพิกัด', Category: null, Lat: null, Lng: null, districts: { Dist_ID: 99, Dist_Name: 'พระนคร', provinces: { Prov_ID: 1, Prov_Name: 'Bangkok' } } },
@@ -49,6 +50,7 @@ test('feature routes keep their URLs and admin guards; merchant sales use the gl
   replace(prisma.users, 'findMany', async () => []);
   replace(prisma, '$transaction', async (callback: any) => callback({
     $queryRaw: async () => [{ User_ID: 10 }],
+    users: { findUnique: async ({ where }: any) => { assert.equal(where.User_ID, 10, 'only the buyer eligibility is checked'); return { Pin_Hash: null, Subsidy_Eligible: eligible }; } },
     sales_transactions: {
       aggregate: async () => ({ _sum: { Gov_Subsidized_Amount: dailySubsidySpent, Stamp_Paid_Amount: 0 } }),
       create: async ({ data }: any) => { dailySubsidySpent += data.Gov_Subsidized_Amount + (data.Stamp_Paid_Amount ?? 0); return { Tx_ID: 1n, ...data }; },
@@ -76,7 +78,7 @@ test('feature routes keep their URLs and admin guards; merchant sales use the gl
       create: async ({ data }: any) => { rewardRedemptions.push({ ...data, Required_Stamp_Count: rewardRequired }); return data; },
     },
     stamp_spend_transactions: { createMany: async ({ data }: any) => { for (const stamp of data) spentStampIds.add(stamp.User_Stamp_ID); } },
-    missions: { findFirst: async () => null },
+    missions: { findFirst: async () => null, findMany: async () => [] },
     districts: { findUniqueOrThrow: async () => ({ Dist_ID: 99, Dist_Name: 'พระนคร', Stamp_Min_Spend: 150, Stamp_Reward_Count: 2 }) },
     district_stamps: { findFirst: async () => ({ Stamp_ID: 1, Stamp_Name: 'แสตมป์พระนคร', District_ID: 99 }) },
   }));
@@ -177,6 +179,13 @@ test('feature routes keep their URLs and admin guards; merchant sales use the gl
     assert.equal(qualifying.status, 200);
     assert.equal((await qualifying.json() as any).awardedStampCount, 2);
     assert.equal(issuedPurchaseStamps, 6);
+    const before = { walletDebits, grantDebits, merchantCredits };
+    eligible = false;
+    assert.equal((await request('/user/pay', citizen, { Merchant_ID: 1, Total_Amount: 100, District_ID: 99 })).status, 403);
+    assert.equal((await request('/merchants/me/sales', merchant, { User_ID: 10, Total_Amount: 100, District_ID: 99 })).status, 403);
+    assert.deepEqual({ walletDebits, grantDebits, merchantCredits }, before, 'revoked buyers cannot charge a wallet, use a grant, or credit a shop');
+    eligible = true;
+    assert.equal((await request('/merchants/me/sales', merchant, { User_ID: 10, Total_Amount: 1, District_ID: 99 })).status, 201);
   } finally {
     [admin, merchant, government, citizen].forEach(destroySession);
     originals.reverse().forEach(restore => restore());
