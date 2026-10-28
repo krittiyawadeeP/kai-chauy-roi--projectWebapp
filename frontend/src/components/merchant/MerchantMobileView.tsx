@@ -67,6 +67,7 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
     currentMerchant,
     setCurrentMerchant,
     transactions,
+    missions,
     refreshMerchantData,
     logout
   } = useApp();
@@ -94,6 +95,31 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
   const merchantTransactions = React.useMemo(() => {
     return transactions.filter(t => t.merchantId === currentMerchant?.mchId);
   }, [transactions, currentMerchant?.mchId]);
+
+  const myActiveMissions = React.useMemo(() => {
+    if (!currentMerchant?.mchId) return [];
+    return missions.filter(
+      m => m.status === 'active' && Number(m.targetMerchantId) === Number(currentMerchant.mchId)
+    );
+  }, [missions, currentMerchant?.mchId]);
+
+  const formatMissionTimeWindow = (startIso: string, endIso: string, label?: string) => {
+    if (label) return label;
+    try {
+      const fmt = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Asia/Bangkok',
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+      });
+      const s = fmt.format(new Date(startIso));
+      const e = fmt.format(new Date(endIso));
+      if (s === e) return '13:00 - 15:00 น. (กำหนดเวลา 2 ชม.)';
+      return `${s} - ${e} น. (กำหนดเวลา 2 ชม.)`;
+    } catch {
+      return '13:00 - 15:00 น. (กำหนดเวลา 2 ชม.)';
+    }
+  };
 
   // Filter ONLY transactions for TODAY
   const todayTransactions = React.useMemo(() => {
@@ -319,6 +345,103 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
             </button>
           ))}
         </div>
+      </section>
+
+      {/* Merchant Weekly AI Active Mission Section */}
+      <section className="mt-4 px-4">
+        {myActiveMissions.length > 0 ? (
+          <div className="space-y-3">
+            {myActiveMissions.map(ms => {
+              const progress = Math.min(100, Math.round((ms.currentRecipients / Math.max(1, ms.maxRecipients)) * 100));
+              const timeWindow = formatMissionTimeWindow(ms.startDateTime, ms.endDateTime, ms.timeWindowLabel);
+              return (
+                <div
+                  key={ms.missionId}
+                  className="rounded-[22px] bg-gradient-to-br from-[#fff7ed] via-[#fffbeb] to-[#fef3c7] p-4 border border-amber-300/80 shadow-sm space-y-3"
+                >
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <span className="inline-flex items-center gap-1.5 bg-amber-500 text-white text-[10px] font-extrabold px-2.5 py-1 rounded-full shadow-xs">
+                      <Icon name="sparkle" className="size-3" />
+                      <span>ภารกิจ AI ประจำสัปดาห์ของร้านคุณ (ACTIVE)</span>
+                    </span>
+                    <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-full">
+                      ● 1 ใน 2 ร้านประจำจังหวัดสัปดาห์นี้
+                    </span>
+                  </div>
+
+                  <div className="bg-white/95 rounded-2xl p-3.5 border border-amber-200/70 space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <h3 className="text-sm font-extrabold text-slate-900">{ms.missionName}</h3>
+                        <p className="text-xs text-slate-600 mt-0.5 leading-relaxed">{ms.description}</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-1.5 pt-2 border-t border-amber-100 text-[11px]">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500">⏰ ช่วงเวลาทำภารกิจ (2 ชม./วัน):</span>
+                        <strong className="text-amber-800 font-bold">{timeWindow}</strong>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500">👤 สิทธิ์ลูกค้า 1 คน:</span>
+                        <strong className="text-[#115e59] font-bold">ทำได้ 1 ครั้ง/วัน (สูงสุด 7 ครั้ง/สัปดาห์)</strong>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500">📅 ระยะเวลาภารกิจ:</span>
+                        <strong className="text-slate-800">ตลอด 1 สัปดาห์ (สถานะ Active)</strong>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500">💰 ยอดซื้อขั้นต่ำรับแสตมป์:</span>
+                        <strong className="text-emerald-700 font-mono">฿{ms.minSpend.toLocaleString('th-TH')} บาท</strong>
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-amber-100 space-y-1">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-slate-500 font-medium">ผู้เข้าร่วมทำภารกิจสัปดาห์นี้:</span>
+                        <strong className="text-amber-900 font-mono">
+                          {ms.currentRecipients} / {ms.maxRecipients} ครั้ง (คงเหลือ {Math.max(0, ms.maxRecipients - ms.currentRecipients)} สิทธิ์)
+                        </strong>
+                      </div>
+                      <div className="w-full bg-amber-100 rounded-full h-2 overflow-hidden">
+                        <div
+                          className="bg-gradient-to-r from-amber-500 to-teal-600 h-2 rounded-full transition-all"
+                          style={{ width: `${progress}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setQrModalOpen(true)}
+                    className="w-full py-2.5 bg-[#115e59] hover:bg-[#0f766e] text-white rounded-xl text-xs font-bold shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Icon name="qr" className="size-4" />
+                    <span>สร้าง QR รับเงินสำหรับลูกค้าที่มาทำภารกิจ</span>
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="rounded-[20px] bg-white p-3.5 border border-teal-100/80 shadow-xs flex items-start gap-3">
+            <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-teal-50 text-[#115e59]">
+              <Icon name="sparkle" className="size-4" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-bold text-slate-800">ภารกิจ AI ประจำสัปดาห์ของร้านคุณ</p>
+                <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+                  ไม่มีภารกิจ Active สัปดาห์นี้
+                </span>
+              </div>
+              {/* <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
+                AI จะวิเคราะห์ยอดขายรายสัปดาห์เพื่อเลือกร้านค้ายอดขายชะลอตัว 2 ร้าน/จังหวัด มาจัดภารกิจกำหนดเวลา 2 ชม./วัน (1 คนทำได้ 1 ครั้ง/วัน สูงสุด 7 ครั้ง/สัปดาห์)
+              </p> */}
+            </div>
+          </div>
+        )}
       </section>
 
       {/* Tab Switcher */}

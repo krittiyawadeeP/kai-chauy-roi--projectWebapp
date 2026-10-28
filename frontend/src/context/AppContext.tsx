@@ -243,14 +243,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const refreshMerchantData = React.useCallback(async () => {
     if (!authStorage.getToken()) return;
     try {
-      const [profile, sales] = await Promise.all([
+      const [profile, sales, missionsRes, aiTargetShopsRes] = await Promise.all([
         merchantService.getMyProfile(),
-        merchantService.getSalesSummary<ApiSale[]>()
+        merchantService.getSalesSummary<ApiSale[]>(),
+        api.get<Mission[]>('/missions').catch(() => null),
+        api.get<AiTargetShop[]>('/ai/target-shops').catch(() => null),
       ]);
       const mappedMerchant = mapApiMerchant(profile);
       setCurrentMerchant(mappedMerchant);
       setMerchants(previous => [mappedMerchant, ...previous.filter(item => item.mchId !== mappedMerchant.mchId)]);
       setTransactions(sales.map(s => mapApiSale(s, users)));
+      if (Array.isArray(missionsRes)) setMissions(missionsRes);
+      if (Array.isArray(aiTargetShopsRes)) setAiTargetShops(aiTargetShopsRes);
       setAuthenticatedRole('merchant');
       localStorage.setItem(`${STORAGE_KEY}_auth_role`, 'merchant');
       setRoleState(prev => {
@@ -470,9 +474,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (Array.isArray(stampsRes) && stampsRes.length > 0) setDistrictStamps(stampsRes);
       if (Array.isArray(myStampsRes)) setUserStamps(myStampsRes);
       if (Array.isArray(rewardsRes) && rewardsRes.length > 0) setRewards(rewardsRes);
-      if (Array.isArray(missionsRes) && missionsRes.length > 0) setMissions(missionsRes);
+      if (Array.isArray(missionsRes)) setMissions(missionsRes);
       if (Array.isArray(redemptionsRes)) setRedemptions(redemptionsRes);
-      if (Array.isArray(aiTargetShopsRes) && aiTargetShopsRes.length > 0) setAiTargetShops(aiTargetShopsRes);
+      if (Array.isArray(aiTargetShopsRes)) setAiTargetShops(aiTargetShopsRes);
     } catch (err: any) {
       console.warn('refreshCitizenData notice:', err);
       if (err?.status === 401 || err?.status === 403) {
@@ -485,6 +489,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [refreshMerchantData]);
 
   useEffect(() => {
+    api.get<Mission[]>('/missions')
+      .then(res => { if (Array.isArray(res)) setMissions(res); })
+      .catch(() => {});
+    api.get<AiTargetShop[]>('/ai/target-shops')
+      .then(res => { if (Array.isArray(res)) setAiTargetShops(res); })
+      .catch(() => {});
+
     if (!authStorage.getToken()) return;
     if (authenticatedRole === 'merchant' || role === 'merchant') {
       void refreshMerchantData();
@@ -991,22 +1002,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let awardedStamp: DistrictStamp | undefined = undefined;
     let matchingMissionId: number | undefined = undefined;
 
-    // Check if there is an active mission for this merchant
+    // Check if there is an active mission for this merchant (1 time/day, max 7 times/week)
     const shopStamp = districtStamps.find(s => s.distId === targetShop.distId);
-    const activeMission = shopStamp && missions.find(
-      ms =>
-        ms.status === 'active' &&
-        (ms.targetMerchantId === merchantId || ms.targetDistId === targetShop.distId) &&
-        totalAmount >= ms.minSpend &&
-        ms.currentRecipients < ms.maxRecipients &&
-        !ms.completedUserIds.includes(currentUser.userId)
-    );
+    const activeMission = shopStamp && missions.find(ms => {
+      if (ms.status !== 'active') return false;
+      if (ms.targetMerchantId !== merchantId && ms.targetDistId !== targetShop.distId) return false;
+      if (totalAmount < ms.minSpend || ms.currentRecipients >= ms.maxRecipients) return false;
+      const userCompletions = ms.userCompletions?.filter(c => c.userId === currentUser.userId) || [];
+      const weeklyCount = userCompletions.length || ms.completedUserIds.filter(id => id === currentUser.userId).length;
+      const doneToday = userCompletions.some(c => String(c.earnedAt).startsWith(todayStr));
+      return !doneToday && weeklyCount < 7;
+    });
 
     if (activeMission) {
       matchingMissionId = activeMission.missionId;
       awardedStamp = shopStamp;
+      const nowIso = new Date().toISOString();
 
-      // Increment mission recipients
+      // Increment mission recipients (1 time/day, up to 7 times/week)
       setMissions(prev =>
         prev.map(m =>
           m.missionId === activeMission.missionId
@@ -1014,6 +1027,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 ...m,
                 currentRecipients: m.currentRecipients + 1,
                 completedUserIds: [...m.completedUserIds, currentUser.userId],
+                userCompletions: [...(m.userCompletions || []), { userId: currentUser.userId, earnedAt: nowIso }],
                 status: m.currentRecipients + 1 >= m.maxRecipients ? 'completed' : 'active'
               }
             : m

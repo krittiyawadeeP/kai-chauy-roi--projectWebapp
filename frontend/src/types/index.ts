@@ -86,10 +86,13 @@ export interface AISalesAnalysis {
 
 export interface AiTargetShop {
   analysisId: number;
+  missionId?: number;
   merchantId: number;
   merchantName: string;
   category: string;
+  distId?: number;
   districtName: string;
+  provId?: number;
   provinceName: string;
   salesRatio: number;
   salesStatus: string;
@@ -107,15 +110,20 @@ export interface Mission {
   targetMerchantId?: number;
   targetMerchantName?: string;
   targetDistId?: number;
+  targetDistName?: string;
+  targetProvId?: number;
+  targetProvName?: string;
   minSpend: number; // typically 150 THB
   maxRecipients: number; // e.g. 10 or 50
   currentRecipients: number;
   rewardStampId: number;
   startDateTime: string;
   endDateTime: string;
+  timeWindowLabel?: string;
   status: 'active' | 'completed' | 'draft';
   category: string;
   completedUserIds: number[];
+  userCompletions?: { userId: number; earnedAt: string }[];
 }
 
 export interface DistrictStamp {
