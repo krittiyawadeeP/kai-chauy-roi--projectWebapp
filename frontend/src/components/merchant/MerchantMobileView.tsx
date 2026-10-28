@@ -366,8 +366,11 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
         {myActiveMissions.length > 0 ? (
           <div className="space-y-3">
             {myActiveMissions.map(ms => {
-              const progress = Math.min(100, Math.round((ms.currentRecipients / Math.max(1, ms.maxRecipients)) * 100));
-              const timeWindow = formatMissionTimeWindow(ms.startDateTime, ms.endDateTime, ms.timeWindowLabel);
+              const progress = ms.maxRecipients == null ? 0 : Math.min(100, Math.round((ms.currentRecipients / Math.max(1, ms.maxRecipients)) * 100));
+              const minuteLabel = (minute: number) => `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`;
+              const timeWindow = ms.dailyStartMinute != null && ms.dailyEndMinute != null
+                ? `${minuteLabel(ms.dailyStartMinute)} - ${minuteLabel(ms.dailyEndMinute)} น. ทุกวัน`
+                : formatMissionTimeWindow(ms.startDateTime, ms.endDateTime, ms.timeWindowLabel);
               return (
                 <div
                   key={ms.missionId}
@@ -376,11 +379,11 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <span className="inline-flex items-center gap-1.5 bg-amber-500 text-white text-[10px] font-extrabold px-2.5 py-1 rounded-full shadow-xs">
                       <Icon name="sparkle" className="size-3" />
-                      <span>ภารกิจ AI ประจำสัปดาห์ของร้านคุณ (ACTIVE)</span>
+                      <span>{ms.isAiMission ? 'ภารกิจ AI ประจำสัปดาห์ของร้านคุณ (ACTIVE)' : 'ภารกิจของร้านคุณ (ACTIVE)'}</span>
                     </span>
-                    <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-full">
+                    {ms.isAiMission && <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-full">
                       ● 1 ใน 2 ร้านประจำจังหวัดสัปดาห์นี้
-                    </span>
+                    </span>}
                   </div>
 
                   <div className="bg-white/95 rounded-2xl p-3.5 border border-amber-200/70 space-y-2">
@@ -398,15 +401,15 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-slate-500">👤 สิทธิ์ลูกค้า 1 คน:</span>
-                        <strong className="text-[#115e59] font-bold">ทำได้ 1 ครั้ง/วัน (สูงสุด 7 ครั้ง/สัปดาห์)</strong>
+                        <strong className="text-[#115e59] font-bold">{ms.isAiMission ? `รับแสตมป์ AI สูงสุด ${ms.dailyStampLimit ?? 1} ดวง/คน/วัน` : 'รับแสตมป์ได้ 1 ครั้งต่อภารกิจ'}</strong>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-slate-500">📅 ระยะเวลาภารกิจ:</span>
-                        <strong className="text-slate-800">ตลอด 1 สัปดาห์ (สถานะ Active)</strong>
+                        <strong className="text-slate-800">{new Date(ms.startDateTime).toLocaleDateString('th-TH', { timeZone: 'Asia/Bangkok' })} – {new Date(new Date(ms.endDateTime).getTime() - (ms.isAiMission ? 1 : 0)).toLocaleDateString('th-TH', { timeZone: 'Asia/Bangkok' })}</strong>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-slate-500">💰 ยอดซื้อขั้นต่ำรับแสตมป์:</span>
-                        <strong className="text-emerald-700 font-mono">฿{ms.minSpend.toLocaleString('th-TH')} บาท</strong>
+                        <strong className="text-emerald-700 font-mono">{ms.minSpend == null ? 'ไม่มียอดขั้นต่ำ' : `฿${ms.minSpend.toLocaleString('th-TH')} บาท`}</strong>
                       </div>
                     </div>
 
@@ -414,15 +417,15 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
                       <div className="flex items-center justify-between text-[11px]">
                         <span className="text-slate-500 font-medium">ผู้เข้าร่วมทำภารกิจสัปดาห์นี้:</span>
                         <strong className="text-amber-900 font-mono">
-                          {ms.currentRecipients} / {ms.maxRecipients} ครั้ง (คงเหลือ {Math.max(0, ms.maxRecipients - ms.currentRecipients)} สิทธิ์)
+                          {ms.maxRecipients == null ? `แจกแสตมป์แล้ว ${ms.currentRecipients} ดวง · ไม่จำกัดผู้เข้าร่วม` : `${ms.currentRecipients} / ${ms.maxRecipients} ครั้ง (คงเหลือ ${Math.max(0, ms.maxRecipients - ms.currentRecipients)} สิทธิ์)`}
                         </strong>
                       </div>
-                      <div className="w-full bg-amber-100 rounded-full h-2 overflow-hidden">
+                      {ms.maxRecipients != null && <div className="w-full bg-amber-100 rounded-full h-2 overflow-hidden">
                         <div
                           className="bg-gradient-to-r from-amber-500 to-teal-600 h-2 rounded-full transition-all"
                           style={{ width: `${progress}%` }}
                         />
-                      </div>
+                      </div>}
                     </div>
                   </div>
 

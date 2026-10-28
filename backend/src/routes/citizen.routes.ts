@@ -439,6 +439,7 @@ citizenRoutes.get("/missions", async (_req, res) => {
     isAiMission: Boolean(m.Campaign_Week_Start),
     dailyStartMinute: m.Daily_Start_Minute,
     dailyEndMinute: m.Daily_End_Minute,
+    dailyStampLimit: m.Campaign_Week_Start ? m.Ai_Daily_Stamp_Limit ?? 1 : undefined,
     rewardStampId: 1,
     startDateTime: m.Start_DateTime.toISOString(),
     endDateTime: m.End_DateTime.toISOString(),

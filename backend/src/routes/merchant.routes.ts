@@ -212,6 +212,7 @@ type RawMerchantMissionRow = {
   Start_DateTime: Date;
   End_DateTime: Date;
   Status: string;
+  Campaign_Week_Start?: Date | null;
   Daily_Start_Minute?: number | null;
   Daily_End_Minute?: number | null;
   Ai_Daily_Stamp_Limit?: number | null;
@@ -248,6 +249,7 @@ merchantRoutes.get("/me/missions", requireMerchant, async (req: AuthRequest, res
           Start_DateTime,
           End_DateTime,
           Status,
+          Campaign_Week_Start,
           Daily_Start_Minute,
           Daily_End_Minute,
           Ai_Daily_Stamp_Limit
@@ -298,9 +300,13 @@ merchantRoutes.get("/me/missions", requireMerchant, async (req: AuthRequest, res
           targetDistName: merchant.districts?.Dist_Name || "",
           targetProvId: merchant.districts?.Prov_ID || 0,
           targetProvName: merchant.districts?.provinces?.Prov_Name || "",
-          minSpend: 150,
-          maxRecipients: m.Max_Recipients != null ? Number(m.Max_Recipients) : 50,
+          minSpend: m.Campaign_Week_Start ? null : 150,
+          maxRecipients: m.Max_Recipients != null ? Number(m.Max_Recipients) : null,
           currentRecipients: stamps.length,
+          isAiMission: Boolean(m.Campaign_Week_Start),
+          dailyStartMinute: startMin,
+          dailyEndMinute: endMin,
+          dailyStampLimit: m.Campaign_Week_Start ? Number(m.Ai_Daily_Stamp_Limit ?? 1) : undefined,
           rewardStampId: 1,
           startDateTime: startDate.toISOString(),
           endDateTime: endDate.toISOString(),
