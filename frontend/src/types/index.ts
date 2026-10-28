@@ -94,12 +94,16 @@ export interface AiTargetShop {
   districtName: string;
   provId?: number;
   provinceName: string;
+  provinceId?: number;
   salesRatio: number;
   salesStatus: string;
   boostRecommended: boolean;
   missionTitle: string;
   missionDetail: string;
   criticalHours: string;
+  campaignStart?: string;
+  campaignEnd?: string;
+  dailyStampLimit?: number;
   imageUrl: string;
 }
 
@@ -113,9 +117,13 @@ export interface Mission {
   targetDistName?: string;
   targetProvId?: number;
   targetProvName?: string;
-  minSpend: number; // typically 150 THB
-  maxRecipients: number; // e.g. 10 or 50
+  minSpend: number | null;
+  maxRecipients: number | null;
   currentRecipients: number;
+  isAiMission?: boolean;
+  dailyStartMinute?: number | null;
+  dailyEndMinute?: number | null;
+  dailyStampLimit?: number;
   rewardStampId: number;
   startDateTime: string;
   endDateTime: string;

@@ -6,7 +6,7 @@ export async function spendableStamps(db: StampReader, userId: number) {
   const [stamps, redemptions] = await Promise.all([
     db.user_stamps.findMany({
       where: { User_ID: userId, stamp_spend_transactions: { is: null } },
-      select: { User_Stamp_ID: true, User_ID: true, Stamp_ID: true, Earned_At: true, Qualifying_Amount: true },
+      select: { User_Stamp_ID: true, User_ID: true, Stamp_ID: true, Earn_Source: true, Earned_At: true, Qualifying_Amount: true },
       orderBy: [{ Earned_At: 'asc' }, { User_Stamp_ID: 'asc' }],
     }),
     db.stamp_redemptions.findMany({

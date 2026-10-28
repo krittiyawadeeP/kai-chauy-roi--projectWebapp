@@ -477,9 +477,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (Array.isArray(stampsRes) && stampsRes.length > 0) setDistrictStamps(stampsRes);
       if (Array.isArray(myStampsRes)) setUserStamps(myStampsRes);
       if (Array.isArray(rewardsRes) && rewardsRes.length > 0) setRewards(rewardsRes);
-      if (Array.isArray(missionsRes) && missionsRes.length > 0) setMissions(missionsRes);
+      if (Array.isArray(missionsRes)) setMissions(missionsRes);
       if (Array.isArray(redemptionsRes)) setRedemptions(redemptionsRes);
-      if (Array.isArray(aiTargetShopsRes) && aiTargetShopsRes.length > 0) setAiTargetShops(aiTargetShopsRes);
+      if (Array.isArray(aiTargetShopsRes)) setAiTargetShops(aiTargetShopsRes);
     } catch (err: any) {
       console.warn('refreshCitizenData notice:', err);
       if (err?.status === 401 || err?.status === 403) {
@@ -911,10 +911,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
 
           let awardedStamp: DistrictStamp | undefined = undefined;
-          if (res.awardedStamp) {
-            awardedStamp = districtStamps.find(s => s.stampId === res.awardedStamp.Stamp_ID) || {
-              stampId: res.awardedStamp.Stamp_ID,
-              stampName: res.awardedStamp.Stamp_Name || 'แสตมป์ดิจิทัล',
+          const earnedDistrictStamp = res.awardedStamp ?? res.earnedStamp?.district_stamps;
+          if (earnedDistrictStamp) {
+            awardedStamp = districtStamps.find(s => s.stampId === earnedDistrictStamp.Stamp_ID) || {
+              stampId: earnedDistrictStamp.Stamp_ID,
+              stampName: earnedDistrictStamp.Stamp_Name || 'แสตมป์ดิจิทัล',
               distName: targetShop.address,
               distId: targetShop.distId,
               provId: targetShop.provId,
@@ -950,7 +951,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             success: true,
             message: `ชำระเงินสำเร็จ ฿${totalAmount.toLocaleString()} (คุณจ่าย ฿${newTx.userPaidAmount.toLocaleString()}, รัฐช่วยจ่าย ฿${newTx.govSubsidizedAmount.toLocaleString()})`,
             earnedStamp: awardedStamp,
-            earnedStampCount: res.awardedStampCount,
+            earnedStampCount: res.awardedStampCount + (res.earnedStamp ? 1 : 0),
             tx: newTx,
           };
         }
@@ -1004,8 +1005,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ms =>
         ms.status === 'active' &&
         (ms.targetMerchantId === merchantId || ms.targetDistId === targetShop.distId) &&
-        totalAmount >= ms.minSpend &&
-        ms.currentRecipients < ms.maxRecipients &&
+        totalAmount >= (ms.minSpend ?? 0) &&
+        (ms.maxRecipients === null || ms.currentRecipients < ms.maxRecipients) &&
         !ms.completedUserIds.includes(currentUser.userId)
     );
 
@@ -1021,7 +1022,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 ...m,
                 currentRecipients: m.currentRecipients + 1,
                 completedUserIds: [...m.completedUserIds, currentUser.userId],
-                status: m.currentRecipients + 1 >= m.maxRecipients ? 'completed' : 'active'
+                status: m.maxRecipients !== null && m.currentRecipients + 1 >= m.maxRecipients ? 'completed' : 'active'
               }
             : m
         )

@@ -68,6 +68,7 @@ export const citizenService = {
       grant: { grantId: number; userId: number; totalGrantAmount: number; remainingAmount: number };
       awardedStamp?: any;
       awardedStampCount: number;
+      earnedStamp?: any;
     }>('/user/pay', data);
   },
 

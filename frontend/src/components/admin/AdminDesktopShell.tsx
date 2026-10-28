@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Building2, LayoutDashboard, Landmark, FileText, Store, ChartNoAxesCombined, Gift, Stamp, LogOut, ChevronRight, ArrowLeft } from 'lucide-react';
+import { Building2, LayoutDashboard, Landmark, FileText, Store, Users, ChartNoAxesCombined, Gift, Stamp, LogOut, ChevronRight, ArrowLeft } from 'lucide-react';
 import { AdminLoginPage } from './AdminLoginPage';
 import { AdminPortalView } from './AdminPortalView';
 import { GeographicDashboard } from './GeographicDashboard';
@@ -9,7 +9,7 @@ import { authService } from '../../services/authService';
 import { useApp } from '../../context/AppContext';
 import './admin.css';
 
-type AdminTab = 'dashboard' | 'budget' | 'ai' | 'missions' | 'stamps' | 'rewards' | 'merchants';
+type AdminTab = 'dashboard' | 'budget' | 'ai' | 'missions' | 'stamps' | 'rewards' | 'merchants' | 'users';
 const navigation = [
   { key: 'dashboard', label: 'ภาพรวมเศรษฐกิจรายพื้นที่', icon: LayoutDashboard },
   { key: 'budget', label: 'นโยบายอัตราร่วมจ่าย', icon: Landmark },
@@ -18,13 +18,14 @@ const navigation = [
   { key: 'stamps', label: 'แสตมป์รายอำเภอ', icon: Stamp },
   { key: 'rewards', label: 'จัดการของรางวัล OTOP', icon: Gift },
   { key: 'merchants', label: 'ทะเบียนร้านค้า', icon: Store },
+  { key: 'users', label: 'ผู้ใช้งาน', icon: Users },
 ] as const;
 
 export const AdminDesktopShell: React.FC = () => {
   const { setRole } = useApp();
   const [loggedIn, setLoggedIn] = useState(false);
   const [checking, setChecking] = useState(true);
-  const [tab, setTab] = useState<AdminTab>(() => new URLSearchParams(window.location.search).get('tab') === 'ai' ? 'ai' : 'dashboard');
+  const [tab, setTab] = useState<AdminTab>(() => navigation.find(item => item.key === new URLSearchParams(window.location.search).get('tab'))?.key ?? 'dashboard');
   const [adminName, setAdminName] = useState('เจ้าหน้าที่ผู้ดูแลระบบ');
   const [sessionExpired, setSessionExpired] = useState(false);
   useEffect(() => {

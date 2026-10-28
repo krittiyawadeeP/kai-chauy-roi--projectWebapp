@@ -25,6 +25,10 @@ export function destroySession(token: string) {
   sessions.delete(token);
 }
 
+export function revokeUserSessions(userId: number) {
+  for (const [token, session] of sessions) if (session.userId === userId) sessions.delete(token);
+}
+
 export function getBearerToken(req: Request) {
   const header = req.headers.authorization;
 

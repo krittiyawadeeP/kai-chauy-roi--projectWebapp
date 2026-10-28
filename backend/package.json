@@ -9,6 +9,7 @@
     "prisma:generate": "prisma generate",
     "seed:nakhon-pathom": "tsx prisma/seed-nakhon-pathom.ts",
     "seed:sales": "tsx prisma/seed-sales.ts",
+    "seed:ai-dashboard": "tsx prisma/seed-ai-dashboard.ts",
     "seed:otop-rewards": "tsx prisma/seed-otop-rewards.ts",
     "images:otop-rewards": "tsx prisma/add-otop-images.ts"
   },
@@ -26,7 +27,7 @@
     "@types/node": "^24.13.3",
     "@types/swagger-jsdoc": "^6.0.4",
     "@types/swagger-ui-express": "^4.1.8",
-    "prisma": "^7.10.1",
+    "prisma": "^6.19.3",
     "tsx": "^4.23.15",
     "typescript": "~6.0.2"
   }
