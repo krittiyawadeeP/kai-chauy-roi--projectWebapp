@@ -30,7 +30,7 @@ import {
   INITIAL_USER_GRANT,
   INITIAL_REDEMPTIONS
 } from '../mock/initialData';
-import { api, authStorage } from '../services/api';
+import { api, authStorage, AUTH_EXPIRED_EVENT } from '../services/api';
 import { ApiMerchant, ApiSale, merchantService, mapApiMerchant, getCoordinates } from '../services/merchantService';
 import { citizenService } from '../services/citizenService';
 
@@ -60,7 +60,7 @@ interface AppContextType {
   isAuthenticated: boolean;
   setIsAuthenticated: (val: boolean) => void;
   loginCitizen: (citizenId: string, phoneOrOtp?: string, dbUser?: any) => { success: boolean; message: string; user?: User };
-  loginMerchant: (phoneOrTax: string, passwordOrPin?: string, mchId?: number) => { success: boolean; message: string; merchant?: Merchant };
+  loginMerchant: (phoneOrTax: string, passwordOrPin?: string, mchId?: number, dbMerchant?: any) => { success: boolean; message: string; merchant?: Merchant };
   logout: () => void;
   updateMerchantProfile: (mchId: number, data: Partial<Merchant>) => Promise<void>;
   updateMerchantLocation: (mchId: number, lat: number, lng: number, address?: string, distId?: number) => Promise<void>;
@@ -135,7 +135,47 @@ function mapApiSale(data: ApiSale, usersList?: User[]): SalesTransaction {
 }
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [role, setRole] = useState<Role>('citizen');
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    const saved = localStorage.getItem(`${STORAGE_KEY}_is_auth`);
+    return saved !== null ? JSON.parse(saved) : !!authStorage.getToken();
+  });
+
+  const [authenticatedRole, setAuthenticatedRole] = useState<'citizen' | 'merchant' | null>(() => {
+    const saved = localStorage.getItem(`${STORAGE_KEY}_auth_role`);
+    if (saved === 'citizen' || saved === 'merchant') return saved;
+    return null;
+  });
+
+  const [role, setRoleState] = useState<Role>(() => {
+    if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('view') === 'admin') {
+      return 'admin';
+    }
+    const savedAuthRole = localStorage.getItem(`${STORAGE_KEY}_auth_role`);
+    if (savedAuthRole === 'citizen' || savedAuthRole === 'merchant') {
+      return savedAuthRole;
+    }
+    const saved = localStorage.getItem(`${STORAGE_KEY}_role`);
+    if (saved === 'citizen' || saved === 'merchant' || saved === 'admin') {
+      return saved;
+    }
+    return 'citizen';
+  });
+
+  const setRole = React.useCallback((nextRole: Role) => {
+    setRoleState(() => {
+      if (nextRole === 'admin') {
+        localStorage.setItem(`${STORAGE_KEY}_role`, 'admin');
+        return 'admin';
+      }
+      if (isAuthenticated && authenticatedRole && nextRole !== authenticatedRole) {
+        localStorage.setItem(`${STORAGE_KEY}_role`, authenticatedRole);
+        return authenticatedRole;
+      }
+      localStorage.setItem(`${STORAGE_KEY}_role`, nextRole);
+      return nextRole;
+    });
+  }, [isAuthenticated, authenticatedRole]);
+
   const [viewMode, setViewMode] = useState<'mobile' | 'desktop'>('mobile');
 
   // Stored state with default fallback
@@ -159,8 +199,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return saved ? JSON.parse(saved) : INITIAL_USERS;
   });
 
-  const [currentUser, setCurrentUser] = useState<User>(() => users[0] || INITIAL_USERS[0]);
-  const [currentMerchant, setCurrentMerchant] = useState<Merchant>(() => merchants[0] || INITIAL_MERCHANTS[0]);
+  const [currentUser, setCurrentUser] = useState<User>(() => {
+    const saved = localStorage.getItem(`${STORAGE_KEY}_current_user`);
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        // fallback below
+      }
+    }
+    return users[0] || INITIAL_USERS[0];
+  });
+  const [currentMerchant, setCurrentMerchant] = useState<Merchant>(() => {
+    const saved = localStorage.getItem(`${STORAGE_KEY}_current_merchant`);
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        // fallback below
+      }
+    }
+    return merchants[0] || INITIAL_MERCHANTS[0];
+  });
   const [transactions, setTransactions] = useState<SalesTransaction[]>(() => {
     const saved = localStorage.getItem(`${STORAGE_KEY}_transactions`);
     if (saved) {
@@ -182,15 +242,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const refreshMerchantData = React.useCallback(async () => {
     if (!authStorage.getToken()) return;
-    const [profile, sales] = await Promise.all([
-      merchantService.getMyProfile(),
-      merchantService.getSalesSummary<ApiSale[]>()
-    ]);
-    const mappedMerchant = mapApiMerchant(profile);
-    setCurrentMerchant(mappedMerchant);
-    setMerchants(previous => [mappedMerchant, ...previous.filter(item => item.mchId !== mappedMerchant.mchId)]);
-    setTransactions(sales.map(s => mapApiSale(s, users)));
-  }, []);
+    try {
+      const [profile, sales] = await Promise.all([
+        merchantService.getMyProfile(),
+        merchantService.getSalesSummary<ApiSale[]>()
+      ]);
+      const mappedMerchant = mapApiMerchant(profile);
+      setCurrentMerchant(mappedMerchant);
+      setMerchants(previous => [mappedMerchant, ...previous.filter(item => item.mchId !== mappedMerchant.mchId)]);
+      setTransactions(sales.map(s => mapApiSale(s, users)));
+      setAuthenticatedRole('merchant');
+      localStorage.setItem(`${STORAGE_KEY}_auth_role`, 'merchant');
+      setRoleState(prev => {
+        const next = prev === 'admin' ? 'admin' : 'merchant';
+        localStorage.setItem(`${STORAGE_KEY}_role`, next);
+        return next;
+      });
+      setIsAuthenticated(true);
+    } catch (err: any) {
+      console.warn('refreshMerchantData notice:', err);
+      if (err?.status === 401) {
+        authStorage.removeToken();
+        setAuthenticatedRole(null);
+        localStorage.removeItem(`${STORAGE_KEY}_auth_role`);
+        setIsAuthenticated(false);
+      }
+    }
+  }, [users]);
 
   const [missions, setMissions] = useState<Mission[]>(() => {
     const saved = localStorage.getItem(`${STORAGE_KEY}_missions`);
@@ -283,14 +361,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem(`${STORAGE_KEY}_ai`, JSON.stringify(aiAnalysis));
   }, [aiAnalysis]);
 
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    const saved = localStorage.getItem(`${STORAGE_KEY}_is_auth`);
-    return saved !== null ? JSON.parse(saved) : !!authStorage.getToken();
-  });
+  useEffect(() => {
+    localStorage.setItem(`${STORAGE_KEY}_current_user`, JSON.stringify(currentUser));
+  }, [currentUser]);
+
+  useEffect(() => {
+    localStorage.setItem(`${STORAGE_KEY}_current_merchant`, JSON.stringify(currentMerchant));
+  }, [currentMerchant]);
 
   useEffect(() => {
     localStorage.setItem(`${STORAGE_KEY}_is_auth`, JSON.stringify(isAuthenticated));
   }, [isAuthenticated]);
+
+  useEffect(() => {
+    const handleAuthExpired = () => {
+      setAuthenticatedRole(null);
+      localStorage.removeItem(`${STORAGE_KEY}_auth_role`);
+      setIsAuthenticated(false);
+    };
+    window.addEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired);
+    return () => window.removeEventListener(AUTH_EXPIRED_EVENT, handleAuthExpired);
+  }, []);
 
   const refreshCitizenData = React.useCallback(async () => {
     const token = authStorage.getToken();
@@ -302,6 +393,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       const userRes = await api.get<any>('/user/me');
       if (userRes && userRes.User_ID) {
+        if (userRes.Role === 'MERCHANT') {
+          setAuthenticatedRole('merchant');
+          localStorage.setItem(`${STORAGE_KEY}_auth_role`, 'merchant');
+          setRoleState(prev => {
+            const next = prev === 'admin' ? 'admin' : 'merchant';
+            localStorage.setItem(`${STORAGE_KEY}_role`, next);
+            return next;
+          });
+          setIsAuthenticated(true);
+          await refreshMerchantData();
+          return;
+        }
+
+        setAuthenticatedRole('citizen');
+        localStorage.setItem(`${STORAGE_KEY}_auth_role`, 'citizen');
+        setRoleState(prev => {
+          const next = prev === 'admin' ? 'admin' : 'citizen';
+          localStorage.setItem(`${STORAGE_KEY}_role`, next);
+          return next;
+        });
+
         const mappedUser: User = {
           userId: Number(userRes.User_ID),
           citizenId: userRes.Citizen_ID,
@@ -365,16 +477,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.warn('refreshCitizenData notice:', err);
       if (err?.status === 401 || err?.status === 403) {
         authStorage.removeToken();
+        setAuthenticatedRole(null);
+        localStorage.removeItem(`${STORAGE_KEY}_auth_role`);
         setIsAuthenticated(false);
       }
     }
-  }, []);
+  }, [refreshMerchantData]);
 
   useEffect(() => {
-    if (authStorage.getToken()) {
-      refreshCitizenData();
+    if (!authStorage.getToken()) return;
+    if (authenticatedRole === 'merchant' || role === 'merchant') {
+      void refreshMerchantData();
+    } else {
+      void refreshCitizenData();
     }
-  }, [refreshCitizenData]);
+  }, [refreshCitizenData, refreshMerchantData]);
 
   // Login Citizen
   const loginCitizen = (citizenId: string, phoneOrOtp?: string, dbUser?: any) => {
@@ -394,7 +511,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       setUsers(prev => [mappedUser, ...prev.filter(u => u.userId !== mappedUser.userId)]);
       setCurrentUser(mappedUser);
-      setRole('citizen');
+      setAuthenticatedRole('citizen');
+      localStorage.setItem(`${STORAGE_KEY}_auth_role`, 'citizen');
+      localStorage.setItem(`${STORAGE_KEY}_role`, 'citizen');
+      setRoleState('citizen');
       setIsAuthenticated(true);
 
       if (dbUser.wallets) {
@@ -437,7 +557,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const found = users.find(u => u.citizenId.replace(/[^0-9]/g, '') === cleanId || (phoneOrOtp && u.phone.replace(/[^0-9]/g, '') === phoneOrOtp.replace(/[^0-9]/g, '')));
     if (found) {
       setCurrentUser(found);
-      setRole('citizen');
+      setAuthenticatedRole('citizen');
+      localStorage.setItem(`${STORAGE_KEY}_auth_role`, 'citizen');
+      localStorage.setItem(`${STORAGE_KEY}_role`, 'citizen');
+      setRoleState('citizen');
       setIsAuthenticated(true);
       return { success: true, message: `ยินดีต้อนรับ ${found.name}`, user: found };
     }
@@ -456,7 +579,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setUsers(prev => [newUser, ...prev]);
     setCurrentUser(newUser);
-    setRole('citizen');
+    setAuthenticatedRole('citizen');
+    localStorage.setItem(`${STORAGE_KEY}_auth_role`, 'citizen');
+    localStorage.setItem(`${STORAGE_KEY}_role`, 'citizen');
+    setRoleState('citizen');
     setIsAuthenticated(true);
     return { success: true, message: `เข้าสู่ระบบสำเร็จในชื่อ ${newUser.name}`, user: newUser };
   };
@@ -483,7 +609,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       walletBalance: Number(dbMerchant.wallet?.Balance || 0),
       imageUrl: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=500&auto=format&fit=crop&q=80',
       isAiTarget: false,
-    } : (mchId ? merchants.find(m => m.mchId === mchId) : null);
+    } : (mchId ? merchants.find(m => m.mchId === mchId) || null : null);
 
     if (!target) {
       const cleanPhone = phoneOrTax.replace(/[^0-9]/g, '');
@@ -505,7 +631,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         registeredAt: target.registeredAt
       };
       setCurrentUser(linkedUser);
-      setRole('merchant');
+      setAuthenticatedRole('merchant');
+      localStorage.setItem(`${STORAGE_KEY}_auth_role`, 'merchant');
+      localStorage.setItem(`${STORAGE_KEY}_role`, 'merchant');
+      setRoleState('merchant');
       setIsAuthenticated(true);
       return { success: true, message: `เข้าสู่ระบบร้านค้า ${target.shopName}`, merchant: target };
     }
@@ -516,6 +645,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Logout
   const logout = () => {
     authStorage.removeToken();
+    setAuthenticatedRole(null);
+    localStorage.removeItem(`${STORAGE_KEY}_auth_role`);
     setIsAuthenticated(false);
   };
 
@@ -607,6 +738,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setUsers(prev => [newUser, ...prev]);
     }
     setCurrentUser(newUser);
+    setAuthenticatedRole('citizen');
+    localStorage.setItem(`${STORAGE_KEY}_auth_role`, 'citizen');
+    localStorage.setItem(`${STORAGE_KEY}_role`, 'citizen');
+    setRoleState('citizen');
     setIsAuthenticated(true);
     return newUser;
   };
@@ -651,6 +786,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setMerchants(prev => [newMerchant, ...prev]);
     setCurrentMerchant(newMerchant);
+    setAuthenticatedRole('merchant');
+    localStorage.setItem(`${STORAGE_KEY}_auth_role`, 'merchant');
+    localStorage.setItem(`${STORAGE_KEY}_role`, 'merchant');
+    setRoleState('merchant');
     setIsAuthenticated(true);
     return newMerchant;
   };

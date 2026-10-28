@@ -251,7 +251,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         }
 
         const targetMchId = response.merchant?.Mch_ID;
-        const res = loginMerchant(cleanPhone, merchantPassword, targetMchId);
+        const res = loginMerchant(cleanPhone, merchantPassword, targetMchId, response.merchant);
         if (!res.success) throw new Error(res.message);
 
         await refreshMerchantData();

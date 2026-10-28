@@ -130,6 +130,7 @@ const AppContent: React.FC = () => {
             <div className="w-24 h-4 bg-black rounded-full" />
           </div>
           <AuthPage
+            defaultRole={role === 'merchant' ? 'merchant' : 'citizen'}
             onSuccess={(loggedRole) => {
               setRole(loggedRole);
               setActiveNav('หน้าหลัก');
