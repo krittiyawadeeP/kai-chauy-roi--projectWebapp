@@ -1,5 +1,5 @@
 import { api, authStorage } from './api';
-import type { Merchant } from '../types';
+import type { Merchant, Mission } from '../types';
 
 export function getCoordinates(lat: number | null | undefined, lng: number | null | undefined): [number, number] | null {
   return typeof lat === 'number' && Number.isFinite(lat) && lat >= -90 && lat <= 90
@@ -134,6 +134,8 @@ export const merchantService = {
   },
 
   getMyProfile: () => api.get<ApiMerchant>('/merchants/me'),
+
+  getMyMissions: () => api.get<Mission[]>('/merchants/me/missions'),
 
   getWallet: () => api.get<MerchantWalletDetailsResponse>('/merchants/me/wallet'),
 

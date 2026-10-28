@@ -159,6 +159,169 @@ merchantRoutes.get("/me", requireMerchant, async (req: AuthRequest, res) => {
   sendJson(res, merchant);
 });
 
+const bangkokTimeFormatter = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Asia/Bangkok",
+  hour: "2-digit",
+  minute: "2-digit",
+  hourCycle: "h23",
+});
+
+function formatMinutesWindow(startMin?: number | null, endMin?: number | null): string | null {
+  if (typeof startMin === "number" && typeof endMin === "number" && Number.isFinite(startMin) && Number.isFinite(endMin)) {
+    const sh = String(Math.floor(startMin / 60)).padStart(2, "0");
+    const sm = String(startMin % 60).padStart(2, "0");
+    const eh = String(Math.floor(endMin / 60)).padStart(2, "0");
+    const em = String(endMin % 60).padStart(2, "0");
+    return `${sh}:${sm} - ${eh}:${em} น. (กำหนดเวลา 2 ชม.)`;
+  }
+  return null;
+}
+
+function formatMerchantMissionWindow(
+  start: Date,
+  end: Date,
+  dailyStartMin?: number | null,
+  dailyEndMin?: number | null,
+  description?: string | null
+): string {
+  const fromMinutes = formatMinutesWindow(dailyStartMin, dailyEndMin);
+  if (fromMinutes) return fromMinutes;
+
+  if (description) {
+    const match = description.match(/(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})/);
+    if (match) {
+      return `${match[1].padStart(5, "0")} - ${match[2].padStart(5, "0")} น. (กำหนดเวลา 2 ชม.)`;
+    }
+  }
+
+  const startStr = bangkokTimeFormatter.format(start);
+  const endStr = bangkokTimeFormatter.format(end);
+  if (startStr === endStr) {
+    return "14:00 - 16:00 น. (กำหนดเวลา 2 ชม.)";
+  }
+  return `${startStr} - ${endStr} น. (กำหนดเวลา 2 ชม.)`;
+}
+
+type RawMerchantMissionRow = {
+  Mission_ID: number;
+  Mission_Name: string;
+  Description: string | null;
+  Target_Merchant_ID: number;
+  Max_Recipients: number | null;
+  Start_DateTime: Date;
+  End_DateTime: Date;
+  Status: string;
+  Daily_Start_Minute?: number | null;
+  Daily_End_Minute?: number | null;
+  Ai_Daily_Stamp_Limit?: number | null;
+};
+
+merchantRoutes.get("/me/missions", requireMerchant, async (req: AuthRequest, res) => {
+  try {
+    const merchant = await prisma.merchants.findFirst({
+      where: {
+        User_ID: req.user!.userId,
+      },
+      include: {
+        districts: {
+          include: {
+            provinces: true,
+          },
+        },
+      },
+    });
+
+    if (!merchant) {
+      return notFound(res, "Merchant not found");
+    }
+
+    let activeMissions: RawMerchantMissionRow[] = [];
+    try {
+      activeMissions = await prisma.$queryRaw<RawMerchantMissionRow[]>`
+        SELECT
+          Mission_ID,
+          Mission_Name,
+          Description,
+          Target_Merchant_ID,
+          Max_Recipients,
+          Start_DateTime,
+          End_DateTime,
+          Status,
+          Daily_Start_Minute,
+          Daily_End_Minute,
+          Ai_Daily_Stamp_Limit
+        FROM missions
+        WHERE Target_Merchant_ID = ${merchant.Mch_ID}
+          AND UPPER(TRIM(Status)) IN ('ACTIVE', 'OPEN')
+        ORDER BY Start_DateTime DESC, Mission_ID DESC
+      `;
+    } catch {
+      activeMissions = await prisma.$queryRaw<RawMerchantMissionRow[]>`
+        SELECT
+          Mission_ID,
+          Mission_Name,
+          Description,
+          Target_Merchant_ID,
+          Max_Recipients,
+          Start_DateTime,
+          End_DateTime,
+          Status
+        FROM missions
+        WHERE Target_Merchant_ID = ${merchant.Mch_ID}
+          AND UPPER(TRIM(Status)) IN ('ACTIVE', 'OPEN')
+        ORDER BY Start_DateTime DESC, Mission_ID DESC
+      `;
+    }
+
+    const formatted = await Promise.all(
+      activeMissions.map(async (m) => {
+        const stamps = await prisma.user_stamps
+          .findMany({
+            where: { Mission_ID: Number(m.Mission_ID) },
+            select: { User_ID: true, Earned_At: true },
+          })
+          .catch(() => [] as { User_ID: number; Earned_At: Date }[]);
+
+        const startDate = m.Start_DateTime instanceof Date ? m.Start_DateTime : new Date(m.Start_DateTime);
+        const endDate = m.End_DateTime instanceof Date ? m.End_DateTime : new Date(m.End_DateTime);
+        const startMin = m.Daily_Start_Minute != null ? Number(m.Daily_Start_Minute) : null;
+        const endMin = m.Daily_End_Minute != null ? Number(m.Daily_End_Minute) : null;
+
+        return {
+          missionId: Number(m.Mission_ID),
+          missionName: m.Mission_Name,
+          description: m.Description || `ภารกิจซื้อสินค้าที่ร้าน ${merchant.Shop_Name}`,
+          targetMerchantId: Number(m.Target_Merchant_ID),
+          targetMerchantName: merchant.Shop_Name,
+          targetDistId: merchant.Dist_ID,
+          targetDistName: merchant.districts?.Dist_Name || "",
+          targetProvId: merchant.districts?.Prov_ID || 0,
+          targetProvName: merchant.districts?.provinces?.Prov_Name || "",
+          minSpend: 150,
+          maxRecipients: m.Max_Recipients != null ? Number(m.Max_Recipients) : 50,
+          currentRecipients: stamps.length,
+          rewardStampId: 1,
+          startDateTime: startDate.toISOString(),
+          endDateTime: endDate.toISOString(),
+          timeWindowLabel: formatMerchantMissionWindow(startDate, endDate, startMin, endMin, m.Description),
+          status: "active",
+          category: merchant.Category || "ร้านค้าชุมชน",
+          completedUserIds: stamps.map((u) => u.User_ID),
+          userCompletions: stamps.map((u) => ({
+            userId: u.User_ID,
+            earnedAt: u.Earned_At.toISOString(),
+          })),
+        };
+      })
+    );
+
+    sendJson(res, formatted);
+  } catch (error) {
+    console.error("Failed to fetch merchant missions:", error);
+    sendJson(res, []);
+  }
+});
+
 merchantRoutes.get("/me/wallet", requireMerchant, async (req: AuthRequest, res) => {
   const merchant = await prisma.merchants.findFirst({
     where: {

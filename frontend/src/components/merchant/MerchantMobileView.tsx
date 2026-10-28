@@ -10,6 +10,8 @@ import { RevenueBreakdownCard } from './RevenueBreakdownCard';
 import { MerchantWalletView } from './MerchantWalletView';
 import { authStorage } from '../../services/api';
 import { ApiError } from '../../services/api';
+import { merchantService } from '../../services/merchantService';
+import type { Mission } from '../../types';
 
 export const isToday = (dateStr?: string | Date | null): boolean => {
   if (!dateStr) return false;
@@ -80,15 +82,24 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
   const [activeTab, setActiveTab] = useState<'sales' | 'wallet' | 'info'>(initialTab);
   const [loadingMerchantData, setLoadingMerchantData] = useState(false);
   const [merchantDataError, setMerchantDataError] = useState('');
+  const [apiMerchantMissions, setApiMerchantMissions] = useState<Mission[] | null>(null);
 
   useEffect(() => {
-    if (!authStorage.getToken()) return;
+    if (!authStorage.getToken()) {
+      setApiMerchantMissions(null);
+      return;
+    }
     setLoadingMerchantData(true);
     setMerchantDataError('');
-    refreshMerchantData()
+    Promise.all([
+      refreshMerchantData(),
+      merchantService.getMyMissions().then(res => {
+        if (Array.isArray(res)) setApiMerchantMissions(res);
+      }).catch(() => {}),
+    ])
       .catch(error => setMerchantDataError(error instanceof ApiError && error.status === 401 ? 'Session หมดอายุ กรุณาเข้าสู่ระบบใหม่' : error instanceof Error ? error.message : 'โหลดข้อมูลร้านค้าไม่สำเร็จ'))
       .finally(() => setLoadingMerchantData(false));
-  }, [refreshMerchantData]);
+  }, [refreshMerchantData, currentMerchant?.mchId]);
 
   const [salesViewMode, setSalesViewMode] = useState<'today' | 'all'>('today');
 
@@ -97,11 +108,14 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
   }, [transactions, currentMerchant?.mchId]);
 
   const myActiveMissions = React.useMemo(() => {
+    if (apiMerchantMissions && apiMerchantMissions.length > 0) {
+      return apiMerchantMissions.filter(m => m.status === 'active');
+    }
     if (!currentMerchant?.mchId) return [];
     return missions.filter(
       m => m.status === 'active' && Number(m.targetMerchantId) === Number(currentMerchant.mchId)
     );
-  }, [missions, currentMerchant?.mchId]);
+  }, [apiMerchantMissions, missions, currentMerchant?.mchId]);
 
   const formatMissionTimeWindow = (startIso: string, endIso: string, label?: string) => {
     if (label) return label;
