@@ -546,10 +546,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       // Sync transactions from backend
-      fetch('/api/user/me/transactions', {
-        headers: authStorage.getToken() ? { Authorization: `Bearer ${authStorage.getToken()}` } : {},
-      })
-        .then(r => r.json())
+      api.get<SalesTransaction[]>('/user/me/transactions')
         .then(res => {
           if (Array.isArray(res)) {
             setTransactions(res);

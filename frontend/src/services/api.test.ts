@@ -16,7 +16,8 @@ test('an invalid server session clears the saved token and requests a new login'
     removeItem: (key: string) => saved.delete(key),
   } });
   Object.defineProperty(globalThis, 'window', { configurable: true, value: browser });
-  globalThis.fetch = async (_url, options) => {
+  globalThis.fetch = async (url, options) => {
+    assert.equal(url, '/api/admin/merchants');
     assert.equal(new Headers(options?.headers).get('Authorization'), 'Bearer old-token');
     return Response.json({ message: 'Invalid or expired token' }, { status: 401 });
   };

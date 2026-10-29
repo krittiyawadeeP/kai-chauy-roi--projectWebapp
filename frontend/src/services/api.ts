@@ -4,6 +4,7 @@
  */
 
 const TOKEN_KEY = 'kai_chuay_token';
+export const API_BASE_URL = (import.meta.env?.VITE_API_BASE_URL || '/api').replace(/\/+$/, '');
 export const AUTH_EXPIRED_EVENT = 'kai_chuay_auth_expired';
 
 export const authStorage = {
@@ -37,7 +38,7 @@ async function request<T = unknown>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const url = endpoint.startsWith('http') ? endpoint : `/api${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
+  const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
   const token = authStorage.getToken();
 
   const headers = new Headers(options.headers || {});

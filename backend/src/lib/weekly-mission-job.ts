@@ -1,4 +1,5 @@
 import { prisma } from './prisma';
+import { ollamaChat } from './ollama';
 import { bangkokDate, summarizeSales, type SaleForAnalysis } from './sales-mission';
 
 const dayMs = 86_400_000;
@@ -68,9 +69,8 @@ export function rankWeeklyMerchants<T extends { id: number; districtId: number; 
 async function missionText(shopName: string, ratio: number, startMinute: number) {
   const fallback = { name: `ช่วยอุดหนุน${shopName}`, description: `ชวนอุดหนุน${shopName}ในช่วง ${String(startMinute / 60).padStart(2, '0')}:00–${String(startMinute / 60 + 2).padStart(2, '0')}:00 น. ยอดขายเฉลี่ยต่อวันที่มีบิลลดลง ${Math.round((1 - ratio) * 100)}% จากช่วงอ้างอิง` };
   try {
-    const response = await fetch('http://127.0.0.1:11434/api/chat', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(10_000),
-      body: JSON.stringify({ model: 'qwen3:4b', stream: false, think: false, format: 'json', messages: [{ role: 'user', content: `เขียนชื่อและคำอธิบายภารกิจชวนอุดหนุนร้านชุมชนเป็น JSON {"name":"...","description":"..."} เท่านั้น ร้าน: ${shopName}; ยอดขายเฉลี่ยลดลง ${Math.round((1 - ratio) * 100)}%; ช่วงเวลา ${startMinute / 60}:00-${startMinute / 60 + 2}:00 น. ห้ามสัญญาส่วนลด โควต้า หรือยอดซื้อขั้นต่ำ` }] }),
+    const response = await ollamaChat({
+      format: 'json', messages: [{ role: 'user', content: `เขียนชื่อและคำอธิบายภารกิจชวนอุดหนุนร้านชุมชนเป็น JSON {"name":"...","description":"..."} เท่านั้น ร้าน: ${shopName}; ยอดขายเฉลี่ยลดลง ${Math.round((1 - ratio) * 100)}%; ช่วงเวลา ${startMinute / 60}:00-${startMinute / 60 + 2}:00 น. ห้ามสัญญาส่วนลด โควต้า หรือยอดซื้อขั้นต่ำ` }],
     });
     if (!response.ok) return fallback;
     const text = JSON.parse((await response.json() as { message?: { content?: string } }).message?.content ?? '{}');

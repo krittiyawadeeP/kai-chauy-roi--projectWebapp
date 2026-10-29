@@ -42,6 +42,8 @@ test('hourly analysis keeps adjacent hours separate and uses Bangkok dates', () 
 });
 
 test('manual analysis closes the current missions and creates a new set through Sunday', async () => {
+  const originalUrl = process.env.OLLAMA_BASE_URL;
+  const originalModel = process.env.OLLAMA_MODEL;
   const original = {
     merchants: prisma.merchants.findMany, sales: prisma.sales_transactions.findMany,
     missions: prisma.missions.findMany, policy: prisma.ai_mission_policy.findFirst,
@@ -51,6 +53,8 @@ test('manual analysis closes the current missions and creates a new set through 
   const rows = ['2026-09-21', '2026-09-22', '2026-09-23', '2026-09-26', '2026-09-27'].flatMap(date => [sale(date, 100), sale(date, 100)]);
   rows.push(...['2026-10-14', '2026-10-15', '2026-10-16', '2026-10-24', '2026-10-25'].flatMap(date => [sale(date, 30), sale(date, 30)]));
   try {
+    process.env.OLLAMA_BASE_URL = 'https://ai.example.com/';
+    process.env.OLLAMA_MODEL = 'deployed-model';
     (prisma.merchants as any).findMany = async () => [{ Mch_ID: 1, Shop_Name: 'ร้านหนึ่ง', Category: null, Dist_ID: 5, districts: { Prov_ID: 10 } }];
     (prisma.sales_transactions as any).findMany = async () => rows.map(item => ({ ...item, Merchant_ID: 1 }));
     (prisma.missions as any).findMany = async () => [];
@@ -62,16 +66,25 @@ test('manual analysis closes the current missions and creates a new set through 
         create: async ({ data }: any) => { operations.push({ kind: 'create', data }); },
       },
     });
-    globalThis.fetch = async () => new Response(JSON.stringify({ message: { content: JSON.stringify({ name: 'ช่วยร้านหนึ่ง', description: 'อุดหนุนร้านหนึ่ง' }) } }), { status: 200 });
+    globalThis.fetch = async (url, options) => {
+      assert.equal(url, 'https://ai.example.com/api/chat');
+      assert.equal(JSON.parse(String(options?.body)).model, 'deployed-model');
+      return new Response(JSON.stringify({ message: { content: JSON.stringify({ name: 'ช่วยร้านหนึ่ง', description: 'อุดหนุนร้านหนึ่ง' }) } }), { status: 200 });
+    };
     assert.equal(await runWeeklyMissionAnalysis(new Date('2026-10-28T05:00:00Z'), true), 1);
     assert.deepEqual(operations.map(item => item.kind), ['close', 'create']);
     assert.equal(operations[0].data.Status, 'INACTIVE');
     assert.equal(operations[1].data.Status, 'ACTIVE');
+    assert.equal(operations[1].data.Mission_Name, 'ช่วยร้านหนึ่ง');
     assert.equal(operations[1].data.Start_DateTime.toISOString(), '2026-10-28T05:00:00.000Z');
     assert.equal(operations[1].data.End_DateTime.toISOString(), '2026-11-01T17:00:00.000Z');
     assert.equal(operations[1].data.Ai_Daily_Stamp_Limit, 3);
     assert.equal(operations[1].data.Selection_Evidence.hourlySales[0].averageRevenue, 60);
   } finally {
+    if (originalUrl === undefined) delete process.env.OLLAMA_BASE_URL;
+    else process.env.OLLAMA_BASE_URL = originalUrl;
+    if (originalModel === undefined) delete process.env.OLLAMA_MODEL;
+    else process.env.OLLAMA_MODEL = originalModel;
     (prisma.merchants as any).findMany = original.merchants;
     (prisma.sales_transactions as any).findMany = original.sales;
     (prisma.missions as any).findMany = original.missions;

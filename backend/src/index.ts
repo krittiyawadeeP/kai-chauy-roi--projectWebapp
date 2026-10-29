@@ -12,7 +12,7 @@ dotenv.config({ path: ".env.local" });
 
 const app = express();
 
-app.use(cors());
+app.use(cors({ origin: process.env.FRONTEND_ORIGIN?.split(',').map(origin => origin.trim()) || '*' }));
 app.use(express.json());
 
 app.get("/", (_req, res) => {

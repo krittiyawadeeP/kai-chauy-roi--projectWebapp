@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "node --watch --import tsx src/index.ts",
+    "start": "node --import tsx src/index.ts",
     "build": "tsc --noEmit",
     "prisma:generate": "prisma generate",
     "seed:nakhon-pathom": "tsx prisma/seed-nakhon-pathom.ts",

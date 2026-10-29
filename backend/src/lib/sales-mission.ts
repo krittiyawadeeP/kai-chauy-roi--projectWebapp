@@ -1,3 +1,5 @@
+import { ollamaChat } from './ollama';
+
 export type SaleForAnalysis = { Tx_Timestamp: Date; Total_Amount: { toString(): string } };
 
 const bangkok = new Intl.DateTimeFormat('en-GB', {
@@ -65,24 +67,18 @@ export function eligibleMissionSlots(summary: ReturnType<typeof summarizeSales>)
 export async function suggestMission(shopName: string, category: string | null, summary: ReturnType<typeof summarizeSales>, analysisDate?: string): Promise<MissionSuggestion> {
   const eligibleSlots = eligibleMissionSlots(summary);
   if (!eligibleSlots.length) throw new Error('No observed two-hour sales slot fits inside the bill-time range');
-  const response = await fetch('http://127.0.0.1:11434/api/chat', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    signal: AbortSignal.timeout(120000),
-    body: JSON.stringify({
-      model: 'qwen3:4b', stream: false, think: false,
-      messages: [{ role: 'user', content: `You advise Thai community shops. Recommend one low-sales 2-hour slot for a single future mission. Choose dayType, startHour and endHour exactly from one supplied eligible slot. ${analysisDate ? 'These bills are from one completed Bangkok day; compare slots only within that day.' : 'These bills cover 14 days.'} Each eligible slot has sales and fits fully between the earliest and latest bill times of day in this analysis period. Those bill times are not official business hours. Do not infer zero sales from missing slots. Do not invent numbers. Write reason, missionName and description in Thai; do not promise a discount, stamp or minimum spend because those are not configured. Return JSON. Data: ${JSON.stringify({ shopName, category, analysisDate, periodDays: analysisDate ? 1 : 14, observedOpeningTime: summary.observedOpeningTime, observedClosingTime: summary.observedClosingTime, slots: eligibleSlots })}` }],
-      format: {
-        type: 'object',
-        properties: {
-          dayType: { type: 'string', enum: ['weekday', 'weekend'] },
-          startHour: { type: 'integer' }, endHour: { type: 'integer' },
-          reason: { type: 'string' }, missionName: { type: 'string' }, description: { type: 'string' },
-        },
-        required: ['dayType', 'startHour', 'endHour', 'reason', 'missionName', 'description'],
+  const response = await ollamaChat({
+    messages: [{ role: 'user', content: `You advise Thai community shops. Recommend one low-sales 2-hour slot for a single future mission. Choose dayType, startHour and endHour exactly from one supplied eligible slot. ${analysisDate ? 'These bills are from one completed Bangkok day; compare slots only within that day.' : 'These bills cover 14 days.'} Each eligible slot has sales and fits fully between the earliest and latest bill times of day in this analysis period. Those bill times are not official business hours. Do not infer zero sales from missing slots. Do not invent numbers. Write reason, missionName and description in Thai; do not promise a discount, stamp or minimum spend because those are not configured. Return JSON. Data: ${JSON.stringify({ shopName, category, analysisDate, periodDays: analysisDate ? 1 : 14, observedOpeningTime: summary.observedOpeningTime, observedClosingTime: summary.observedClosingTime, slots: eligibleSlots })}` }],
+    format: {
+      type: 'object',
+      properties: {
+        dayType: { type: 'string', enum: ['weekday', 'weekend'] },
+        startHour: { type: 'integer' }, endHour: { type: 'integer' },
+        reason: { type: 'string' }, missionName: { type: 'string' }, description: { type: 'string' },
       },
-      options: { temperature: 0 },
-    }),
+      required: ['dayType', 'startHour', 'endHour', 'reason', 'missionName', 'description'],
+    },
+    options: { temperature: 0 },
   });
   if (!response.ok) throw new Error(`Ollama request failed (${response.status})`);
   const body = await response.json() as { message?: { content?: string } };
