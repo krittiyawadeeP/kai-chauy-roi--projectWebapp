@@ -537,8 +537,12 @@ export const CitizenRewardsPage: React.FC<CitizenRewardsPageProps> = ({
           </div>
         ) : (
           filteredRewards.map(reward => {
-            const canRedeem = totalUserStamps >= reward.requiredStampCount;
-            const diffStamps = reward.requiredStampCount - totalUserStamps;
+            const isProvincialReward = Boolean(reward.provinceName && reward.provinceName !== 'ทั่วประเทศ');
+            const availableStampsForReward = isProvincialReward
+              ? (userStampsByProvince[reward.provinceName] || 0)
+              : totalUserStamps;
+            const canRedeem = availableStampsForReward >= reward.requiredStampCount;
+            const diffStamps = reward.requiredStampCount - availableStampsForReward;
             const stampCountForProv = userStampsByProvince[reward.provinceName] || 0;
             const isLocalGps = Boolean(
               currentProvinceName &&
@@ -625,7 +629,7 @@ export const CitizenRewardsPage: React.FC<CitizenRewardsPageProps> = ({
                           : 'bg-slate-100 text-slate-400 cursor-not-allowed'
                       }`}
                     >
-                      {canRedeem ? 'กดแลกรับเลย' : `ขาด ${diffStamps} ดวง`}
+                      {canRedeem ? 'กดแลกรับเลย' : `ขาดอีก ${diffStamps} ดวง${isProvincialReward ? ` (${reward.provinceName})` : ''}`}
                     </button>
                   </div>
                 </div>

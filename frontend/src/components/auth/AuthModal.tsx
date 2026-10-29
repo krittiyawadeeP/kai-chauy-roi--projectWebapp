@@ -75,24 +75,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Quick preset login helper
-  const handleDemoCitizenLogin = (userId: number) => {
-    const targetUser = users.find(u => u.userId === userId) || users[0];
-    loginCitizen(targetUser.citizenId, targetUser.phone);
-    setNotice(`เข้าสู่ระบบสำเร็จ: ${targetUser.name}`);
-    setTimeout(() => {
-      setNotice('');
-      onClose();
-    }, 1000);
-  };
-
-  const handleDemoMerchantLogin = (mchId: number) => {
-    const targetMch = merchants.find(m => m.mchId === mchId) || merchants[0];
-    setMerchantPhone(targetMch.phone);
-    setSelectedMchId(targetMch.mchId);
-    setErrorNotice('ตัวอย่างร้านเป็นข้อมูล mock โปรดกรอกเบอร์และรหัสผ่านบัญชี MERCHANT ที่ seed ไว้ใน backend');
-  };
-
   const handleCitizenSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorNotice('');
@@ -311,25 +293,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <>
               {authMode === 'login' ? (
                 <form onSubmit={handleCitizenSubmit} className="space-y-3">
-                  {/* Quick test account chip */}
-                  <div className="p-2.5 bg-blue-50/80 rounded-xl border border-blue-100 flex items-center justify-between">
-                    <div>
-                      <span className="text-[10px] text-blue-600 font-bold block">
-                        ⚡ บัญชีประชาชนทดสอบ (1-Click Login):
-                      </span>
-                      <span className="font-semibold text-slate-800 text-[11px]">
-                        นายกิตติคุณ ศรีสวัสดิ์
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => handleDemoCitizenLogin(1)}
-                      className="px-2.5 py-1 bg-[#1769ed] text-white rounded-lg text-[10px] font-bold shadow-xs hover:bg-blue-700"
-                    >
-                      เข้าสู่ระบบทันที
-                    </button>
-                  </div>
-
                   <div>
                     <label className="block text-[11px] font-bold text-slate-600 mb-1">
                       เลขประจำตัวประชาชน 13 หลัก
@@ -471,27 +434,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <>
               {authMode === 'login' ? (
                 <form onSubmit={handleMerchantSubmit} className="space-y-3">
-                  <div className="p-2.5 bg-teal-50 rounded-xl border border-teal-200">
-                    <span className="text-[10px] text-[#115e59] font-bold block mb-1">
-                      ⚡ เลือกร้านค้าตัวอย่างเพื่อทดสอบเข้าสู่ระบบ:
-                    </span>
-                    <div className="space-y-1.5">
-                      {merchants.slice(0, 3).map(m => (
-                        <button
-                          key={m.mchId}
-                          type="button"
-                          onClick={() => handleDemoMerchantLogin(m.mchId)}
-                          className="w-full text-left p-2 rounded-lg bg-white border border-teal-100 hover:border-teal-400 flex items-center justify-between text-[11px]"
-                        >
-                          <span className="font-bold text-slate-800">{m.shopName}</span>
-                          <span className="text-[10px] text-teal-700 font-bold bg-teal-50 px-2 py-0.5 rounded-md">
-                            เข้าสู่ระบบ
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
                   <div>
                     <label className="block text-[11px] font-bold text-slate-600 mb-1">
                       เบอร์โทรศัพท์ร้านค้า / พร้อมเพย์
