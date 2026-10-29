@@ -14,15 +14,12 @@ export function AdminUsersPanel() {
   const [message, setMessage] = useState('');
   const [reload, setReload] = useState(0);
   const [editing, setEditing] = useState<AdminUserRecord | null>(null);
-  const [eligibilityUser, setEligibilityUser] = useState<AdminUserRecord | null>(null);
   const [credentialType, setCredentialType] = useState<'password' | 'pin'>('password');
   const [credential, setCredential] = useState('');
   const [credentialConfirm, setCredentialConfirm] = useState('');
-  const [eligible, setEligible] = useState(true);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
   const dialog = useRef<HTMLDialogElement>(null);
-  const eligibilityDialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     let active = true;
     setLoading(true); setError('');
@@ -36,9 +33,6 @@ export function AdminUsersPanel() {
   const resetCredentials = () => { setCredential(''); setCredentialConfirm(''); setFormError(''); };
   const editCredentials = (user: AdminUserRecord, kind: 'password' | 'pin') => {
     setCredentialType(kind); resetCredentials(); setEditing(user); setMessage(''); dialog.current?.showModal();
-  };
-  const editEligibility = (user: AdminUserRecord) => {
-    setEligibilityUser(user); setEligible(!user.Subsidy_Eligible); setFormError(''); setMessage(''); eligibilityDialog.current?.showModal();
   };
   const saveCredentials = async (event: FormEvent) => {
     event.preventDefault();
@@ -54,18 +48,6 @@ export function AdminUsersPanel() {
     } catch (value) { setFormError(value instanceof Error ? value.message : 'บันทึกบัญชีไม่สำเร็จ'); }
     finally { setSaving(false); }
   };
-  const saveEligibility = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!eligibilityUser || saving || eligible === eligibilityUser.Subsidy_Eligible) return;
-    setSaving(true); setFormError('');
-    try {
-      const saved = await adminService.updateUser(eligibilityUser.User_ID, { Subsidy_Eligible: eligible });
-      setUsers(previous => previous.map(user => user.User_ID === saved.User_ID ? { ...user, ...saved } : user));
-      setMessage(`${saved.Subsidy_Eligible ? 'คืน' : 'ตัด'}สิทธิ์ซื้อ 60/40 ของบัญชี #${saved.User_ID} แล้ว`);
-      eligibilityDialog.current?.close();
-    } catch (value) { setFormError(value instanceof Error ? value.message : 'บันทึกสิทธิ์ 60/40 ไม่สำเร็จ'); }
-    finally { setSaving(false); }
-  };
   const citizens = users.filter(user => user.accountType === 'USER').length;
   const owners = users.length - citizens;
   const search = query.trim().toLocaleLowerCase('th');
@@ -73,7 +55,7 @@ export function AdminUsersPanel() {
     `${user.User_ID} ${nameOf(user)} ${user.Phone} ${user.merchants.map(merchant => `${merchant.Shop_Name} ${merchant.Owner_Name ?? ''}`).join(' ')}`.toLocaleLowerCase('th').includes(search));
 
   return <section className="space-y-5">
-    <div className="admin-card flex flex-wrap items-start justify-between gap-4 p-5"><div><h2 className="flex items-center gap-2 text-base font-semibold text-slate-900"><Users size={20} className="text-[#9c7b36]" />ทะเบียนบัญชีผู้ใช้งาน</h2><p className="mt-2 text-xs leading-6 text-slate-500">{type === 'USER' ? 'จัดการบัญชีประชาชน เปลี่ยนรหัสผ่าน PIN และกำหนดสิทธิ์การซื้อสินค้า 60/40' : 'จัดการบัญชีเจ้าของร้านและเปลี่ยนรหัสผ่าน / PIN'}</p></div><button type="button" className="admin-secondary" disabled={loading || saving} onClick={() => setReload(value => value + 1)}><RefreshCw size={14} />รีเฟรชข้อมูล</button></div>
+    <div className="admin-card flex flex-wrap items-start justify-between gap-4 p-5"><div><h2 className="flex items-center gap-2 text-base font-semibold text-slate-900"><Users size={20} className="text-[#9c7b36]" />ทะเบียนบัญชีผู้ใช้งาน</h2><p className="mt-2 text-xs leading-6 text-slate-500">{type === 'USER' ? 'จัดการบัญชีประชาชน เปลี่ยนรหัสผ่าน PIN และระงับบัญชี' : 'จัดการบัญชีเจ้าของร้านและเปลี่ยนรหัสผ่าน / PIN'}</p></div><button type="button" className="admin-secondary" disabled={loading || saving} onClick={() => setReload(value => value + 1)}><RefreshCw size={14} />รีเฟรชข้อมูล</button></div>
     {error && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">{error}</p>}
     {message && <p role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-700">{message}</p>}
     <div className="grid gap-4 sm:grid-cols-3">{[
@@ -94,7 +76,7 @@ export function AdminUsersPanel() {
         {type === 'USER' && <td><span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium ${user.Subsidy_Eligible ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>{user.Subsidy_Eligible ? <ShieldCheck size={13} /> : <ShieldOff size={13} />}{user.Subsidy_Eligible ? 'มีสิทธิ์' : 'ถูกตัดสิทธิ์'}</span></td>}
         {type === 'MERCHANT' && <td className="max-w-72 whitespace-normal">{user.merchants.length ? <div className="space-y-2">{user.merchants.map(merchant => <div key={merchant.Mch_ID}><p className="font-medium text-slate-800">{merchant.Shop_Name}</p><p className="mt-1 text-[11px] text-slate-500">รหัสร้านค้า #{merchant.Mch_ID}</p></div>)}</div> : <span className="text-slate-400">ยังไม่มีร้านค้าที่ผูกกับบัญชี</span>}</td>}
         <td><AccountSuspensionControl userId={user.User_ID} name={nameOf(user)} suspended={user.Is_Suspended} onChanged={async () => { setUsers(await adminService.getUsers()); }} /></td>
-        <td><div className="flex flex-col items-start gap-2"><button type="button" className="admin-secondary" aria-label={`เปลี่ยนรหัสผ่าน บัญชี ${user.User_ID}`} onClick={() => editCredentials(user, 'password')}><KeyRound size={13} />เปลี่ยนรหัสผ่าน</button><button type="button" className="admin-secondary" aria-label={`เปลี่ยน PIN บัญชี ${user.User_ID}`} onClick={() => editCredentials(user, 'pin')}><ShieldCheck size={13} />เปลี่ยน PIN</button>{type === 'USER' && <button type="button" className={`admin-secondary ${user.Subsidy_Eligible ? '!border-rose-200 !bg-rose-50 !text-rose-700 hover:!bg-rose-100' : '!border-emerald-200 !bg-emerald-50 !text-emerald-700 hover:!bg-emerald-100'}`} aria-label={`${user.Subsidy_Eligible ? 'ตัด' : 'คืน'}สิทธิ์ 60/40 บัญชี ${user.User_ID}`} onClick={() => editEligibility(user)}>{user.Subsidy_Eligible ? 'ตัดสิทธิ์ 60/40' : 'คืนสิทธิ์ 60/40'}</button>}</div></td>
+        <td><div className="flex flex-col items-start gap-2"><button type="button" className="admin-secondary" aria-label={`เปลี่ยนรหัสผ่าน บัญชี ${user.User_ID}`} onClick={() => editCredentials(user, 'password')}><KeyRound size={13} />เปลี่ยนรหัสผ่าน</button><button type="button" className="admin-secondary" aria-label={`เปลี่ยน PIN บัญชี ${user.User_ID}`} onClick={() => editCredentials(user, 'pin')}><ShieldCheck size={13} />เปลี่ยน PIN</button></div></td>
       </tr>)}</tbody></table></div>
       {loading ? <p role="status" className="p-8 text-center text-sm text-slate-500">กำลังโหลดผู้ใช้งาน…</p> : !error && !visible.length && <p className="p-8 text-center text-sm text-slate-500">ไม่พบผู้ใช้งานที่ตรงกับประเภทและตัวกรองที่เลือก</p>}
     </div>
@@ -109,15 +91,6 @@ export function AdminUsersPanel() {
         <p className="text-[11px] leading-5 text-slate-500">{credentialType === 'pin' ? 'PIN ต้องเป็นตัวเลข 6 หลัก · ' : 'รหัสผ่านต้องยาว 6–128 ตัวอักษร · '}เมื่อเปลี่ยน{credentialLabel} ผู้ใช้ต้องเข้าสู่ระบบใหม่</p>
         {formError && <p role="alert" className="rounded bg-rose-50 p-3 text-rose-700">{formError}</p>}
         <div className="flex justify-end gap-2 border-t border-slate-200 pt-4"><button type="button" className="admin-secondary" onClick={() => dialog.current?.close()}>ยกเลิก</button><button type="submit" className="admin-primary" disabled={!credential || !credentialConfirm}>{saving ? 'กำลังบันทึก…' : `บันทึก${credentialLabel}`}</button></div>
-      </fieldset></form>}
-    </dialog>
-    <dialog ref={eligibilityDialog} aria-labelledby="user-eligibility-title" className="m-auto max-h-[90vh] w-[92vw] max-w-lg overflow-y-auto rounded-2xl border-0 bg-white p-0 shadow-2xl backdrop:bg-slate-900/40" onClose={() => { setEligibilityUser(null); setFormError(''); }} onCancel={event => { if (saving) event.preventDefault(); }}>
-      <div className="flex items-center justify-between gap-4 border-b border-slate-200 px-6 py-5"><h2 id="user-eligibility-title" className="text-base font-semibold text-slate-900">จัดการสิทธิ์ซื้อสินค้า 60/40</h2><button type="button" aria-label="ปิดฟอร์มสิทธิ์ 60/40" disabled={saving} onClick={() => eligibilityDialog.current?.close()} className="rounded p-1 text-slate-500 hover:bg-slate-100"><X size={20} /></button></div>
-      {eligibilityUser && <form onSubmit={saveEligibility} className="p-6"><fieldset disabled={saving} className="space-y-5 text-xs">
-        <div className="rounded-lg bg-slate-50 p-4"><p className="font-semibold text-slate-900">{nameOf(eligibilityUser)}</p><p className="mt-1 text-slate-500">บัญชี #{eligibilityUser.User_ID} · {eligibilityUser.Phone}</p><p className="mt-2 text-slate-600">สถานะปัจจุบัน: {eligibilityUser.Subsidy_Eligible ? 'มีสิทธิ์ซื้อ 60/40' : 'ถูกตัดสิทธิ์ซื้อ 60/40'}</p></div>
-        <div className={`rounded-lg border p-4 ${eligible ? 'border-emerald-100 bg-emerald-50' : 'border-rose-200 bg-rose-50'}`}><label className="flex items-center gap-2 font-medium text-slate-800"><input type="checkbox" checked={eligible} onChange={event => setEligible(event.target.checked)} className="size-4 accent-emerald-700" />อนุญาตให้ใช้สิทธิ์ซื้อสินค้า 60/40</label><p className="mt-2 text-[11px] leading-5 text-slate-600">{eligible ? 'บันทึกแล้วบัญชีนี้จะกลับมาใช้สิทธิ์ซื้อสินค้าตามเงื่อนไขโครงการได้' : 'บันทึกแล้วบัญชีนี้ยังชำระเงินได้ โดยจ่ายเองเต็มจำนวน รัฐไม่ร่วมจ่าย และใช้แสตมป์แทนเงินไม่ได้'}{eligibilityUser.accountType === 'MERCHANT' ? ' · ร้านของบัญชีนี้ยังรับชำระได้ตามเดิม' : ''}</p></div>
-        {formError && <p role="alert" className="rounded bg-rose-50 p-3 text-rose-700">{formError}</p>}
-        <div className="flex justify-end gap-2 border-t border-slate-200 pt-4"><button type="button" className="admin-secondary" onClick={() => eligibilityDialog.current?.close()}>ยกเลิก</button><button type="submit" className={`admin-primary ${!eligible ? '!border-rose-700 !bg-rose-700 hover:!bg-rose-800' : ''}`} disabled={eligible === eligibilityUser.Subsidy_Eligible}>{saving ? 'กำลังบันทึก…' : eligible ? 'ยืนยันคืนสิทธิ์ 60/40' : 'ยืนยันตัดสิทธิ์ 60/40'}</button></div>
       </fieldset></form>}
     </dialog>
   </section>;
