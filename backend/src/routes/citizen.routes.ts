@@ -237,6 +237,17 @@ citizenRoutes.get("/user/me", requireAuth, async (req: AuthRequest, res) => {
   });
 });
 
+citizenRoutes.post("/users/me/location", requireAuth, async (req: AuthRequest, res) => {
+  const { provinceId, lat, lng } = req.body;
+  if (provinceId && Number.isInteger(Number(provinceId))) {
+    await prisma.users.update({
+      where: { User_ID: req.user!.userId },
+      data: { Province_ID: Number(provinceId) },
+    }).catch(() => {});
+  }
+  sendJson(res, { success: true, message: "Location updated", lat, lng, provinceId });
+});
+
 citizenRoutes.post("/user/verify-pin", requireAuth, async (req: AuthRequest, res) => {
   const { Pin } = req.body;
   if (!Pin || typeof Pin !== "string") {
@@ -520,54 +531,169 @@ citizenRoutes.get("/users/me/stamps", requireAuth, async (req: AuthRequest, res)
 });
 
 citizenRoutes.get("/users/me/stamps/history", requireAuth, async (req: AuthRequest, res) => {
-  const history = await prisma.user_stamps.findMany({
+  const userId = req.user!.userId;
+
+  // 1. Fetch earned stamps from user_stamps
+  const userStamps = await prisma.user_stamps.findMany({
     where: {
-      User_ID: req.user!.userId,
+      User_ID: userId,
     },
     include: {
-      district_stamps: true,
+      district_stamps: {
+        include: {
+          districts: {
+            include: {
+              provinces: true,
+            },
+          },
+        },
+      },
       missions: true,
       stamp_earn_transactions: {
         include: {
-          sales_transactions: true,
+          sales_transactions: {
+            include: {
+              merchants: true,
+              districts: true,
+            },
+          },
         },
       },
-      stamp_spend_transactions: { include: { sales_transactions: true } },
     },
     orderBy: {
       Earned_At: "desc",
     },
   });
 
-  sendJson(res, history);
+  // 2. Fetch redeemed stamps from stamp_redemptions
+  const redemptions = await prisma.stamp_redemptions.findMany({
+    where: {
+      User_ID: userId,
+    },
+    include: {
+      rewards: {
+        include: {
+          provinces: true,
+        },
+      },
+      district_stamps: {
+        include: {
+          districts: true,
+        },
+      },
+    },
+    orderBy: {
+      Redeemed_At: "desc",
+    },
+  });
+
+  const formattedEarns = userStamps.map((us) => {
+    const tx = us.stamp_earn_transactions?.[0]?.sales_transactions;
+    const merchantName = tx?.merchants?.Shop_Name;
+    const distName =
+      us.district_stamps?.districts?.Dist_Name ||
+      tx?.districts?.Dist_Name ||
+      us.district_stamps?.Stamp_Name ||
+      "ชุมชนท้องถิ่น";
+
+    let sourceText = "ซื้อสินค้าชุมชนครบยอดสะสมเพื่อรับแสตมป์";
+    if (merchantName) {
+      const amount = tx?.Total_Amount ? ` ฿${Number(tx.Total_Amount).toLocaleString()}` : "";
+      sourceText = `ซื้อสินค้า${amount} ณ ร้าน ${merchantName}`;
+    } else if (us.Earn_Source === "AI_MISSION" || us.Earn_Source === "MISSION" || us.missions) {
+      sourceText = us.missions?.Mission_Name
+        ? `ภารกิจ AI: ${us.missions.Mission_Name}`
+        : "สำเร็จภารกิจกระตุ้นเศรษฐกิจ AI";
+    } else if (us.Earn_Source === "CO_PAY" || us.Earn_Source === "PURCHASE") {
+      sourceText = us.Qualifying_Amount
+        ? `ซื้อสินค้าครบ ฿${Number(us.Qualifying_Amount).toLocaleString()} ในพื้นที่ ${distName}`
+        : `ซื้อสินค้าครบยอดสะสมในพื้นที่ ${distName}`;
+    }
+
+    return {
+      id: `earn-${us.User_Stamp_ID}`,
+      type: "earn" as const,
+      stampName: us.district_stamps?.Stamp_Name || `แสตมป์ประจำ${distName}`,
+      distName,
+      imageUrl: us.district_stamps?.Stamp_ID === 1
+        ? "https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=300&auto=format&fit=crop&q=80"
+        : "https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=300&auto=format&fit=crop&q=80",
+      timestamp: us.Earned_At ? us.Earned_At.toISOString().replace("T", " ").substring(0, 19) : "",
+      source: sourceText,
+      count: 1,
+    };
+  });
+
+  const formattedRedeems = redemptions.map((r) => {
+    const distName =
+      r.district_stamps?.districts?.Dist_Name ||
+      r.rewards?.provinces?.Prov_Name ||
+      "สินค้าชุมชน";
+    const rewardName = r.rewards?.Reward_Name || "ของรางวัล OTOP";
+
+    return {
+      id: `redeem-${r.Redemption_ID}`,
+      type: "redeem" as const,
+      stampName: rewardName,
+      distName,
+      imageUrl: r.rewards?.Image_URL || "",
+      timestamp: r.Redeemed_At ? r.Redeemed_At.toISOString().replace("T", " ").substring(0, 19) : "",
+      source: `ใช้แสตมป์แลกรับ ${rewardName}`,
+      count: r.Quantity || 1,
+    };
+  });
+
+  const combined = [...formattedEarns, ...formattedRedeems].sort((a, b) => {
+    const timeA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+    const timeB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+    return timeB - timeA;
+  });
+
+  sendJson(res, combined);
 });
 
 // GET /rewards
-citizenRoutes.get("/rewards", async (_req, res) => {
-  const rewards = await prisma.rewards.findMany({
-    where: {
-      Status: {
-        in: ["ACTIVE", "active", "AVAILABLE", "available"],
-      },
+citizenRoutes.get("/rewards", async (req, res) => {
+  const { prov_id } = req.query;
+  const where: any = {
+    Status: {
+      in: ["ACTIVE", "active", "AVAILABLE", "available"],
     },
+  };
+
+  if (prov_id && !isNaN(Number(prov_id))) {
+    where.Province_ID = Number(prov_id);
+  }
+
+  const rewards = await prisma.rewards.findMany({
+    where,
     include: { provinces: true },
+    orderBy: {
+      Reward_ID: "asc",
+    },
   });
 
-  const formatted = rewards.map((r) => ({
-    rewardId: r.Reward_ID,
-    rewardName: r.Reward_Name,
-    rewardType: "discount_voucher",
-    description: r.Description || `แลกรับสิทธิ์ ${r.Reward_Name} ใช้ ${r.Required_Stamp_Count} แสตมป์`,
-    requiredStampCount: r.Required_Stamp_Count,
-    status: "available",
-    originalValue: 100,
-    discountValue: 50,
-    imageUrl: r.Reward_ID === 1
-      ? "https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=300&auto=format&fit=crop&q=80"
-      : "https://images.unsplash.com/photo-1517256064527-09c73fc73e38?w=300&auto=format&fit=crop&q=80",
-    provinceName: "ทั่วประเทศ",
-    remainingStock: 50,
-  }));
+  const formatted = rewards.map((r) => {
+    const rawType = (r.Reward_Type || "").toLowerCase();
+    const isOtop = rawType.includes("otop") || rawType.includes("product") || rawType.includes("souvenir");
+    const rewardType = isOtop ? "otop_product" : "discount_voucher";
+
+    return {
+      rewardId: r.Reward_ID,
+      rewardName: r.Reward_Name,
+      rewardType,
+      description: r.Description || `แลกรับสิทธิ์ ${r.Reward_Name} ใช้ ${r.Required_Stamp_Count} แสตมป์`,
+      requiredStampCount: r.Required_Stamp_Count,
+      status: (r.Status.toLowerCase() === "active" || r.Status.toLowerCase() === "available") ? "available" : "out_of_stock",
+      originalValue: Math.max(100, r.Required_Stamp_Count * 30),
+      discountValue: Math.max(50, r.Required_Stamp_Count * 15),
+      imageUrl: r.Image_URL || (r.Reward_ID === 1
+        ? "https://images.unsplash.com/photo-1607082348824-0a96f2a4b9da?w=300&auto=format&fit=crop&q=80"
+        : "https://images.unsplash.com/photo-1517256064527-09c73fc73e38?w=300&auto=format&fit=crop&q=80"),
+      provinceName: r.provinces?.Prov_Name || "ทั่วประเทศ",
+      remainingStock: 50,
+    };
+  });
 
   sendJson(res, formatted);
 });
@@ -726,7 +852,7 @@ citizenRoutes.post("/user/topup", requireAuth, async (req: AuthRequest, res) => 
 
 // POST /user/pay
 citizenRoutes.post("/user/pay", requireAuth, async (req: AuthRequest, res) => {
-  const { Merchant_ID, Total_Amount, District_ID, Stamp_Count = 0, Pin } = req.body;
+  const { Merchant_ID, Total_Amount, District_ID, Stamp_Count = 0, Pin, Mission_ID, missionId, mission, selectedStamps, Selected_Stamps } = req.body;
   const inputAmount = Number(Total_Amount);
   const totalAmount = Number(inputAmount.toFixed(2));
   const merchantId = Number(Merchant_ID);
@@ -782,8 +908,26 @@ citizenRoutes.post("/user/pay", requireAuth, async (req: AuthRequest, res) => {
       if (Stamp_Count > dailySubsidy.remaining - govShare || Stamp_Count > Number(grant.Remaining_Amount) - govShare) {
         throw new Error('วงเงินรัฐสำหรับจ่ายค่าสแตมป์ไม่เพียงพอ');
       }
-      const stamps = Stamp_Count ? (await spendableStamps(tx, req.user!.userId)).slice(0, Stamp_Count) : [];
-      if (stamps.length !== Stamp_Count) throw new Error('จำนวนสแตมป์คงเหลือไม่เพียงพอ');
+      let stamps: any[] = [];
+      if (Stamp_Count > 0) {
+        const allSpendable = await spendableStamps(tx, req.user!.userId);
+        const stampAlloc = selectedStamps || Selected_Stamps;
+        if (stampAlloc && typeof stampAlloc === 'object') {
+          for (const [stampIdStr, countVal] of Object.entries(stampAlloc)) {
+            const sId = Number(stampIdStr);
+            const needed = Number(countVal);
+            if (needed > 0) {
+              const matching = allSpendable.filter(s => s.Stamp_ID === sId && !stamps.some(st => st.User_Stamp_ID === s.User_Stamp_ID)).slice(0, needed);
+              stamps.push(...matching);
+            }
+          }
+        }
+        if (stamps.length < Stamp_Count) {
+          const remaining = allSpendable.filter(s => !stamps.some(st => st.User_Stamp_ID === s.User_Stamp_ID)).slice(0, Stamp_Count - stamps.length);
+          stamps.push(...remaining);
+        }
+        if (stamps.length !== Stamp_Count) throw new Error('จำนวนสแตมป์คงเหลือไม่เพียงพอ');
+      }
       const walletShare = Math.round((userShare - Stamp_Count) * 100) / 100;
       if (!wallet || Number(wallet.Balance) < walletShare) {
         throw new Error(`ยอดเงินในกระเป๋าไม่เพียงพอ (ต้องการ ${walletShare} บาท มีอยู่ ${Number(wallet?.Balance || 0)} บาท)`);
@@ -829,14 +973,20 @@ citizenRoutes.post("/user/pay", requireAuth, async (req: AuthRequest, res) => {
         create: { Merchant_ID: merchantId, Balance: totalAmount, Status: "ACTIVE" },
       });
 
-      const activeMissions = await tx.missions.findMany({
-        where: { Target_Merchant_ID: merchantId, Status: { in: ['ACTIVE', 'active', 'OPEN', 'open'] }, Start_DateTime: { lte: transaction.Tx_Timestamp }, End_DateTime: { gt: transaction.Tx_Timestamp } },
-        orderBy: { Mission_ID: 'desc' }, select: { Mission_ID: true },
-      });
+      const specifiedMissionId = toNumber(Mission_ID ?? missionId ?? mission);
       let missionStamp = null;
-      for (const mission of activeMissions) {
-        missionStamp = await awardMissionStamp(tx, mission.Mission_ID, transaction);
-        if (missionStamp) break;
+      if (specifiedMissionId) {
+        missionStamp = await awardMissionStamp(tx, specifiedMissionId, transaction);
+      }
+      if (!missionStamp) {
+        const activeMissions = await tx.missions.findMany({
+          where: { Target_Merchant_ID: merchantId, Status: { in: ['ACTIVE', 'active', 'OPEN', 'open'] }, Start_DateTime: { lte: transaction.Tx_Timestamp }, End_DateTime: { gt: transaction.Tx_Timestamp } },
+          orderBy: { Mission_ID: 'desc' }, select: { Mission_ID: true },
+        });
+        for (const mission of activeMissions) {
+          missionStamp = await awardMissionStamp(tx, mission.Mission_ID, transaction);
+          if (missionStamp) break;
+        }
       }
       const stampReward = await awardPurchaseStamps(tx, transaction);
 

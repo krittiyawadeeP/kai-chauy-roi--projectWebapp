@@ -9,6 +9,8 @@ import { StampRedeemModal } from './StampRedeemModal';
 import { AuthModal } from '../auth/AuthModal';
 import { StoreMapPickerModal } from '../merchant/StoreMapPickerModal';
 import { Reward, DistrictStamp } from '../../types';
+import { calculateDistanceKm } from '../../services/citizenGpsService';
+import { TopupModal } from './TopupModal';
 
 export interface CitizenMobileViewProps {
   activeTab?: 'home' | 'missions' | 'wallet';
@@ -33,12 +35,107 @@ export const CitizenMobileView: React.FC<CitizenMobileViewProps> = ({
     rewards,
     transactions,
     topupWallet,
-    logout
+    logout,
+    userGpsLocation,
+    isGpsTracking,
+    refreshLocationNow
   } = useApp();
 
-  const localAiShops = aiTargetShops.filter(shop => shop.provinceId === undefined || shop.provinceId === currentUser.provId);
+  const currentProvinceId = userGpsLocation?.provinceId || currentUser.provId;
+  const currentDistrictId = userGpsLocation?.districtId || currentUser.distId;
+  const currentProvinceName = userGpsLocation?.provinceName;
+  const currentDistrictName = userGpsLocation?.districtName;
+
+  const normalizeProv = (p?: string) => (p || '').replace(/^(จังหวัด|จ\.)/g, '').trim().toLowerCase();
+
+  const isSameProvince = (targetProvId?: number, targetProvName?: string) => {
+    if (currentProvinceId && targetProvId && targetProvId === currentProvinceId) return true;
+    if (currentProvinceName && targetProvName) {
+      const cleanCur = normalizeProv(currentProvinceName);
+      const cleanTarget = normalizeProv(targetProvName);
+      if (cleanCur && cleanTarget && (cleanCur.includes(cleanTarget) || cleanTarget.includes(cleanCur))) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  // Stamp counts per province for the user
+  const userStampsByProvince = React.useMemo(() => {
+    const counts: Record<string, number> = {};
+    userStamps.forEach(us => {
+      if (us.count <= 0) return;
+      const ds = districtStamps.find(d => d.stampId === us.stampId);
+      if (ds?.provName) {
+        const pName = ds.provName.trim();
+        counts[pName] = (counts[pName] || 0) + us.count;
+      }
+    });
+    return counts;
+  }, [userStamps, districtStamps]);
+
+  // Local AI Target Shops - STRICTLY matching user's current province
+  const localAiShops = aiTargetShops
+    .filter(shop => {
+      const mch = merchants.find(m => m.mchId === shop.merchantId);
+      const provId = shop.provId || shop.provinceId || mch?.provId;
+      const provName = shop.provinceName;
+      if (currentProvinceId || currentProvinceName) {
+        return isSameProvince(provId, provName);
+      }
+      return true;
+    })
+    .map(shop => {
+      const mch = merchants.find(m => m.mchId === shop.merchantId);
+      const distanceKm = userGpsLocation && mch?.lat && mch?.lng
+        ? calculateDistanceKm(userGpsLocation.lat, userGpsLocation.lng, mch.lat, mch.lng)
+        : undefined;
+
+      const isExactDistrict = Boolean(currentDistrictId && (shop.distId === currentDistrictId || mch?.distId === currentDistrictId));
+      const isExactProvince = Boolean(currentProvinceId && (shop.provId === currentProvinceId || shop.provinceId === currentProvinceId || mch?.provId === currentProvinceId));
+
+      return {
+        ...shop,
+        distanceKm,
+        isExactDistrict,
+        isExactProvince,
+      };
+    })
+    .sort((a, b) => {
+      if (a.isExactDistrict && !b.isExactDistrict) return -1;
+      if (!a.isExactDistrict && b.isExactDistrict) return 1;
+      if (a.distanceKm !== undefined && b.distanceKm !== undefined) return a.distanceKm - b.distanceKm;
+      return 0;
+    });
+
   const featuredAiShop = localAiShops.length > 0 ? localAiShops[0] : null;
-  const generalMissions = missions.filter(mission => !mission.isAiMission);
+
+  // General Missions - STRICTLY matching user's current province
+  const generalMissions = missions
+    .filter(mission => {
+      if (mission.isAiMission) return false;
+      const mch = merchants.find(m => m.mchId === mission.targetMerchantId);
+      const provId = mission.targetProvId || mch?.provId;
+      const provName = mission.targetProvName;
+      if (currentProvinceId || currentProvinceName) {
+        return isSameProvince(provId, provName);
+      }
+      return true;
+    })
+    .map(mission => {
+      const isDistrictMatch = Boolean(currentDistrictId && mission.targetDistId === currentDistrictId);
+      const isProvinceMatch = Boolean(currentProvinceId && (mission.targetProvId === currentProvinceId || (currentProvinceName && mission.targetProvName?.includes(currentProvinceName))));
+      return {
+        ...mission,
+        isDistrictMatch,
+        isProvinceMatch,
+      };
+    })
+    .sort((a, b) => {
+      if (a.isDistrictMatch && !b.isDistrictMatch) return -1;
+      if (!a.isDistrictMatch && b.isDistrictMatch) return 1;
+      return 0;
+    });
 
   const [currentScreen, setCurrentScreen] = useState<'home' | 'statement'>('home');
   const [internalTab, setInternalTab] = useState<'home' | 'missions' | 'wallet'>(controlledTab || 'home');
@@ -49,12 +146,14 @@ export const CitizenMobileView: React.FC<CitizenMobileViewProps> = ({
   };
   const [scannerOpen, setScannerOpen] = useState(false);
   const [selectedMerchantIdForScan, setSelectedMerchantIdForScan] = useState<number | undefined>();
+  const [selectedMissionIdForScan, setSelectedMissionIdForScan] = useState<number | undefined>();
   const [showMyQr, setShowMyQr] = useState(false);
   const [registrationModalOpen, setRegistrationModalOpen] = useState(false);
   const [redeemModalOpen, setRedeemModalOpen] = useState(false);
   const [selectedReward, setSelectedReward] = useState<Reward | null>(null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [mapModalShopId, setMapModalShopId] = useState<number | null>(null);
+  const [topupModalOpen, setTopupModalOpen] = useState(false);
 
   const totalUserStamps = userStamps.reduce((acc, curr) => acc + curr.count, 0);
 
@@ -66,6 +165,7 @@ export const CitizenMobileView: React.FC<CitizenMobileViewProps> = ({
       color: 'blue',
       onClick: () => {
         setSelectedMerchantIdForScan(undefined);
+        setSelectedMissionIdForScan(undefined);
         setScannerOpen(true);
       }
     },
@@ -200,7 +300,8 @@ export const CitizenMobileView: React.FC<CitizenMobileViewProps> = ({
               </div>
             </div>
             <button
-              onClick={() => topupWallet(500)}
+              type="button"
+              onClick={() => setTopupModalOpen(true)}
               className="rounded-xl bg-[#eaf2ff] px-3 py-1.5 text-xs font-bold text-[#1769ed] hover:bg-blue-100 transition-colors flex items-center gap-1 cursor-pointer"
             >
               <Icon name="plus" className="size-3.5" />
@@ -333,38 +434,25 @@ export const CitizenMobileView: React.FC<CitizenMobileViewProps> = ({
                   className="size-14 rounded-xl object-cover shrink-0"
                 />
                 <div className="min-w-0 flex-1">
-                  <h4 className="font-bold text-xs text-slate-800 line-clamp-1">
-                    {featuredAiShop ? `${featuredAiShop.merchantName} (${featuredAiShop.districtName})` : 'ร้านกาแฟโบราณลุงเปี๊ยก (ท่าน้ำนนท์)'}
-                  </h4>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <h4 className="font-bold text-xs text-slate-800 line-clamp-1">
+                      {featuredAiShop ? `${featuredAiShop.merchantName} (${featuredAiShop.districtName})` : 'ร้านกาแฟโบราณลุงเปี๊ยก (ท่าน้ำนนท์)'}
+                    </h4>
+                    {featuredAiShop?.distanceKm !== undefined && (
+                      <span className="text-[9px] bg-blue-100 text-blue-800 font-extrabold px-1.5 py-0.2 rounded-md border border-blue-200">
+                        📍 ห่าง {featuredAiShop.distanceKm} กม.
+                      </span>
+                    )}
+                  </div>
                   <p className="text-[11px] text-amber-800 font-medium mt-0.5 line-clamp-1">
                     {featuredAiShop ? featuredAiShop.missionTitle : 'ซื้อครบตามเกณฑ์พื้นที่ รับแสตมป์ประจำอำเภอ'}
                   </p>
                   <p className="text-[10px] text-slate-400 mt-1">
-                    {featuredAiShop ? `${featuredAiShop.criticalHours} • AI วิเคราะห์ฟื้นฟูร้านค้า` : 'ช่วงบ่าย 13:00 - 16:00 น. • จำกัด 10 สิทธิ์แรก'}
+                    {featuredAiShop ? `${featuredAiShop.criticalHours} • AI วิเคราะห์ตามพื้นที่ GPS` : 'ช่วงบ่าย 13:00 - 16:00 น. • จำกัด 10 สิทธิ์แรก'}
                   </p>
                 </div>
               </div>
 
-              <div className="flex gap-2 mt-3">
-                <button
-                  type="button"
-                  onClick={() => setMapModalShopId(featuredAiShop?.merchantId || 1)}
-                  className="px-3 py-2.5 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1 shrink-0"
-                >
-                  <span>📍 ดูพิกัดร้าน</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedMerchantIdForScan(featuredAiShop?.merchantId || 1);
-                    setScannerOpen(true);
-                  }}
-                  className="flex-1 py-2.5 bg-[#d97706] hover:bg-amber-600 text-white rounded-xl text-xs font-bold shadow-sm transition-colors flex items-center justify-center gap-1.5"
-                >
-                  <Icon name="scan" className="size-4" />
-                  <span>สแกนจ่าย 60/40</span>
-                </button>
-              </div>
             </div>
           </section>
 
@@ -408,8 +496,39 @@ export const CitizenMobileView: React.FC<CitizenMobileViewProps> = ({
       {/* TAB 2: MISSIONS */}
       {activeTab === 'missions' && (
         <section className="px-4 pt-5 space-y-4">
+          {/* Real-time GPS Location Status Banner (Refreshes every 10 min) */}
+          <div className="rounded-[22px] bg-gradient-to-r from-blue-900 via-indigo-950 to-slate-900 text-white p-3.5 shadow-md border border-blue-400/30 flex items-center justify-between">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className={`size-8 rounded-xl bg-blue-500/20 text-blue-300 border border-blue-400/40 grid place-items-center text-sm shrink-0 ${isGpsTracking ? 'animate-pulse' : ''}`}>
+                📍
+              </span>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-xs font-black text-white truncate">
+                    {userGpsLocation ? `${userGpsLocation.districtName ? `${userGpsLocation.districtName}, ` : ''}${userGpsLocation.provinceName}` : 'กำลังระบุพิกัด GPS...'}
+                  </span>
+                  <span className="text-[9px] bg-blue-500/30 text-blue-200 px-1.5 py-0.2 rounded-full font-bold">
+                    พิกัด 10 นาที
+                  </span>
+                </div>
+                <p className="text-[10px] text-blue-200/80 truncate">
+                  {userGpsLocation?.lastUpdated ? `อัปเดตล่าสุด ${userGpsLocation.lastUpdated}` : 'ระบบจะคัดเลือกภารกิจที่อยู่ในพื้นที่ของคุณ ณ ตอนนั้น'}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => void refreshLocationNow()}
+              disabled={isGpsTracking}
+              className="p-2 rounded-xl bg-white/10 hover:bg-white/20 active:scale-95 text-white transition cursor-pointer shrink-0 ml-2"
+              title="ดึงพิกัด GPS ใหม่ตอนนี้"
+            >
+              <Icon name="refresh" className={`size-3.5 ${isGpsTracking ? 'animate-spin text-amber-300' : ''}`} />
+            </button>
+          </div>
+
           {/* Section 1: AI Target Missions */}
-          {localAiShops.length > 0 && (
+          {localAiShops.length > 0 ? (
             <div className="space-y-3">
               <div className="flex items-center justify-between bg-gradient-to-r from-amber-500 to-amber-600 text-white p-3.5 rounded-[22px] shadow-sm">
                 <div className="flex items-center gap-2">
@@ -446,6 +565,16 @@ export const CitizenMobileView: React.FC<CitizenMobileViewProps> = ({
                           <span className="text-[10px] font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
                             {shop.category}
                           </span>
+                          {shop.distanceKm !== undefined && (
+                            <span className="text-[10px] font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
+                              📍 ห่าง {shop.distanceKm} กม.
+                            </span>
+                          )}
+                          {shop.isExactDistrict && (
+                            <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                              🎯 ในอำเภอของคุณ
+                            </span>
+                          )}
                         </div>
                         <h4 className="font-bold text-sm text-slate-800 mt-1">{shop.merchantName}</h4>
                         <p className="text-xs text-amber-800 font-medium mt-0.5">{shop.missionTitle}</p>
@@ -471,30 +600,19 @@ export const CitizenMobileView: React.FC<CitizenMobileViewProps> = ({
                       </div>
                       <p className="text-[11px] text-slate-500">รับแสตมป์ AI ได้สูงสุด {shop.dailyStampLimit ?? 1} ดวงต่อคนต่อวัน รวมทุกร้านที่มีภารกิจ · ช่วงเวลาจากข้อมูลบิล ไม่ใช่เวลาทำการที่ร้านยืนยัน</p>
                     </div>
-
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setMapModalShopId(shop.merchantId)}
-                        className="px-3 py-2.5 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1 shrink-0"
-                      >
-                        <span>📍 ดูพิกัดร้าน</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedMerchantIdForScan(shop.merchantId);
-                          setScannerOpen(true);
-                        }}
-                        className="flex-1 py-2.5 bg-[#d97706] hover:bg-amber-600 text-white font-bold text-xs rounded-xl shadow-sm transition-colors flex items-center justify-center gap-1.5"
-                      >
-                        <Icon name="scan" className="size-4" />
-                        <span>สแกนจ่ายที่ร้านนี้</span>
-                      </button>
-                    </div>
                   </div>
                 ))}
               </div>
+            </div>
+          ) : (
+            <div className="rounded-[22px] bg-amber-50/70 p-4 border border-amber-200/80 text-center space-y-1.5 shadow-xs">
+              <div className="flex items-center justify-center gap-1.5 text-amber-900 font-bold text-xs">
+                <Icon name="sparkle" className="size-4 text-amber-600" />
+                <span>ไม่พบร้านค้าชี้เป้า AI ในจังหวัด{currentProvinceName || 'ที่คุณอยู่'}</span>
+              </div>
+              <p className="text-[11px] text-amber-700">
+                ระบบกรองเฉพาะร้านค้าที่ตั้งอยู่ในจังหวัดเดียวกัน เพื่อกระตุ้นเศรษฐกิจในพื้นที่ที่คุณอยู่จริง
+              </p>
             </div>
           )}
 
@@ -510,7 +628,14 @@ export const CitizenMobileView: React.FC<CitizenMobileViewProps> = ({
           </div>
 
           <div className="space-y-3">
-            {generalMissions.map(ms => {
+            {generalMissions.length === 0 ? (
+              <div className="py-8 text-center bg-white rounded-[22px] p-6 border border-slate-100 space-y-2 shadow-xs">
+                <span className="text-3xl block">📍</span>
+                <p className="text-xs font-bold text-slate-700">ไม่พบภารกิจในจังหวัด{currentProvinceName || 'ที่คุณอยู่'} ณ ตอนนี้</p>
+                <p className="text-[11px] text-slate-400">ระบบแสดงเฉพาะภารกิจในจังหวัดเดียวกันเพื่อกระจายรายได้สู่ชุมชน</p>
+              </div>
+            ) : (
+              generalMissions.map(ms => {
               const merchant = merchants.find(shop => shop.mchId === ms.targetMerchantId);
               const stamp = districtStamps.find(s => s.distId === (merchant?.distId ?? ms.targetDistId));
               const progress = ms.maxRecipients ? Math.min(100, (ms.currentRecipients / ms.maxRecipients) * 100) : 0;
@@ -528,9 +653,21 @@ export const CitizenMobileView: React.FC<CitizenMobileViewProps> = ({
                       />
                     )}
                     <div className="min-w-0 flex-1">
-                      <span className="text-[10px] font-bold text-[#1769ed] bg-blue-50 px-2 py-0.5 rounded-md">
-                        {ms.category}
-                      </span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[10px] font-bold text-[#1769ed] bg-blue-50 px-2 py-0.5 rounded-md">
+                          {ms.category}
+                        </span>
+                        {ms.isDistrictMatch && (
+                          <span className="text-[10px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                            🎯 ในอำเภอของคุณ
+                          </span>
+                        )}
+                        {ms.isProvinceMatch && !ms.isDistrictMatch && (
+                          <span className="text-[10px] font-bold text-blue-800 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200">
+                            📍 ในจังหวัดของคุณ
+                          </span>
+                        )}
+                      </div>
                       <h4 className="font-bold text-sm text-slate-800 mt-1">{ms.missionName}</h4>
                       <p className="text-xs text-slate-500 mt-0.5">{ms.description}</p>
                     </div>
@@ -558,22 +695,10 @@ export const CitizenMobileView: React.FC<CitizenMobileViewProps> = ({
                       />
                     </div>}
                   </div>
-
-                  <button
-                    onClick={() => {
-                      if (ms.targetMerchantId) {
-                        setSelectedMerchantIdForScan(ms.targetMerchantId);
-                      }
-                      setScannerOpen(true);
-                    }}
-                    className="w-full py-2.5 bg-[#1769ed] hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-sm transition-colors flex items-center justify-center gap-1.5"
-                  >
-                    <Icon name="scan" className="size-4" />
-                    <span>สแกนจ่ายทำภารกิจที่ร้านนี้</span>
-                  </button>
                 </div>
               );
-            })}
+            })
+          )}
           </div>
         </section>
       )}
@@ -648,26 +773,52 @@ export const CitizenMobileView: React.FC<CitizenMobileViewProps> = ({
             </div>
 
             <div className="space-y-3">
-              {rewards.map(reward => {
-                const canRedeem = totalUserStamps >= reward.requiredStampCount;
-                return (
-                  <div
-                    key={reward.rewardId}
-                    className="rounded-[22px] bg-white p-3.5 border border-slate-100 shadow-sm flex items-center gap-3.5"
-                  >
-                    <img
-                      src={reward.imageUrl}
-                      alt={reward.rewardName}
-                      className="size-20 rounded-2xl object-cover border border-slate-100 shrink-0"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md">
-                        {reward.provinceName}
-                      </span>
-                      <h4 className="font-bold text-xs text-slate-800 mt-1 line-clamp-1">
-                        {reward.rewardName}
-                      </h4>
-                      <p className="text-[11px] text-slate-400 line-clamp-1 mt-0.5">{reward.description}</p>
+              {[...rewards]
+                .sort((a, b) => {
+                  const aStamps = userStampsByProvince[a.provinceName] || 0;
+                  const bStamps = userStampsByProvince[b.provinceName] || 0;
+                  if (aStamps !== bStamps) return bStamps - aStamps;
+                  if (currentProvinceName) {
+                    const aLocal = a.provinceName.includes(currentProvinceName);
+                    const bLocal = b.provinceName.includes(currentProvinceName);
+                    if (aLocal && !bLocal) return -1;
+                    if (!aLocal && bLocal) return 1;
+                  }
+                  return 0;
+                })
+                .map(reward => {
+                  const canRedeem = totalUserStamps >= reward.requiredStampCount;
+                  const stampCount = userStampsByProvince[reward.provinceName] || 0;
+                  return (
+                    <div
+                      key={reward.rewardId}
+                      className="rounded-[22px] bg-white p-3.5 border border-slate-100 shadow-sm flex items-center gap-3.5"
+                    >
+                      <img
+                        src={reward.imageUrl}
+                        alt={reward.rewardName}
+                        className="size-20 rounded-2xl object-cover border border-slate-100 shrink-0"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[10px] font-bold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-md">
+                            {reward.provinceName}
+                          </span>
+                          {stampCount > 0 && (
+                            <span className="text-[9px] font-extrabold text-amber-900 bg-amber-100 border border-amber-300 px-1.5 py-0.2 rounded-md">
+                              ⭐ มี {stampCount} แสตมป์
+                            </span>
+                          )}
+                          {currentProvinceName && reward.provinceName.includes(currentProvinceName) && (
+                            <span className="text-[9px] font-extrabold text-emerald-800 bg-emerald-50 border border-emerald-300 px-1.5 py-0.2 rounded-md">
+                              📍 พิกัดคุณ
+                            </span>
+                          )}
+                        </div>
+                        <h4 className="font-bold text-xs text-slate-800 mt-1 line-clamp-1">
+                          {reward.rewardName}
+                        </h4>
+                        <p className="text-[11px] text-slate-400 line-clamp-1 mt-0.5">{reward.description}</p>
                       <div className="mt-2 flex items-center justify-between">
                         <span className="text-xs font-bold text-amber-700">
                           ⭐ ใช้ {reward.requiredStampCount} แสตมป์
@@ -699,8 +850,12 @@ export const CitizenMobileView: React.FC<CitizenMobileViewProps> = ({
       {/* MODALS */}
       <QRScannerModal
         isOpen={scannerOpen}
-        onClose={() => setScannerOpen(false)}
+        onClose={() => {
+          setScannerOpen(false);
+          setSelectedMissionIdForScan(undefined);
+        }}
         presetMerchantId={selectedMerchantIdForScan}
+        presetMissionId={selectedMissionIdForScan}
       />
 
       <CitizenRegistrationModal
@@ -718,6 +873,11 @@ export const CitizenMobileView: React.FC<CitizenMobileViewProps> = ({
         isOpen={mapModalShopId !== null}
         onClose={() => setMapModalShopId(null)}
         mchId={mapModalShopId ?? undefined}
+      />
+
+      <TopupModal
+        isOpen={topupModalOpen}
+        onClose={() => setTopupModalOpen(false)}
       />
 
       {/* POPUP "QR ของฉัน" (Real Dynamic QR Code & Token) */}
