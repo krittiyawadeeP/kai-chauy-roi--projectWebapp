@@ -65,7 +65,7 @@ export const citizenService = {
     return api.post<{
       transaction: any;
       wallet: { walletId: number; userId: number; balance: number; updatedAt: string };
-      grant: { grantId: number; userId: number; totalGrantAmount: number; remainingAmount: number };
+      grant: { grantId: number; userId: number; totalGrantAmount: number; remainingAmount: number } | null;
       awardedStamp?: any;
       awardedStampCount: number;
       earnedStamp?: any;

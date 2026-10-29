@@ -392,6 +392,7 @@ export const swaggerSpec = swaggerJSDoc({
               Password: { type: 'string', minLength: 6, maxLength: 128, writeOnly: true },
               Pin: { type: 'string', pattern: '^[0-9]{6}$', writeOnly: true },
               Subsidy_Eligible: { type: 'boolean', description: 'สิทธิ์ซื้อสินค้า 60/40 ของบัญชี' },
+              Is_Suspended: { type: 'boolean', description: 'ระงับบัญชีและร้านทั้งหมดของเจ้าของบัญชี ค่าเริ่มต้น false; ระงับแล้วเซสชันเดิมถูกยกเลิก' },
             },
           } } } },
           responses: okResponse('Account access updated'),

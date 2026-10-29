@@ -90,7 +90,7 @@ export async function runWeeklyMissionAnalysis(now = new Date(), refresh = false
     const weekDate = new Date(`${bangkokDate(start)}T00:00:00.000Z`);
     const from = new Date(analysisEnd.getTime() - 42 * dayMs);
     const recentStart = new Date(analysisEnd.getTime() - 14 * dayMs);
-    const merchants = await prisma.merchants.findMany({ select: { Mch_ID: true, Shop_Name: true, Category: true, Dist_ID: true, districts: { select: { Prov_ID: true } } } });
+    const merchants = await prisma.merchants.findMany({ where: { users: { Is_Suspended: false } }, select: { Mch_ID: true, Shop_Name: true, Category: true, Dist_ID: true, districts: { select: { Prov_ID: true } } } });
     const sales = await prisma.sales_transactions.findMany({ where: { Status: { in: ['COMPLETED', 'completed'] }, Tx_Timestamp: { gte: from, lt: analysisEnd } }, select: { Merchant_ID: true, Tx_Timestamp: true, Total_Amount: true } });
     const previous = await prisma.missions.findMany({ where: { Campaign_Week_Start: { not: null, lt: weekDate } }, select: { Target_Merchant_ID: true, Start_DateTime: true }, orderBy: { Start_DateTime: 'desc' } });
     const overlapping = await prisma.missions.findMany({ where: { Start_DateTime: { lt: end }, End_DateTime: { gt: start }, Campaign_Week_Start: null, Status: { in: ['ACTIVE', 'active', 'OPEN', 'open'] } }, select: { Target_Merchant_ID: true } });
@@ -120,7 +120,7 @@ export async function runWeeklyMissionAnalysis(now = new Date(), refresh = false
         await prisma.$transaction(async tx => {
             await tx.$queryRaw`SELECT Prov_ID FROM provinces WHERE Prov_ID = ${provinceId} FOR UPDATE`;
             const count = await tx.missions.count({ where: { Campaign_Week_Start: weekDate, merchants: { districts: { Prov_ID: provinceId } } } });
-            if (count >= 2) return;
+            if (count >= 2 || !await tx.merchants.count({ where: { Mch_ID: selected.id, users: { Is_Suspended: false } } })) return;
             await tx.missions.create({
               data: {
                 Target_Merchant_ID: selected.id, Campaign_Week_Start: weekDate, Daily_Start_Minute: selected.startMinute, Daily_End_Minute: selected.endMinute,
@@ -137,17 +137,21 @@ export async function runWeeklyMissionAnalysis(now = new Date(), refresh = false
       for (let index = 0; index < replacements.length; index += 6) {
         prepared.push(...await Promise.all(replacements.slice(index, index + 6).map(async item => ({ ...item, ...await missionText(item.shopName, item.ratio, item.startMinute) }))));
       }
-      await prisma.$transaction(async tx => {
+      const created = await prisma.$transaction(async tx => {
         await tx.$queryRaw`SELECT Prov_ID FROM provinces ORDER BY Prov_ID FOR UPDATE`;
+        const active = await tx.merchants.findMany({ where: { Mch_ID: { in: prepared.map(item => item.merchantId) }, users: { Is_Suspended: false } }, select: { Mch_ID: true } });
+        const eligible = prepared.filter(item => active.some(merchant => merchant.Mch_ID === item.merchantId));
+        if (!eligible.length) throw new Error('No merchants qualify for a new analysis');
         const latestPolicy = await tx.ai_mission_policy.findFirst({ orderBy: [{ Effective_From: 'desc' }, { Policy_ID: 'desc' }] });
         await tx.missions.updateMany({ where: { Campaign_Week_Start: weekDate, Status: { in: ['ACTIVE', 'active', 'OPEN', 'open'] } }, data: { Status: 'INACTIVE' } });
-        for (const item of prepared) await tx.missions.create({ data: {
+        for (const item of eligible) await tx.missions.create({ data: {
           Target_Merchant_ID: item.merchantId, Campaign_Week_Start: weekDate, Daily_Start_Minute: item.startMinute, Daily_End_Minute: item.endMinute,
           Start_DateTime: now, End_DateTime: end, Max_Recipients: null, Ai_Daily_Stamp_Limit: latestPolicy?.Daily_Stamp_Limit ?? 1,
           Status: 'ACTIVE', Mission_Name: item.name, Description: item.description, Selection_Evidence: item.evidence,
         } });
+        return eligible.length;
       }, { timeout: 120_000 });
-      return prepared.length;
+      return created;
     }
   } finally { running = false; }
 }

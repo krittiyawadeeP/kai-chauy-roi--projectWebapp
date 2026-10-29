@@ -77,3 +77,27 @@ test('reads recover from backend restarts with bounded retries while writes and 
     else Reflect.deleteProperty(globalThis, 'localStorage');
   }
 });
+
+test('suspension expires only the caller session, preserving it for a suspended counterparty', async () => {
+  const originalFetch = globalThis.fetch;
+  const originalStorage = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, 'window');
+  let token: string | null = 'saved-token';
+  const browser = new EventTarget();
+  let expired = 0;
+  browser.addEventListener(AUTH_EXPIRED_EVENT, () => expired++);
+  Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: { getItem: () => token, removeItem: () => { token = null; } } });
+  Object.defineProperty(globalThis, 'window', { configurable: true, value: browser });
+  try {
+    for (const account of ['COUNTERPARTY', 'SELF']) {
+      globalThis.fetch = async () => Response.json({ code: 'ACCOUNT_SUSPENDED', account, message: 'ถูกระงับ' }, { status: 403 });
+      await assert.rejects(api.post('/user/pay', {}), (error: unknown) => error instanceof ApiError && error.status === 403);
+      assert.equal(token, account === 'SELF' ? null : 'saved-token');
+      assert.equal(expired, account === 'SELF' ? 1 : 0);
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (originalStorage) Object.defineProperty(globalThis, 'localStorage', originalStorage); else Reflect.deleteProperty(globalThis, 'localStorage');
+    if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow); else Reflect.deleteProperty(globalThis, 'window');
+  }
+});

@@ -6,7 +6,10 @@ import { prisma } from '../lib/prisma';
 import { adminRoutes } from '../routes/admin.routes';
 import type { MissionHistoryReport } from '../../../shared/mission-history';
 
-test('history API guards access, validates dates, selects only analysed missions and rejects manual creation', async () => {
+test('history API guards access, validates dates, selects only analysed missions and rejects manual creation', async (t) => {
+  const authFind = prisma.users.findUnique;
+  (prisma.users as any).findUnique = async () => ({ Is_Suspended: false });
+  t.after(() => { (prisma.users as any).findUnique = authFind; });
   const originals = { missions: prisma.missions.findMany, sales: prisma.sales_transactions.findMany };
   let missionReads = 0;
   let salesReads = 0;

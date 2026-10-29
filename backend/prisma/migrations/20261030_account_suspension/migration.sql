@@ -1,0 +1,1 @@
+ALTER TABLE `users` ADD COLUMN `Is_Suspended` BOOLEAN NOT NULL DEFAULT false;

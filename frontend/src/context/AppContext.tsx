@@ -432,6 +432,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           status: 'approved',
           registeredAt: new Date().toISOString(),
           hasPin: Boolean(userRes.hasPin || userRes.Pin_Hash),
+          subsidyEligible: userRes.Subsidy_Eligible !== false,
         };
         setCurrentUser(mappedUser);
         setIsAuthenticated(true);
@@ -514,6 +515,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         status: 'approved',
         registeredAt: new Date().toISOString().replace('T', ' ').substring(0, 19),
         hasPin: Boolean(dbUser.hasPin || dbUser.Pin_Hash),
+        subsidyEligible: dbUser.Subsidy_Eligible !== false,
       };
 
       setUsers(prev => [mappedUser, ...prev.filter(u => u.userId !== mappedUser.userId)]);
@@ -859,11 +861,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       .reduce((sum, t) => sum + (Number(t.govSubsidizedAmount) || 0), 0);
     const remainingDaily = Math.max(0, DAILY_SUBSIDY_LIMIT - todayGovSpent);
 
-    const govRatio = userGrant?.govPayRatio ?? 0.60;
+    const govRatio = currentUser.subsidyEligible === false ? 0 : (userGrant?.govPayRatio ?? 0.60);
     const requestedGovShare = Math.round(totalAmount * govRatio * 100) / 100;
     const govShare = Math.min(requestedGovShare, remainingDaily, userGrant.remainingAmount);
     const userShare = (Math.round(totalAmount * 100) - Math.round(govShare * 100)) / 100;
 
+    if (currentUser.subsidyEligible === false && stampCount) return { success: false, message: 'บัญชีนี้ไม่มีสิทธิ์ใช้เงินรัฐสำหรับชำระด้วยแสตมป์' };
     const stampDiscount = stampCount || 0;
     const finalUserShare = Math.max(0, Math.round((userShare - stampDiscount) * 100) / 100);
 
@@ -900,10 +903,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               updatedAt: res.wallet.updatedAt || new Date().toISOString(),
             }));
           }
-          if (res.grant) {
+          const updatedGrant = res.grant;
+          if (updatedGrant) {
             setUserGrant(prev => ({
               ...prev,
-              remainingAmount: Number(res.grant.remainingAmount),
+              remainingAmount: Number(updatedGrant.remainingAmount),
             }));
           }
 

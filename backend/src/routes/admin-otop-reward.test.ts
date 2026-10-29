@@ -6,7 +6,10 @@ import { createSession, destroySession } from '../lib/auth';
 import { prisma } from '../lib/prisma';
 import { adminRoutes } from './admin.routes';
 
-test('OTOP reward defaults to the district threshold but supports a validated custom count on create and edit', async () => {
+test('OTOP reward defaults to the district threshold but supports a validated custom count on create and edit', async (t) => {
+  const authFind = prisma.users.findUnique;
+  (prisma.users as any).findUnique = async () => ({ Is_Suspended: false });
+  t.after(() => { (prisma.users as any).findUnique = authFind; });
   const originalCount = prisma.districts.count;
   const originalCreate = prisma.rewards.create;
   const originalFind = prisma.rewards.findUnique;

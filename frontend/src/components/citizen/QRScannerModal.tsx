@@ -18,7 +18,9 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
   onClose,
   presetMerchantId
 }) => {
-  const { merchants, executePayment, wallet, userGrant, topupWallet, transactions, currentUser, userStamps } = useApp();
+  const { merchants, executePayment, wallet, userGrant, topupWallet, transactions, currentUser, userStamps, refreshCitizenData } = useApp();
+
+  useEffect(() => { if (isOpen) void refreshCitizenData(); }, [isOpen, refreshCitizenData]);
 
   const [step, setStep] = useState<'scan' | 'confirm' | 'pin' | 'success'>('scan');
   const [selectedMerchant, setSelectedMerchant] = useState<Merchant | null>(null);
@@ -309,9 +311,9 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
   const todayGovSpent = transactions
     .filter(t => t.userId === currentUser.userId && t.status === 'completed' && String(t.txTimestamp).startsWith(todayStr))
     .reduce((sum, t) => sum + (Number(t.govSubsidizedAmount) || 0), 0);
-  const remainingDaily = Math.max(0, DAILY_SUBSIDY_LIMIT - todayGovSpent);
+  const remainingDaily = currentUser.subsidyEligible === false ? 0 : Math.max(0, DAILY_SUBSIDY_LIMIT - todayGovSpent);
 
-  const govRatio = userGrant?.govPayRatio ?? 0.60;
+  const govRatio = currentUser.subsidyEligible === false ? 0 : (userGrant?.govPayRatio ?? 0.60);
   const requestedGovShare = Math.round(amount * govRatio * 100) / 100;
   const govPays = Math.min(requestedGovShare, remainingDaily, userGrant?.remainingAmount ?? amount);
   const userPays = (Math.round(amount * 100) - Math.round(govPays * 100)) / 100;
@@ -591,8 +593,8 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
               )}
               <div className="flex justify-between items-center">
                 <div>
-                  <span className="text-slate-600 block">รัฐช่วยจ่าย (60%):</span>
-                  <span className="text-[10px] text-emerald-700 font-bold">สูงสุดไม่เกิน ฿200 / วัน</span>
+                  <span className="text-slate-600 block">รัฐช่วยจ่าย ({Number((govRatio * 100).toFixed(2))}%):</span>
+                  <span className="text-[10px] text-emerald-700 font-bold">{currentUser.subsidyEligible === false ? 'ไม่มีสิทธิ์รัฐร่วมจ่าย ชำระเองเต็มจำนวน' : 'สูงสุดไม่เกิน ฿200 / วัน'}</span>
                 </div>
                 <strong className="text-base text-emerald-600">฿ {govPays.toLocaleString()}</strong>
               </div>
@@ -827,7 +829,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
                 </div>
               )}
               <div className="flex justify-between text-slate-600">
-                <span>รัฐช่วยจ่าย ({Number((userGrant.govPayRatio * 100).toFixed(2))}%)</span>
+                <span>รัฐช่วยจ่าย ({Number((govRatio * 100).toFixed(2))}%)</span>
                 <span className="font-bold text-emerald-600">฿{govPays.toLocaleString()}</span>
               </div>
             </div>

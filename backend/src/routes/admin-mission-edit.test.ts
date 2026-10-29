@@ -5,7 +5,10 @@ import { createSession, destroySession } from '../lib/auth';
 import { prisma } from '../lib/prisma';
 import { adminRoutes } from './admin.routes';
 
-test('admin can edit an existing mission, while invalid changes leave it untouched', async () => {
+test('admin can edit an existing mission, while invalid changes leave it untouched', async (t) => {
+  const authFind = prisma.users.findUnique;
+  (prisma.users as any).findUnique = async () => ({ Is_Suspended: false });
+  t.after(() => { (prisma.users as any).findUnique = authFind; });
   const mission = {
     Mission_ID: 3, Mission_Name: 'ภารกิจเดิม', Description: 'รายละเอียดเดิม',
     Target_Merchant_ID: 12, Max_Recipients: 50,

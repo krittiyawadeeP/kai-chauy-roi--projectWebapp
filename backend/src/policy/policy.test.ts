@@ -24,6 +24,7 @@ test('feature routes keep their URLs and admin guards; merchant sales use the gl
   let merchantCredits = 0;
   let allowPayment = true;
   let eligible = true;
+  let hasGrant = true;
   let dailySubsidySpent = 0;
   let issuedPurchaseStamps = 0;
   const spentStampIds = new Set<bigint>();
@@ -50,13 +51,13 @@ test('feature routes keep their URLs and admin guards; merchant sales use the gl
   replace(prisma.users, 'findMany', async () => []);
   replace(prisma, '$transaction', async (callback: any) => callback({
     $queryRaw: async () => [{ User_ID: 10 }],
-    users: { findUnique: async ({ where }: any) => { assert.equal(where.User_ID, 10, 'only the buyer eligibility is checked'); return { Pin_Hash: null, Subsidy_Eligible: eligible }; } },
+    users: { findUnique: async ({ where, select }: any) => { if (select?.Is_Suspended) return { Is_Suspended: false }; assert.equal(where.User_ID, 10, 'only the buyer eligibility is checked'); return { Pin_Hash: null, Subsidy_Eligible: eligible }; } },
     sales_transactions: {
       aggregate: async () => ({ _sum: { Gov_Subsidized_Amount: dailySubsidySpent, Stamp_Paid_Amount: 0 } }),
       create: async ({ data }: any) => { dailySubsidySpent += data.Gov_Subsidized_Amount + (data.Stamp_Paid_Amount ?? 0); return { Tx_ID: 1n, ...data }; },
     },
     user_grants: {
-      findFirst: async () => ({ Grant_ID: 1n, User_ID: 10, Total_Grant_Amount: 1000, Remaining_Amount: 1000 }),
+      findFirst: async () => hasGrant ? ({ Grant_ID: 1n, User_ID: 10, Total_Grant_Amount: 1000, Remaining_Amount: 1000 }) : null,
       findUniqueOrThrow: async () => ({ Grant_ID: 1n, User_ID: 10, Total_Grant_Amount: 1000, Remaining_Amount: 1000 }),
       update: async () => ({ Grant_ID: 1n, User_ID: 10, Total_Grant_Amount: 1000, Remaining_Amount: 1000 }),
       updateMany: async ({ data }: any) => { grantUpdates += 1; grantDebits += data.Remaining_Amount.decrement; return { count: 1 }; },
@@ -68,7 +69,7 @@ test('feature routes keep their URLs and admin guards; merchant sales use the gl
       update: async ({ data }: any) => ({ Wallet_ID: 1, User_ID: 10, Balance: 1000 - data.Balance.decrement, Updated_At: new Date() }),
       upsert: async ({ update }: any) => { merchantCredits += update.Balance.increment; },
     },
-    merchants: { findUnique: async () => ({ Mch_ID: 1, Dist_ID: 99 }) },
+    merchants: { findUnique: async () => ({ Mch_ID: 1, User_ID: 2, Dist_ID: 99 }) },
     user_stamps: {
       findMany: async () => Array.from({ length: 25 }, (_, index) => ({ User_Stamp_ID: BigInt(index + 1), Stamp_ID: 1, User_ID: 10, Earned_At: new Date(), Qualifying_Amount: null })).filter(stamp => !spentStampIds.has(stamp.User_Stamp_ID)),
       create: async ({ data }: any) => { issuedPurchaseStamps++; assert.equal(data.stamp_earn_transactions.create.Tx_ID, 1n); return data; },
@@ -179,13 +180,40 @@ test('feature routes keep their URLs and admin guards; merchant sales use the gl
     assert.equal(qualifying.status, 200);
     assert.equal((await qualifying.json() as any).awardedStampCount, 2);
     assert.equal(issuedPurchaseStamps, 6);
-    const before = { walletDebits, grantDebits, merchantCredits };
+    const before = { walletDebits, grantDebits, merchantCredits, grantUpdates, stamps: spentStampIds.size };
     eligible = false;
-    assert.equal((await request('/user/pay', citizen, { Merchant_ID: 1, Total_Amount: 100, District_ID: 99 })).status, 403);
-    assert.equal((await request('/merchants/me/sales', merchant, { User_ID: 10, Total_Amount: 100, District_ID: 99 })).status, 403);
-    assert.deepEqual({ walletDebits, grantDebits, merchantCredits }, before, 'revoked buyers cannot charge a wallet, use a grant, or credit a shop');
-    eligible = true;
-    assert.equal((await request('/merchants/me/sales', merchant, { User_ID: 10, Total_Amount: 1, District_ID: 99 })).status, 201);
+    const selfPaid = await request('/user/pay', citizen, { Merchant_ID: 1, Total_Amount: 100, District_ID: 99 });
+    assert.equal(selfPaid.status, 200);
+    const selfPaidTx = (await selfPaid.json() as any).transaction;
+    assert.equal(selfPaidTx.govSubsidizedAmount, 0);
+    assert.equal(selfPaidTx.userPaidAmount, 100);
+    assert.equal(selfPaidTx.stampPaidAmount, 0);
+    const selfPaidSale = await request('/merchants/me/sales', merchant, { User_ID: 10, Total_Amount: 100, District_ID: 99 });
+    assert.equal(selfPaidSale.status, 201);
+    const selfPaidSaleTx = await selfPaidSale.json() as any;
+    assert.equal(selfPaidSaleTx.Gov_Subsidized_Amount, 0);
+    assert.equal(selfPaidSaleTx.User_Paid_Amount, 100);
+    assert.equal(walletDebits, before.walletDebits + 200);
+    assert.equal(merchantCredits, before.merchantCredits + 200);
+    assert.equal(grantDebits, before.grantDebits);
+    assert.equal(grantUpdates, before.grantUpdates, 'cash-only payments must not update the government grant');
+    assert.equal((await request('/user/pay', citizen, { Merchant_ID: 1, Total_Amount: 100, District_ID: 99, Stamp_Count: 1 })).status, 400);
+    assert.equal(spentStampIds.size, before.stamps, 'ineligible buyers cannot spend government-funded stamps');
+    assert.equal(walletDebits, before.walletDebits + 200);
+    hasGrant = false;
+    const noGrant = await request('/user/pay', citizen, { Merchant_ID: 1, Total_Amount: 10, District_ID: 99 });
+    assert.equal(noGrant.status, 200);
+    assert.equal((await noGrant.json() as any).grant, null, 'self-funded buyers do not need a grant to pay');
+    const beforeFailure = { walletDebits, merchantCredits };
+    allowPayment = false;
+    assert.equal((await request('/user/pay', citizen, { Merchant_ID: 1, Total_Amount: 100, District_ID: 99 })).status, 400);
+    assert.equal((await request('/merchants/me/sales', merchant, { User_ID: 10, Total_Amount: 100, District_ID: 99 })).status, 400);
+    assert.deepEqual({ walletDebits, merchantCredits }, beforeFailure);
+    allowPayment = true; hasGrant = true; eligible = true;
+    const restored = await request('/merchants/me/sales', merchant, { User_ID: 10, Total_Amount: 1, District_ID: 99 });
+    assert.equal(restored.status, 201);
+    assert.equal((await restored.json() as any).Gov_Subsidized_Amount, 0.6);
+
   } finally {
     [admin, merchant, government, citizen].forEach(destroySession);
     originals.reverse().forEach(restore => restore());

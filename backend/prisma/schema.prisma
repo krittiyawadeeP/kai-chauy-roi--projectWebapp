@@ -250,6 +250,7 @@ model users {
   Pin_Hash           String?              @db.VarChar(255)
   Password           String               @db.VarChar(255)
   Role               String               @default("USER") @db.VarChar(20)
+  Is_Suspended       Boolean              @default(false)
   Subsidy_Eligible   Boolean              @default(true)
   Province_ID        Int?
   merchants          merchants[]

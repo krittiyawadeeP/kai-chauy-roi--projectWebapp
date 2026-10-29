@@ -5,7 +5,10 @@ import { createSession, destroySession } from '../lib/auth';
 import { prisma } from '../lib/prisma';
 import { adminRoutes } from './admin.routes';
 
-test('only admins can list public user profile fields and accounts are separated by their merchant ownership', async () => {
+test('only admins can list public user profile fields and accounts are separated by their merchant ownership', async (t) => {
+  const authFind = prisma.users.findUnique;
+  (prisma.users as any).findUnique = async () => ({ Is_Suspended: false });
+  t.after(() => { (prisma.users as any).findUnique = authFind; });
   const original = prisma.users.findMany;
   let reads = 0;
   (prisma.users as any).findMany = async (query: any) => {

@@ -5,7 +5,10 @@ import { createSession, destroySession } from '../lib/auth';
 import { prisma } from '../lib/prisma';
 import { citizenRoutes } from './citizen.routes';
 
-test('OTOP redemption uses the configured count while requiring distinct districts of the product province', async () => {
+test('OTOP redemption uses the configured count while requiring distinct districts of the product province', async (t) => {
+  const authFind = prisma.users.findUnique;
+  (prisma.users as any).findUnique = async () => ({ Is_Suspended: false });
+  t.after(() => { (prisma.users as any).findUnique = authFind; });
   const originals = { reward: prisma.rewards.findUnique, transaction: prisma.$transaction };
   let required = 3;
   let issued = 0;

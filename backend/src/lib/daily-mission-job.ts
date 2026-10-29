@@ -38,6 +38,7 @@ export function nextMissionWindow(suggestion: MissionSuggestion, now = new Date(
 }
 
 async function createAutomaticMission(analysisId: number, merchantId: number, suggestion: MissionSuggestion) {
+  if (!await prisma.merchants.count({ where: { Mch_ID: merchantId, users: { Is_Suspended: false } } })) throw new Error('บัญชีเจ้าของร้านถูกระงับการใช้งาน');
   const { start, end } = nextMissionWindow(suggestion);
   try {
     await prisma.missions.upsert({
@@ -77,6 +78,7 @@ export async function runDailyMissionAnalysis(now = new Date()) {
     if (!unfinished.length) return;
 
     const merchants = await prisma.merchants.findMany({
+      where: { users: { Is_Suspended: false } },
       select: { Mch_ID: true, Shop_Name: true, Category: true, districts: { select: { Prov_ID: true } } },
       orderBy: { Mch_ID: 'asc' },
     });
@@ -97,7 +99,7 @@ export async function runDailyMissionAnalysis(now = new Date()) {
         await prisma.daily_mission_analyses.update({ where, data: { Status: 'READY', Message: null } });
         continue;
       }
-      if (saved.Merchant_ID && saved.Suggestion) {
+      if (saved.Merchant_ID && saved.Suggestion && merchants.some(merchant => merchant.Mch_ID === saved.Merchant_ID)) {
         try {
           await createAutomaticMission(saved.Analysis_ID, saved.Merchant_ID, saved.Suggestion as MissionSuggestion);
           await prisma.daily_mission_analyses.update({ where, data: { Status: 'READY', Message: null } });

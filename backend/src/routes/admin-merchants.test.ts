@@ -6,7 +6,10 @@ import { prisma } from '../lib/prisma';
 import { bangkokDate } from '../lib/sales-mission';
 import { adminRoutes } from './admin.routes';
 
-test('admin merchant registry shows safe owner details and completed-sale income, and validates profile edits', async () => {
+test('admin merchant registry shows safe owner details and completed-sale income, and validates profile edits', async (t) => {
+  const authFind = prisma.users.findUnique;
+  (prisma.users as any).findUnique = async () => ({ Is_Suspended: false });
+  t.after(() => { (prisma.users as any).findUnique = authFind; });
   const original = {
     list: prisma.merchants.findMany, find: prisma.merchants.findUnique, update: prisma.merchants.update,
     district: prisma.districts.findUnique, sales: prisma.sales_transactions.groupBy,
@@ -16,7 +19,7 @@ test('admin merchant registry shows safe owner details and completed-sale income
     users: { User_ID: 11, Name: 'ชื่อบัญชี', Phone: '0812345678', Password: 'secret', Pin_Hash: 'secret' }, districts: district(1) };
   let updates = 0;
   (prisma.merchants as any).findMany = async (query: any) => {
-    assert.deepEqual(query.include.users.select, { User_ID: true, Name: true, Phone: true });
+    assert.deepEqual(query.include.users.select, { User_ID: true, Name: true, Phone: true, Is_Suspended: true });
     return [shop, { ...shop, Mch_ID: 2 }];
   };
   (prisma.sales_transactions as any).groupBy = async (query: any) => {

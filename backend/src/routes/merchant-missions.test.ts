@@ -5,7 +5,10 @@ import { createSession, destroySession } from '../lib/auth';
 import { prisma } from '../lib/prisma';
 import { merchantRoutes } from './merchant.routes';
 
-test('merchant missions preserve locations and completion history alongside unlimited AI conditions', async () => {
+test('merchant missions preserve locations and completion history alongside unlimited AI conditions', async (t) => {
+  const authFind = prisma.users.findUnique;
+  (prisma.users as any).findUnique = async () => ({ Is_Suspended: false });
+  t.after(() => { (prisma.users as any).findUnique = authFind; });
   const original = { merchant: prisma.merchants.findFirst, query: prisma.$queryRaw, stamps: prisma.user_stamps.findMany };
   (prisma.merchants as any).findFirst = async () => ({
     Mch_ID: 12, User_ID: 7, Shop_Name: 'ร้านชุมชน', Dist_ID: 7306, Category: 'FOOD_DRINK',

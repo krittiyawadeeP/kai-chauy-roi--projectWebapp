@@ -6,7 +6,10 @@ import { prisma } from '../lib/prisma';
 import { adminRoutes } from './admin.routes';
 import { citizenRoutes } from './citizen.routes';
 
-test('admin overview includes every district and aggregates issued stamps while edits preserve ownership', async () => {
+test('admin overview includes every district and aggregates issued stamps while edits preserve ownership', async (t) => {
+  const authFind = prisma.users.findUnique;
+  (prisma.users as any).findUnique = async () => ({ Is_Suspended: false });
+  t.after(() => { (prisma.users as any).findUnique = authFind; });
   const record = {
     Stamp_ID: 1, Stamp_Name: 'แสตมป์สามพราน', District_ID: 7,
     districts: { Dist_ID: 7, Dist_Name: 'สามพราน', Prov_ID: 1, Stamp_Min_Spend: 150, Stamp_Reward_Count: 1, provinces: { Prov_Name: 'นครปฐม' } },

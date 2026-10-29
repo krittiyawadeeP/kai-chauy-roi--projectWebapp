@@ -39,7 +39,7 @@ export function getBearerToken(req: Request) {
   return header.slice("Bearer ".length);
 }
 
-export function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
+export async function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
   const token = getBearerToken(req);
 
   if (!token) {
@@ -52,18 +52,25 @@ export function requireAuth(req: AuthRequest, res: Response, next: NextFunction)
     return sendJson(res, { message: "Invalid or expired token" }, 401);
   }
 
+  const account = await prisma.users.findUnique({ where: { User_ID: session.userId }, select: { Is_Suspended: true } });
+  if (!account) {
+    revokeUserSessions(session.userId);
+    return sendJson(res, { message: "Invalid or expired token" }, 401);
+  }
+  if (account.Is_Suspended) {
+    revokeUserSessions(session.userId);
+    return sendJson(res, { code: "ACCOUNT_SUSPENDED", account: "SELF", message: "บัญชีของคุณถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบ" }, 403);
+  }
+
   req.user = session;
   next();
 }
 
-export function requireAdmin(req: AuthRequest, res: Response, next: NextFunction) {
-  requireAuth(req, res, () => {
-    if (req.user?.role !== "ADMIN") {
-      return sendJson(res, { message: "Admin permission required" }, 403);
-    }
-
-    next();
-  });
+export async function requireAdmin(req: AuthRequest, res: Response, next: NextFunction) {
+  await requireAuth(req, res, () => undefined);
+  if (!req.user) return;
+  if (req.user.role !== "ADMIN") return sendJson(res, { message: "Admin permission required" }, 403);
+  next();
 }
 
 export async function requireMerchant(
@@ -71,10 +78,7 @@ export async function requireMerchant(
   res: Response,
   next: NextFunction,
 ) {
-  // Authenticate synchronously first. `requireAuth` invokes its callback
-  // directly, so passing an async callback here would leave its rejection
-  // outside Express's middleware chain.
-  requireAuth(req, res, () => undefined);
+  await requireAuth(req, res, () => undefined);
   if (!req.user) return;
 
   const merchant = await prisma.merchants.findFirst({

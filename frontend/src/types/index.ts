@@ -19,6 +19,7 @@ export interface User {
   phone: string;
   password?: string;
   hasPin?: boolean;
+  subsidyEligible?: boolean;
   merchantId?: number;
   provId: number;
   distId?: number;

@@ -71,7 +71,8 @@ async function request<T = unknown>(
       (isJson && typeof data === 'object' && data !== null && 'message' in data)
         ? (data as { message: string }).message
         : `Request failed with status ${response.status}`;
-    if (response.status === 401 && errorMessage === 'Invalid or expired token' && token && authStorage.getToken() === token) {
+    const suspended = response.status === 403 && typeof data === 'object' && data !== null && 'code' in data && data.code === 'ACCOUNT_SUSPENDED' && 'account' in data && data.account === 'SELF';
+    if (((response.status === 401 && errorMessage === 'Invalid or expired token') || suspended) && token && authStorage.getToken() === token) {
       authStorage.removeToken();
       window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
     }

@@ -1,3 +1,4 @@
+import { AccountSuspendedError, checkPaymentAccounts } from '../lib/account-status';
 import { Router } from "express";
 
 import { createSession, requireAuth, requireMerchant, type AuthRequest } from "../lib/auth";
@@ -8,7 +9,7 @@ import { hashPin, validPin } from "../lib/pin";
 import { getCurrentPolicy } from '../policy/policy';
 import { awardMissionStamp } from '../lib/mission-stamp';
 import { awardPurchaseStamps } from '../lib/purchase-stamp';
-import { remainingDailySubsidy, SUBSIDY_REVOKED_MESSAGE } from "../lib/daily-subsidy";
+import { remainingDailySubsidy } from "../lib/daily-subsidy";
 import { hashPassword, validPassword } from '../lib/password';
 
 export const merchantRoutes = Router();
@@ -528,6 +529,7 @@ merchantRoutes.post("/me/sales", requireMerchant, async (req: AuthRequest, res) 
   const remainingGrant = activeGrant ? Number(activeGrant.Remaining_Amount) : 0;
   try {
     const transaction = await prisma.$transaction(async (tx) => {
+    await checkPaymentAccounts(tx, userId, merchant.User_ID, req.user!.userId);
     const dailySubsidy = await remainingDailySubsidy(tx, userId);
     const govSubsidizedAmount = Math.min(requestedGovAmount, remainingGrant, dailySubsidy.remaining);
     const userPaidAmount = Number((totalAmount - govSubsidizedAmount).toFixed(2));
@@ -588,7 +590,7 @@ merchantRoutes.post("/me/sales", requireMerchant, async (req: AuthRequest, res) 
 
     sendJson(res, transaction, 201);
   } catch (error) {
-    if (error instanceof Error && error.message === SUBSIDY_REVOKED_MESSAGE) return sendJson(res, { message: SUBSIDY_REVOKED_MESSAGE }, 403);
+    if (error instanceof AccountSuspendedError) return sendJson(res, { code: error.code, account: error.account, message: error.message }, 403);
     if (error instanceof Error && error.message === "INSUFFICIENT_WALLET_BALANCE") return badRequest(res, "Customer wallet balance is insufficient");
     if (error instanceof Error && error.message === "GRANT_BALANCE_CHANGED") return badRequest(res, "Customer grant balance changed; retry the sale");
     throw error;

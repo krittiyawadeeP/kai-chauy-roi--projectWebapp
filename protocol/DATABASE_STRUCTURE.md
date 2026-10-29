@@ -84,6 +84,7 @@ erDiagram
 | `Password` | `VARCHAR(255)` | Not Null | รหัสผ่าน (Hashed หรือข้อความที่ปลอดภัย) |
 | `Role` | `VARCHAR(20)` | Default `"USER"` | บทบาทผู้ใช้งาน (`USER`, `MERCHANT`, `ADMIN`) |
 | `Province_ID` | `INT` | FK -> `provinces(Prov_ID)`, Nullable | จังหวัดที่พำนักอาศัย |
+| `Is_Suspended` | `BOOLEAN` | Not Null, Default `false` | ระงับทั้งบัญชีผู้ใช้และร้านทั้งหมดที่เชื่อมผ่าน `User_ID` |
 
 #### 4) ตาราง `wallets` (กระเป๋าเงินดิจิทัล)
 | คอลัมน์ | ชนิดข้อมูล | เงื่อนไข | คำอธิบาย |
@@ -277,3 +278,9 @@ npm run tsx prisma/seed.ts
 # 6. เปิดหน้าต่างเว็บ GUI เพื่อดูและแก้ไขข้อมูลสด
 npx prisma studio
 ```
+
+### การระงับบัญชี
+
+ใช้ `users.Is_Suspended` จุดเดียว ไม่เพิ่มสถานะซ้ำใน `merchants` และไม่เปลี่ยน `Subsidy_Eligible` ยอดเงิน ประวัติ หรือภารกิจเดิม การคืนสถานะต้องเข้าสู่ระบบใหม่ ไม่มีการหมดอายุอัตโนมัติ
+
+ก่อนเปิด backend รุ่นที่ใช้สถานะนี้ ให้รันจากโฟลเดอร์ `backend`: `npx prisma migrate deploy` แล้ว `npm run prisma:generate` หาก Windows แจ้งว่าไฟล์ query engine ถูกใช้งาน ให้ปิด backend ก่อน generate และเปิดใหม่หลังเสร็จ

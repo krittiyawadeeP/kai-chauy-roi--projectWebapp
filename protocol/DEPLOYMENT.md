@@ -1,5 +1,70 @@
 # Deploy แยก Frontend / Backend / Ollama
 
+## เริ่มด้วย Docker บนเครื่องนี้
+
+มี `Dockerfile` แยกใน `frontend` และ `backend` พร้อม `compose.yaml` ที่ root สำหรับลองทั้งสาม container บนเครื่องเดียวกัน โดยเชื่อม MySQL ที่มีอยู่แล้ว ไม่สร้างหรือแก้ฐานข้อมูลให้อัตโนมัติ
+
+1. เปิด Docker Desktop และรอให้ Linux engine พร้อม (`docker info` ต้องสำเร็จ)
+2. รันจาก root ของโปรเจกต์ใน PowerShell:
+
+   ```powershell
+   Copy-Item .env.docker.example .env.docker.local
+   ```
+
+3. แก้ `.env.docker.local` ให้ `DATABASE_URL` ใช้ฐานข้อมูลจริงที่มี schema ของโปรเจกต์อยู่แล้ว ถ้า MySQL อยู่บน Windows เครื่องนี้ให้ใช้ `host.docker.internal` แทน `localhost`; ถ้าอยู่ remote ให้ใช้ hostname จริงและอนุญาตการเชื่อมต่อจาก Docker host อย่า commit ไฟล์นี้
+4. ตรวจ config และ build image:
+
+   ```powershell
+   docker compose --env-file .env.docker.local config --quiet
+   docker compose --env-file .env.docker.local build
+   ```
+
+5. เปิด Ollama และดาวน์โหลดโมเดลให้เสร็จก่อนเปิด Backend:
+
+   ```powershell
+   docker compose --env-file .env.docker.local up -d ollama
+   docker compose --env-file .env.docker.local exec ollama ollama pull qwen3:4b
+   docker compose --env-file .env.docker.local up -d backend frontend
+   ```
+
+   ถ้าเปลี่ยน `OLLAMA_MODEL` ให้ pull ชื่อโมเดลนั้นแทน `qwen3:4b` ค่าเริ่มต้นรันด้วย CPU; ถ้าใช้ GPU ต้องตั้ง Docker ให้เข้าถึง GPU ตาม [คู่มือ Ollama Docker](https://docs.ollama.com/docker)
+
+6. เปิดเว็บ `http://localhost:4000` และตรวจ Backend ที่ `http://localhost:4001`:
+
+   ```powershell
+   docker compose --env-file .env.docker.local ps
+   docker compose --env-file .env.docker.local logs -f backend
+   ```
+
+หยุดด้วย `docker compose --env-file .env.docker.local down` ซึ่งเก็บ volume โมเดลไว้ ครั้งถัดไปใช้ `up -d` ได้เลย เมื่อแก้โค้ดใช้ `up -d --build backend frontend` ถ้าเปลี่ยน `VITE_API_BASE_URL` ต้อง rebuild Frontend ด้วย
+
+ไฟล์ `.env` จริง, `node_modules` และ Prisma client ที่ generate บน Windows ถูกกันออกจาก Docker build context; Backend generate Prisma client ใหม่ใน Linux image ส่วน Frontend ใช้ Nginx เสิร์ฟไฟล์ที่ build แล้วพร้อม SPA fallback
+
+## ใช้ Docker แยกคนละเซิร์ฟเวอร์
+
+Docker Compose ชุดข้างต้นเป็นการลองบน host เดียวกัน การแยกคนละ host ให้รันเฉพาะบริการที่ต้องใช้บนแต่ละเครื่อง และเปลี่ยน URL ดังนี้:
+
+| เครื่อง | สิ่งที่ต้องตั้ง |
+| --- | --- |
+| Frontend | `VITE_API_BASE_URL=https://api.example.com/api` ตอน build แล้วให้ HTTPS reverse proxy ส่งต่อเข้า container พอร์ต 80 |
+| Backend | `FRONTEND_ORIGIN=https://app.example.com`, `DATABASE_URL` จริง และ `OLLAMA_BASE_URL` ที่เข้าถึงเครื่อง AI ได้ แล้วให้ HTTPS reverse proxy ส่งต่อเข้าพอร์ต 4001 |
+| AI | รัน Ollama พร้อม volume และเปิดให้ Backend เข้าถึงผ่าน private network หรือ authenticated HTTPS proxy |
+
+บนเครื่อง Frontend ใช้ `docker compose --env-file .env.docker.local up -d --build frontend` และบนเครื่อง Backend ใช้คำสั่งเดียวกันแต่ระบุ `backend` โดยตั้ง `.env.docker.local` ของแต่ละเครื่องให้ตรงกับที่อยู่จริง
+
+Compose ไม่ publish พอร์ต Ollama สู่ host โดยค่าเริ่มต้น เพราะ Backend ใน network เดียวกันเรียก `http://ollama:11434` ได้อยู่แล้ว ถ้าแยก AI ไปอีก host สามารถรันบนเครื่อง AI โดยแทน `PRIVATE_IP` ด้วย IP ส่วนตัวของเครื่องนั้น:
+
+```sh
+docker run -d --name ollama --restart unless-stopped -v ollama-data:/root/.ollama -p PRIVATE_IP:11434:11434 ollama/ollama:latest
+docker exec ollama ollama pull qwen3:4b
+```
+
+จากนั้นตั้ง Backend เป็น `OLLAMA_BASE_URL=http://PRIVATE_IP:11434` และจำกัด firewall ให้เฉพาะ Backend เข้าถึงได้ ชื่อ `ollama` จะใช้ข้าม host โดยอัตโนมัติไม่ได้ ส่วน URL ใน `VITE_API_BASE_URL` ต้องเป็นที่อยู่ที่ **เบราว์เซอร์ของผู้ใช้** เข้าถึงได้ ไม่ใช่ชื่อ container
+
+ตัวแปรสำหรับ Compose อ่านจาก `--env-file .env.docker.local` ตาม [Docker Compose interpolation](https://docs.docker.com/compose/how-tos/environment-variables/variable-interpolation/); ไฟล์ `.env.local` ภายใน `backend` หรือ `frontend` จะไม่ถูกนำเข้า image
+
+## รายละเอียดการตั้งค่าแต่ละบริการ
+
 ```text
 Browser → Frontend (static hosting)
         → Backend (Node.js service) → Ollama (AI server)

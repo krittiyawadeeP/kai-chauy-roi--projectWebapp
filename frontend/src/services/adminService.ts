@@ -113,7 +113,7 @@ export interface OtopRewardInput {
 export interface AdminMerchantRecord {
   Mch_ID: number; User_ID: number; Shop_Name: string; Owner_Name: string | null; Category: string | null;
   Dist_ID: number; Lat: number | string | null; Lng: number | string | null;
-  users: { User_ID: number; Name: string | null; Phone: string };
+  users: { User_ID: number; Name: string | null; Phone: string; Is_Suspended: boolean };
   districts: { Dist_ID: number; Dist_Name: string; Prov_ID: number; provinces: { Prov_ID: number; Prov_Name: string } };
   income: { totalRevenue: number; monthRevenue: number; transactionCount: number; lastSaleAt: string | null };
 }
@@ -122,15 +122,15 @@ export interface AdminMerchantInput {
 }
 
 export interface AdminUserRecord {
-  User_ID: number; Name: string | null; Phone: string; Role: string; Subsidy_Eligible: boolean;
+  User_ID: number; Name: string | null; Phone: string; Role: string; Subsidy_Eligible: boolean; Is_Suspended: boolean;
   accountType: 'USER' | 'MERCHANT';
   merchants: { Mch_ID: number; Shop_Name: string; Owner_Name: string | null }[];
 }
 
 export const adminService = {
   getUsers: () => api.get<AdminUserRecord[]>('/admin/users'),
-  updateUser: (id: number, data: { Password?: string; Pin?: string; Subsidy_Eligible?: boolean }) =>
-    api.patch<Pick<AdminUserRecord, 'User_ID' | 'Subsidy_Eligible'>>(`/admin/users/${id}`, data),
+  updateUser: (id: number, data: { Password?: string; Pin?: string; Subsidy_Eligible?: boolean; Is_Suspended?: boolean }) =>
+    api.patch<Pick<AdminUserRecord, 'User_ID' | 'Subsidy_Eligible' | 'Is_Suspended'>>(`/admin/users/${id}`, data),
   getStamps: () => api.get<DistrictStampOverview[]>('/admin/stamps'),
   setStampRule: (districtId: number, data: { minSpend: number; rewardCount: number }) =>
     api.patch<{ districtId: number; minSpend: number; rewardCount: number }>(`/admin/stamps/districts/${districtId}`, data),

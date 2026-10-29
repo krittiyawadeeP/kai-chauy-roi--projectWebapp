@@ -1,3 +1,4 @@
+import { AccountSuspendedError, checkPaymentAccounts } from '../lib/account-status';
 import { Router } from "express";
 
 import {
@@ -14,7 +15,7 @@ import { getCurrentPolicy } from '../policy/policy';
 import { awardMissionStamp } from '../lib/mission-stamp';
 import { awardPurchaseStamps } from '../lib/purchase-stamp';
 import { collectedDistrictCount } from '../lib/otop-reward';
-import { remainingDailySubsidy, SUBSIDY_REVOKED_MESSAGE } from "../lib/daily-subsidy";
+import { remainingDailySubsidy } from "../lib/daily-subsidy";
 import { hashPassword, validPassword, verifyPassword } from '../lib/password';
 import { spendableStamps } from '../lib/spendable-stamps';
 
@@ -174,6 +175,7 @@ citizenRoutes.post("/login", async (req, res) => {
     return sendJson(res, { message: "เบอร์โทรศัพท์/เลขบัตรประชาชน หรือรหัสผ่านไม่ถูกต้อง" }, 401);
   }
 
+  if (user.Is_Suspended) return sendJson(res, { code: "ACCOUNT_SUSPENDED", account: "SELF", message: "บัญชีของคุณถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบ" }, 403);
   const token = createSession(user.User_ID, user.Role);
 
   // If user is a merchant, also fetch merchant details
@@ -742,6 +744,9 @@ citizenRoutes.post("/user/pay", requireAuth, async (req: AuthRequest, res) => {
   try {
     const policy = await getCurrentPolicy();
     const result = await prisma.$transaction(async (tx) => {
+      const merchant = await tx.merchants.findUnique({ where: { Mch_ID: merchantId } });
+      if (!merchant || merchant.Dist_ID !== districtId) throw new Error("Invalid merchant or district");
+      await checkPaymentAccounts(tx, req.user!.userId, merchant.User_ID, req.user!.userId);
       const userRecord = await tx.users.findUnique({
         where: { User_ID: req.user!.userId },
         select: { Pin_Hash: true },
@@ -753,8 +758,6 @@ citizenRoutes.post("/user/pay", requireAuth, async (req: AuthRequest, res) => {
       }
 
       const dailySubsidy = await remainingDailySubsidy(tx, req.user!.userId);
-      const merchant = await tx.merchants.findUnique({ where: { Mch_ID: merchantId } });
-      if (!merchant || merchant.Dist_ID !== districtId) throw new Error("Invalid merchant or district");
       let wallet = await tx.wallets.findFirst({
         where: { User_ID: req.user!.userId },
       });
@@ -763,7 +766,7 @@ citizenRoutes.post("/user/pay", requireAuth, async (req: AuthRequest, res) => {
         where: { User_ID: req.user!.userId, Status: "ACTIVE" },
       });
 
-      if (!grant) {
+      if (!grant && dailySubsidy.remaining > 0) {
         grant = await tx.user_grants.create({
           data: {
             User_ID: req.user!.userId,
@@ -776,10 +779,10 @@ citizenRoutes.post("/user/pay", requireAuth, async (req: AuthRequest, res) => {
       }
 
       const requestedGovShare = Math.round(totalAmount * Number(policy.Gov_Pay_Ratio) * 100) / 100;
-      const govShare = Math.min(requestedGovShare, Number(grant.Remaining_Amount), dailySubsidy.remaining);
+      const govShare = Math.min(requestedGovShare, Number(grant?.Remaining_Amount ?? 0), dailySubsidy.remaining);
       const userShare = Math.round((totalAmount - govShare) * 100) / 100;
       if (Stamp_Count > Math.floor(userShare / 2)) throw new Error('ใช้สแตมป์ได้ไม่เกิน 50% ของส่วนที่ผู้ใช้ต้องจ่าย');
-      if (Stamp_Count > dailySubsidy.remaining - govShare || Stamp_Count > Number(grant.Remaining_Amount) - govShare) {
+      if (Stamp_Count > dailySubsidy.remaining - govShare || Stamp_Count > Number(grant?.Remaining_Amount ?? 0) - govShare) {
         throw new Error('วงเงินรัฐสำหรับจ่ายค่าสแตมป์ไม่เพียงพอ');
       }
       const stamps = Stamp_Count ? (await spendableStamps(tx, req.user!.userId)).slice(0, Stamp_Count) : [];
@@ -796,12 +799,15 @@ citizenRoutes.post("/user/pay", requireAuth, async (req: AuthRequest, res) => {
       if (paid.count !== 1) throw new Error('ยอดเงินในกระเป๋าไม่เพียงพอ');
       const updatedWallet = await tx.wallets.findUniqueOrThrow({ where: { Wallet_ID: wallet.Wallet_ID } });
 
-      const granted = await tx.user_grants.updateMany({
-        where: { Grant_ID: grant.Grant_ID, Status: 'ACTIVE', Remaining_Amount: { gte: govShare + Stamp_Count } },
-        data: { Remaining_Amount: { decrement: govShare + Stamp_Count } },
-      });
-      if (granted.count !== 1) throw new Error('วงเงินสิทธิรัฐคงเหลือไม่เพียงพอ');
-      const updatedGrant = await tx.user_grants.findUniqueOrThrow({ where: { Grant_ID: grant.Grant_ID } });
+      let updatedGrant = grant;
+      if (grant && govShare + Stamp_Count > 0) {
+        const granted = await tx.user_grants.updateMany({
+          where: { Grant_ID: grant.Grant_ID, Status: 'ACTIVE', Remaining_Amount: { gte: govShare + Stamp_Count } },
+          data: { Remaining_Amount: { decrement: govShare + Stamp_Count } },
+        });
+        if (granted.count !== 1) throw new Error('วงเงินสิทธิรัฐคงเหลือไม่เพียงพอ');
+        updatedGrant = await tx.user_grants.findUniqueOrThrow({ where: { Grant_ID: grant.Grant_ID } });
+      }
 
       const transaction = await tx.sales_transactions.create({
         data: {
@@ -860,12 +866,12 @@ citizenRoutes.post("/user/pay", requireAuth, async (req: AuthRequest, res) => {
           balance: Number(updatedWallet.Balance),
           updatedAt: updatedWallet.Updated_At,
         },
-        grant: {
+        grant: updatedGrant ? {
           grantId: Number(updatedGrant.Grant_ID),
           userId: updatedGrant.User_ID,
           totalGrantAmount: Number(updatedGrant.Total_Grant_Amount),
           remainingAmount: Number(updatedGrant.Remaining_Amount),
-        },
+        } : null,
         awardedStamp: stampReward.stamp,
         awardedStampCount: stampReward.count,
         earnedStamp: missionStamp?.created ? missionStamp.stamp : null,
@@ -878,7 +884,7 @@ citizenRoutes.post("/user/pay", requireAuth, async (req: AuthRequest, res) => {
 
     sendJson(res, result);
   } catch (err: any) {
-    if (err.message === SUBSIDY_REVOKED_MESSAGE) return sendJson(res, { message: SUBSIDY_REVOKED_MESSAGE }, 403);
+    if (err instanceof AccountSuspendedError) return sendJson(res, { code: err.code, account: err.account, message: err.message }, 403);
     return badRequest(res, err.message || "การชำระเงินไม่สำเร็จ");
   }
 });

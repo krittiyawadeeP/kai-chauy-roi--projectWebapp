@@ -50,16 +50,18 @@ test('manual analysis closes the current missions and creates a new set through 
     transaction: prisma.$transaction, fetch: globalThis.fetch,
   };
   const operations: { kind: string; data: any }[] = [];
+  let stillActive = true;
   const rows = ['2026-09-21', '2026-09-22', '2026-09-23', '2026-09-26', '2026-09-27'].flatMap(date => [sale(date, 100), sale(date, 100)]);
   rows.push(...['2026-10-14', '2026-10-15', '2026-10-16', '2026-10-24', '2026-10-25'].flatMap(date => [sale(date, 30), sale(date, 30)]));
   try {
     process.env.OLLAMA_BASE_URL = 'https://ai.example.com/';
     process.env.OLLAMA_MODEL = 'deployed-model';
-    (prisma.merchants as any).findMany = async () => [{ Mch_ID: 1, Shop_Name: 'ร้านหนึ่ง', Category: null, Dist_ID: 5, districts: { Prov_ID: 10 } }];
+    (prisma.merchants as any).findMany = async (query: any) => { assert.deepEqual(query.where.users, { Is_Suspended: false }); return [{ Mch_ID: 1, Shop_Name: 'ร้านหนึ่ง', Category: null, Dist_ID: 5, districts: { Prov_ID: 10 } }]; };
     (prisma.sales_transactions as any).findMany = async () => rows.map(item => ({ ...item, Merchant_ID: 1 }));
     (prisma.missions as any).findMany = async () => [];
     (prisma.ai_mission_policy as any).findFirst = async () => ({ Daily_Stamp_Limit: 3 });
     (prisma as any).$transaction = async (run: (tx: any) => Promise<unknown>) => run({
+      merchants: { findMany: async (query: any) => { assert.deepEqual(query.where.users, { Is_Suspended: false }); return stillActive ? [{ Mch_ID: 1 }] : []; } },
       $queryRaw: async () => [], ai_mission_policy: { findFirst: async () => ({ Daily_Stamp_Limit: 3 }) },
       missions: {
         updateMany: async ({ data }: any) => { operations.push({ kind: 'close', data }); },
@@ -80,6 +82,9 @@ test('manual analysis closes the current missions and creates a new set through 
     assert.equal(operations[1].data.End_DateTime.toISOString(), '2026-11-01T17:00:00.000Z');
     assert.equal(operations[1].data.Ai_Daily_Stamp_Limit, 3);
     assert.equal(operations[1].data.Selection_Evidence.hourlySales[0].averageRevenue, 60);
+    stillActive = false; operations.length = 0;
+    await assert.rejects(runWeeklyMissionAnalysis(new Date('2026-10-28T05:00:00Z'), true), /No merchants qualify/);
+    assert.deepEqual(operations, [], 'suspension during AI generation must preserve the old missions and create no new ones');
   } finally {
     if (originalUrl === undefined) delete process.env.OLLAMA_BASE_URL;
     else process.env.OLLAMA_BASE_URL = originalUrl;

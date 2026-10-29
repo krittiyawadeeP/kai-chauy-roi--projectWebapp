@@ -27,7 +27,7 @@ adminRoutes.get('/users', async (_req, res) => {
   const users = await prisma.users.findMany({
     where: { Role: { in: ['USER', 'MERCHANT'] } },
     select: {
-      User_ID: true, Name: true, Phone: true, Role: true, Subsidy_Eligible: true,
+      User_ID: true, Name: true, Phone: true, Role: true, Subsidy_Eligible: true, Is_Suspended: true,
       merchants: { select: { Mch_ID: true, Shop_Name: true, Owner_Name: true } },
     },
     orderBy: { User_ID: 'desc' },
@@ -38,21 +38,22 @@ adminRoutes.get('/users', async (_req, res) => {
 adminRoutes.patch('/users/:userId', async (req, res) => {
   const userId = Number(req.params.userId);
   const body = req.body;
-  const allowed = ['Password', 'Pin', 'Subsidy_Eligible'];
+  const allowed = ['Password', 'Pin', 'Subsidy_Eligible', 'Is_Suspended'];
   if (!Number.isInteger(userId) || userId < 1 || userId > 2_147_483_647 || !body || typeof body !== 'object' || Array.isArray(body) ||
       !Object.keys(body).length || Object.keys(body).some(key => !allowed.includes(key))) return badRequest(res, 'ข้อมูลบัญชีไม่ถูกต้อง');
-  const { Password, Pin, Subsidy_Eligible } = body;
+  const { Password, Pin, Subsidy_Eligible, Is_Suspended } = body;
   if (Password !== undefined && !validPassword(Password)) return badRequest(res, 'รหัสผ่านต้องยาว 6–128 ตัวอักษร และไม่มีช่องว่างหัวท้าย');
   if (Pin !== undefined && !validPin(Pin)) return badRequest(res, 'PIN ต้องเป็นตัวเลข 6 หลัก');
   if (Subsidy_Eligible !== undefined && typeof Subsidy_Eligible !== 'boolean') return badRequest(res, 'สถานะสิทธิ์ 60/40 ไม่ถูกต้อง');
+  if (Is_Suspended !== undefined && typeof Is_Suspended !== 'boolean') return badRequest(res, 'สถานะระงับบัญชีไม่ถูกต้อง');
   const current = await prisma.users.findUnique({ where: { User_ID: userId }, select: { User_ID: true, Role: true } });
   if (!current || !['USER', 'MERCHANT'].includes(current.Role.toUpperCase())) return notFound(res, 'ไม่พบบัญชีประชาชนหรือเจ้าของร้าน');
   const user = await prisma.users.update({
     where: { User_ID: userId },
-    data: { Password: Password === undefined ? undefined : hashPassword(Password), Pin_Hash: Pin === undefined ? undefined : hashPin(Pin), Subsidy_Eligible },
-    select: { User_ID: true, Subsidy_Eligible: true },
+    data: { Password: Password === undefined ? undefined : hashPassword(Password), Pin_Hash: Pin === undefined ? undefined : hashPin(Pin), Subsidy_Eligible, Is_Suspended },
+    select: { User_ID: true, Subsidy_Eligible: true, Is_Suspended: true },
   });
-  if (Password !== undefined || Pin !== undefined) revokeUserSessions(userId);
+  if (Password !== undefined || Pin !== undefined || Is_Suspended === true) revokeUserSessions(userId);
   sendJson(res, user);
 });
 
@@ -149,7 +150,7 @@ adminRoutes.get("/ai/analysis", async (_req, res) => {
 
 const merchantDetails = {
   districts: { include: { provinces: true } },
-  users: { select: { User_ID: true, Name: true, Phone: true } },
+  users: { select: { User_ID: true, Name: true, Phone: true, Is_Suspended: true } },
 } as const;
 
 adminRoutes.get('/merchants', async (_req, res) => {
@@ -247,7 +248,7 @@ adminRoutes.post('/provinces/:provinceId/daily-mission-suggestion', async (req, 
   const province = await prisma.provinces.findUnique({ where: { Prov_ID: provinceId } });
   if (!province) return notFound(res, 'Province not found');
   const merchants = await prisma.merchants.findMany({
-    where: { districts: { is: { Prov_ID: provinceId } } },
+    where: { districts: { is: { Prov_ID: provinceId } }, users: { Is_Suspended: false } },
     select: { Mch_ID: true, Shop_Name: true, Category: true },
   });
   if (!merchants.length) return sendJson(res, { message: 'จังหวัดนี้ยังไม่มีร้านค้า' }, 422);
@@ -293,8 +294,9 @@ adminRoutes.post('/provinces/:provinceId/daily-mission-suggestion', async (req, 
 adminRoutes.post('/merchants/:merchantId/mission-suggestion', async (req, res) => {
   const merchantId = toNumber(req.params.merchantId);
   if (!merchantId || !Number.isInteger(merchantId) || merchantId < 1) return badRequest(res, 'Invalid merchantId');
-  const merchant = await prisma.merchants.findUnique({ where: { Mch_ID: merchantId } });
+  const merchant = await prisma.merchants.findUnique({ where: { Mch_ID: merchantId }, include: { users: { select: { Is_Suspended: true } } } });
   if (!merchant) return notFound(res, 'Merchant not found');
+  if (merchant.users.Is_Suspended) return sendJson(res, { code: 'ACCOUNT_SUSPENDED', account: 'COUNTERPARTY', message: 'บัญชีเจ้าของร้านถูกระงับการใช้งาน' }, 403);
   const periodEnd = new Date();
   const since = new Date(periodEnd.getTime() - 14 * 86400000);
   const sales = await prisma.sales_transactions.findMany({

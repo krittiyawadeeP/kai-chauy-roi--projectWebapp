@@ -41,6 +41,7 @@ export interface AuthResponse {
     Phone: string;
     Name?: string | null;
     Role: string;
+    Subsidy_Eligible?: boolean;
     Province_ID?: number;
     Dist_ID?: number;
   };
