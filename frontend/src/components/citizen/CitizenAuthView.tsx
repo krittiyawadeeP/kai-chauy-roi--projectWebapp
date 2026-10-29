@@ -53,32 +53,6 @@ export const CitizenAuthView: React.FC = () => {
     }
   };
 
-  // Quick Demo Login (Uses Cloud MySQL Seeded Citizen: 0822222222 / 123456)
-  const handleQuickDemoLogin = async () => {
-    setIdentifier('0822222222');
-    setPassword('123456');
-    setErrorMsg('');
-    setLoading(true);
-
-    try {
-      const res = await authService.login({
-        Phone: '0822222222',
-        Password: '123456',
-      });
-      if (res && res.user) {
-        loginCitizen(res.user.Citizen_ID, res.user.Phone, res.user);
-        await refreshCitizenData();
-      } else {
-        loginCitizen('1103702948112', '0822222222');
-      }
-    } catch (err) {
-      console.warn('Quick login fallback:', err);
-      loginCitizen('1103702948112', '0822222222');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   // Handle Register
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -243,21 +217,6 @@ export const CitizenAuthView: React.FC = () => {
                 </>
               )}
             </button>
-
-            {/* Quick Demo Test Button */}
-            <div className="pt-2 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={handleQuickDemoLogin}
-                disabled={loading}
-                className="w-full py-2.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 font-bold rounded-xl text-xs transition flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
-              >
-                <span>⚡ เข้าสู่ระบบบัญชีทดสอบด่วน (Database Seed)</span>
-              </button>
-              <p className="text-[10px] text-center text-slate-400 mt-1">
-                เบอร์ 082-222-2222 • รหัสผ่าน 123456 (เชื่อมต่อ Cloud MySQL จริง)
-              </p>
-            </div>
           </form>
         ) : (
           <form onSubmit={handleRegister} className="space-y-3.5">

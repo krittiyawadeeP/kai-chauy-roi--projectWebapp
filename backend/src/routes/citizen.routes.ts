@@ -700,8 +700,11 @@ citizenRoutes.get("/rewards", async (req, res) => {
   sendJson(res, formatted);
 });
 
-citizenRoutes.post("/stamp-redemptions", requireAuth, async (req: AuthRequest, res) => {
-  const { Reward_ID, Stamp_ID, Quantity } = req.body;
+const handleStampRedemption = async (req: AuthRequest, res: any) => {
+  const Reward_ID = req.body?.Reward_ID ?? req.params?.rewardId;
+  const Stamp_ID = req.body?.Stamp_ID ?? req.body?.Dist_Stamp_ID;
+  const Quantity = req.body?.Quantity;
+
   const rewardId = Number(Reward_ID);
   if (!Number.isInteger(rewardId) || rewardId < 1) return badRequest(res, 'Valid Reward_ID is required');
   const reward = await prisma.rewards.findUnique({ where: { Reward_ID: rewardId } });
@@ -714,7 +717,7 @@ citizenRoutes.post("/stamp-redemptions", requireAuth, async (req: AuthRequest, r
       if (await tx.stamp_redemptions.findFirst({ where: { User_ID: userId, Reward_ID: rewardId, Status: { in: ['REQUESTED', 'COMPLETED'] } } })) return { error: 'This reward has already been claimed' };
       const districtCount = await tx.districts.count({ where: { Prov_ID: reward.Province_ID! } });
       const stamps = await tx.user_stamps.findMany({
-        where: { User_ID: userId },
+        where: { User_ID: userId, stamp_spend_transactions: { is: null } },
         include: { district_stamps: { include: { districts: true } } },
       });
       const eligible = stamps.filter(stamp => stamp.district_stamps.districts.Prov_ID === reward.Province_ID);
@@ -730,24 +733,52 @@ citizenRoutes.post("/stamp-redemptions", requireAuth, async (req: AuthRequest, r
     return sendJson(res, result.redemption, 201);
   }
 
-  const stampId = Number(Stamp_ID);
-  const quantity = Number(Quantity);
-  if (!Number.isInteger(stampId) || stampId < 1 || !Number.isSafeInteger(quantity) || quantity < 1) return badRequest(res, 'Valid Stamp_ID and Quantity are required');
+  const quantity = Number(Quantity || 1);
+  if (!Number.isSafeInteger(quantity) || quantity < 1) return badRequest(res, 'Valid Quantity is required');
   const required = quantity * reward.Required_Stamp_Count;
   if (!Number.isSafeInteger(required) || required < 1) return badRequest(res, 'Invalid stamp requirement');
+
   const result = await prisma.$transaction(async tx => {
     const userId = req.user!.userId;
     await tx.$queryRaw`SELECT User_ID FROM users WHERE User_ID = ${userId} FOR UPDATE`;
     const stamps = await spendableStamps(tx, userId);
-    if (stamps.filter(stamp => stamp.Stamp_ID === stampId).length < required) return null;
+    const eligibleStamps = reward.Province_ID
+      ? stamps.filter(s => (s as any).district_stamps?.districts?.Prov_ID === reward.Province_ID)
+      : stamps;
+    if (eligibleStamps.length < required) return null;
+
+    let chosenStampId = Number(Stamp_ID);
+    const matching = Number.isInteger(chosenStampId) && chosenStampId > 0
+      ? eligibleStamps.filter(stamp => stamp.Stamp_ID === chosenStampId)
+      : [];
+
+    if (matching.length < required) {
+      // Find a stamp ID with sufficient stamps or default to the most frequent stamp
+      const counts = new Map<number, number>();
+      for (const s of eligibleStamps) {
+        counts.set(s.Stamp_ID, (counts.get(s.Stamp_ID) ?? 0) + 1);
+      }
+      let foundStampId: number | null = null;
+      for (const [sId, c] of counts.entries()) {
+        if (c >= required) {
+          foundStampId = sId;
+          break;
+        }
+      }
+      chosenStampId = foundStampId ?? eligibleStamps[0].Stamp_ID;
+    }
+
     return tx.stamp_redemptions.create({
-      data: { User_ID: userId, Reward_ID: rewardId, Stamp_ID: stampId, Quantity: quantity, Status: 'REQUESTED', Redeemed_At: new Date() },
+      data: { User_ID: userId, Reward_ID: rewardId, Stamp_ID: chosenStampId, Quantity: quantity, Status: 'REQUESTED', Redeemed_At: new Date() },
       include: { rewards: true, district_stamps: true },
     });
   }, { isolationLevel: 'ReadCommitted' });
-  if (!result) return badRequest(res, 'จำนวนสแตมป์คงเหลือไม่เพียงพอ');
+  if (!result) return badRequest(res, reward.Province_ID ? 'จำนวนสแตมป์ของจังหวัดนี้ไม่เพียงพอ' : 'จำนวนสแตมป์คงเหลือไม่เพียงพอ');
   sendJson(res, result, 201);
-});
+};
+
+citizenRoutes.post("/stamp-redemptions", requireAuth, handleStampRedemption);
+citizenRoutes.post("/rewards/:rewardId/redeem", requireAuth, handleStampRedemption);
 
 citizenRoutes.get("/users/me/stamp-redemptions", requireAuth, async (req: AuthRequest, res) => {
   const redemptions = await prisma.stamp_redemptions.findMany({

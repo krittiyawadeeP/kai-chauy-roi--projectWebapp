@@ -90,7 +90,7 @@ interface AppContextType {
     selectedStamps?: Record<number, number>;
     missionId?: number;
   }) => Promise<{ success: boolean; message: string; earnedStamp?: DistrictStamp; earnedStampCount?: number; tx?: SalesTransaction }>;
-  redeemReward: (rewardId: number) => { success: boolean; message: string; redemption?: StampRedemption };
+  redeemReward: (rewardId: number) => Promise<{ success: boolean; message: string; redemption?: StampRedemption }>;
   tradeStamp: (stampId: number, targetName: string) => { success: boolean; message: string };
   topupWallet: (amount: number) => void;
   withdrawMerchantWallet: (amount: number, promptpayOrAccount?: string) => Promise<{ success: boolean; message: string; newBalance?: number }>;
@@ -1247,24 +1247,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Stamp Redemption for OTOP products or discount vouchers
-  const redeemReward = (rewardId: number) => {
+  const redeemReward = async (rewardId: number): Promise<{ success: boolean; message: string; redemption?: StampRedemption }> => {
     const reward = rewards.find(r => r.rewardId === rewardId);
     if (!reward) return { success: false, message: 'ไม่พบของรางวัล' };
 
-    // Calculate total stamps available
-    const totalUserStamps = userStamps.reduce((acc, curr) => acc + curr.count, 0);
+    // Check if the reward belongs to a specific province
+    const isProvincialReward = Boolean(reward.provinceName && reward.provinceName !== 'ทั่วประเทศ');
+    const eligibleUserStamps = isProvincialReward
+      ? userStamps.filter(us => {
+          const ds = districtStamps.find(d => d.stampId === us.stampId);
+          return ds?.provName === reward.provinceName;
+        })
+      : userStamps;
 
-    if (totalUserStamps < reward.requiredStampCount) {
+    const availableStampCount = eligibleUserStamps.reduce((acc, curr) => acc + curr.count, 0);
+
+    if (availableStampCount < reward.requiredStampCount) {
       return {
         success: false,
-        message: `จำนวนแสตมป์ไม่เพียงพอ (ต้องการ ${reward.requiredStampCount} ดวง คุณมี ${totalUserStamps} ดวง)`
+        message: isProvincialReward
+          ? `จำนวนแสตมป์ของจังหวัด${reward.provinceName}ไม่เพียงพอ (ต้องการ ${reward.requiredStampCount} ดวง คุณมี ${availableStampCount} ดวง)`
+          : `จำนวนแสตมป์ไม่เพียงพอ (ต้องการ ${reward.requiredStampCount} ดวง คุณมี ${availableStampCount} ดวง)`
       };
     }
 
     // Check if requires specific stamp
     let targetStampId = reward.stampIdRequired;
     if (targetStampId) {
-      const specific = userStamps.find(s => s.stampId === targetStampId && s.count >= reward.requiredStampCount);
+      const specific = eligibleUserStamps.find(s => s.stampId === targetStampId && s.count >= reward.requiredStampCount);
       if (!specific) {
         return {
           success: false,
@@ -1273,13 +1283,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
 
-    // Deduct stamps
+    // Choose best stamp from eligible stamps
+    const qualifiedStamp = eligibleUserStamps.find(s => s.count >= reward.requiredStampCount);
+    const chosenStampId = targetStampId || qualifiedStamp?.stampId || eligibleUserStamps.find(s => s.count > 0)?.stampId || 1;
+
+    let dbRedemption: any = null;
+
+    // Save to Database if authenticated
+    if (authStorage.getToken()) {
+      try {
+        dbRedemption = await api.post('/stamp-redemptions', {
+          Reward_ID: rewardId,
+          Stamp_ID: chosenStampId,
+          Quantity: 1,
+        });
+      } catch (err: any) {
+        return {
+          success: false,
+          message: err?.message || 'การแลกรางวัลล้มเหลว กรุณาตรวจสอบเงื่อนไขแสตมป์หรือลองใหม่อีกครั้ง'
+        };
+      }
+    }
+
+    // Deduct stamps locally only from eligible stamps
     let needed = reward.requiredStampCount;
+    const eligibleStampIds = new Set(eligibleUserStamps.map(s => s.stampId));
     setUserStamps(prev => {
       return prev
         .map(us => {
           if (needed <= 0) return us;
           if (targetStampId && us.stampId !== targetStampId) return us;
+          if (isProvincialReward && !eligibleStampIds.has(us.stampId)) return us;
           const deduct = Math.min(us.count, needed);
           needed -= deduct;
           return { ...us, count: us.count - deduct };
@@ -1289,30 +1323,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Update reward stock
     setRewards(prev =>
-      prev.map(r => (r.rewardId === rewardId ? { ...r, remainingStock: r.remainingStock - 1 } : r))
+      prev.map(r => (r.rewardId === rewardId ? { ...r, remainingStock: Math.max(0, r.remainingStock - 1) } : r))
     );
 
-    // Save to Database
-    if (authStorage.getToken()) {
-      try {
-        const stampId = targetStampId || userStamps[0]?.stampId || 1;
-        api.post('/stamp-redemptions', {
-          Reward_ID: rewardId,
-          Stamp_ID: stampId,
-          Quantity: 1,
-        }).then(() => refreshCitizenData()).catch(console.warn);
-      } catch (e) {
-        console.warn('Real redeem error:', e);
-      }
-    }
     const redemptionCode = `THAI-REWARD-${reward.rewardId}-${Math.floor(1000 + Math.random() * 9000)}`;
     const newRedemption: StampRedemption = {
-      redemptionId: Date.now(),
+      redemptionId: dbRedemption?.Redemption_ID ? Number(dbRedemption.Redemption_ID) : Date.now(),
       userId: currentUser.userId,
       userName: currentUser.name,
       rewardId: reward.rewardId,
       rewardName: reward.rewardName,
-      stampId: targetStampId || userStamps[0]?.stampId || 1,
+      stampId: chosenStampId,
       quantity: 1,
       status: 'ready_to_use',
       redeemedAt: new Date().toISOString().replace('T', ' ').substring(0, 19),
@@ -1320,6 +1341,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     setRedemptions(prev => [newRedemption, ...prev]);
+
+    // Resync database stamps and redemptions in background
+    if (authStorage.getToken()) {
+      refreshCitizenData().catch(console.warn);
+    }
 
     return {
       success: true,

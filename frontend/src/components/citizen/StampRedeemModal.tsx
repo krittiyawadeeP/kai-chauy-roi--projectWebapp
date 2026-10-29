@@ -15,28 +15,47 @@ export const StampRedeemModal: React.FC<StampRedeemModalProps> = ({
   onClose,
   reward
 }) => {
-  const { redeemReward, userStamps } = useApp();
+  const { redeemReward, userStamps, districtStamps } = useApp();
   const [successRedemption, setSuccessRedemption] = useState<StampRedemption | null>(null);
   const [errorMsg, setErrorMsg] = useState<string>('');
+  const [isRedeeming, setIsRedeeming] = useState<boolean>(false);
 
   if (!isOpen || !reward) return null;
 
+  const isProvincial = Boolean(reward.provinceName && reward.provinceName !== 'ทั่วประเทศ');
+  const provStampsCount = isProvincial
+    ? userStamps
+        .filter(us => {
+          const ds = districtStamps.find(d => d.stampId === us.stampId);
+          return ds?.provName === reward.provinceName;
+        })
+        .reduce((acc, curr) => acc + curr.count, 0)
+    : 0;
   const totalStamps = userStamps.reduce((acc, curr) => acc + curr.count, 0);
-  const hasEnough = totalStamps >= reward.requiredStampCount;
+  const availableStamps = isProvincial ? provStampsCount : totalStamps;
+  const hasEnough = availableStamps >= reward.requiredStampCount;
 
-  const handleRedeem = () => {
+  const handleRedeem = async () => {
+    if (isRedeeming) return;
+    setIsRedeeming(true);
     setErrorMsg('');
-    const res = redeemReward(reward.rewardId);
-    if (!res.success) {
-      setErrorMsg(res.message);
-      return;
+    try {
+      const res = await redeemReward(reward.rewardId);
+      if (!res.success) {
+        setErrorMsg(res.message);
+        return;
+      }
+      setSuccessRedemption(res.redemption || null);
+      confetti({
+        particleCount: 70,
+        spread: 60,
+        origin: { y: 0.6 }
+      });
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'เกิดข้อผิดพลาดในการแลกรางวัล');
+    } finally {
+      setIsRedeeming(false);
     }
-    setSuccessRedemption(res.redemption || null);
-    confetti({
-      particleCount: 70,
-      spread: 60,
-      origin: { y: 0.6 }
-    });
   };
 
   const handleClose = () => {
@@ -96,7 +115,11 @@ export const StampRedeemModal: React.FC<StampRedeemModalProps> = ({
                   </span>
                   <div>
                     <span className="font-bold text-amber-950 block">แสตมป์ที่ต้องใช้</span>
-                    <span className="text-[10px] text-amber-700">คุณมีสะสม {totalStamps} ดวง</span>
+                    <span className="text-[10px] text-amber-700">
+                      {isProvincial
+                        ? `คุณมีสะสมแสตมป์ ${reward.provinceName} ${availableStamps} ดวง`
+                        : `คุณมีสะสม ${availableStamps} ดวง`}
+                    </span>
                   </div>
                 </div>
                 <span
@@ -104,7 +127,7 @@ export const StampRedeemModal: React.FC<StampRedeemModalProps> = ({
                     hasEnough ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
                   }`}
                 >
-                  {hasEnough ? 'พอแลก' : 'แสตมป์ไม่พอ'}
+                  {hasEnough ? 'พอแลก' : `แสตมป์${isProvincial ? ` ${reward.provinceName}` : ''}ไม่พอ`}
                 </span>
               </div>
 
@@ -116,14 +139,21 @@ export const StampRedeemModal: React.FC<StampRedeemModalProps> = ({
 
               <button
                 onClick={handleRedeem}
-                disabled={!hasEnough}
-                className={`w-full py-2.5 rounded-xl font-bold text-xs transition-all shadow-sm ${
-                  hasEnough
-                    ? 'bg-[#1769ed] hover:bg-blue-700 text-white cursor-pointer'
+                disabled={!hasEnough || isRedeeming}
+                className={`w-full py-2.5 rounded-xl font-bold text-xs transition-all shadow-sm flex items-center justify-center gap-2 ${
+                  hasEnough && !isRedeeming
+                    ? 'bg-[#1769ed] hover:bg-blue-700 text-white cursor-pointer active:scale-98'
                     : 'bg-slate-100 text-slate-400 cursor-not-allowed'
                 }`}
               >
-                ยืนยันการแลกรับสิทธิ์
+                {isRedeeming ? (
+                  <>
+                    <span className="size-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>กำลังบันทึกข้อมูลลงฐานข้อมูล...</span>
+                  </>
+                ) : (
+                  <span>ยืนยันการแลกรับสิทธิ์</span>
+                )}
               </button>
             </div>
           ) : (
