@@ -319,7 +319,7 @@ export const QRGeneratorModal: React.FC<QRGeneratorModalProps> = ({ isOpen, onCl
 
           {/* QR Code Display Canvas */}
           <div ref={qrContainerRef} className="flex flex-col items-center justify-center p-3 rounded-2xl bg-slate-50 border border-slate-200">
-            <QRCodeDisplay value={qrPayload} size={160} />
+            <QRCodeDisplay value={qrPayload} size={240} />
             <p className="font-extrabold text-sm text-slate-800 mt-2">
               ยอดรวมเรียกเก็บ: ฿{numericAmount.toLocaleString()}
             </p>

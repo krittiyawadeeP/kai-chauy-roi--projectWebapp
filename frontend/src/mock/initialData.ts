@@ -322,8 +322,8 @@ export const INITIAL_MISSIONS: Mission[] = [
     maxRecipients: 10,
     currentRecipients: 6, // 4 slots left!
     rewardStampId: 1,
-    startDateTime: '2026-10-10 08:00:00',
-    endDateTime: '2026-10-20 20:00:00',
+    startDateTime: '2026-10-01 00:00:00',
+    endDateTime: '2026-11-30 23:59:59',
     status: 'active',
     category: 'กระตุ้นยอดขายช่วงบ่าย (AI Recommended)',
     completedUserIds: []
@@ -339,8 +339,8 @@ export const INITIAL_MISSIONS: Mission[] = [
     maxRecipients: 25,
     currentRecipients: 12,
     rewardStampId: 2,
-    startDateTime: '2026-10-08 09:00:00',
-    endDateTime: '2026-10-25 18:00:00',
+    startDateTime: '2026-10-01 00:00:00',
+    endDateTime: '2026-11-30 23:59:59',
     status: 'active',
     category: 'ส่งเสริมสินค้า OTOP ชุมชน',
     completedUserIds: []
@@ -356,8 +356,8 @@ export const INITIAL_MISSIONS: Mission[] = [
     maxRecipients: 15,
     currentRecipients: 5,
     rewardStampId: 4,
-    startDateTime: '2026-10-12 10:00:00',
-    endDateTime: '2026-10-28 17:00:00',
+    startDateTime: '2026-10-01 00:00:00',
+    endDateTime: '2026-11-30 23:59:59',
     status: 'active',
     category: 'กระตุ้นเศรษฐกิจท่องเที่ยวท้องถิ่น',
     completedUserIds: []
