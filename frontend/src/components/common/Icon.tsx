@@ -24,7 +24,9 @@ export type IconName =
   | 'history'
   | 'repeat'
   | 'logout'
-  | 'grid';
+  | 'grid'
+  | 'map-pin'
+  | 'lock';
 
 interface IconProps {
   name: IconName;
@@ -165,6 +167,18 @@ export const Icon: React.FC<IconProps> = ({ name, className = 'size-5' }) => {
         <rect x="14" y="3" width="7" height="7" rx="1.5" />
         <rect x="14" y="14" width="7" height="7" rx="1.5" />
         <rect x="3" y="14" width="7" height="7" rx="1.5" />
+      </>
+    ),
+    'map-pin': (
+      <>
+        <path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0" />
+        <circle cx="12" cy="10" r="3" />
+      </>
+    ),
+    lock: (
+      <>
+        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
       </>
     )
   };

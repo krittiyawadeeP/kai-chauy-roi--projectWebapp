@@ -35,7 +35,27 @@ export const StampPassportModal: React.FC<StampPassportModalProps> = ({
       .then(res => {
         if (!active) return;
         if (Array.isArray(res) && res.length > 0) {
-          setHistoryList(res);
+          const normalized = res.map((item: any, idx: number) => {
+            const isEarn = item.type === 'earn' || (!item.type && !item.Redemption_ID);
+            const stampName = item.stampName || item.district_stamps?.Stamp_Name || item.Stamp_Name || (isEarn ? 'แสตมป์ดิจิทัล' : (item.rewardName || 'ของรางวัล OTOP'));
+            const distName = item.distName || item.district_stamps?.districts?.Dist_Name || item.district_stamps?.Stamp_Name || item.Dist_Name || 'สินค้าชุมชน';
+            const imageUrl = item.imageUrl || item.district_stamps?.Image_Url || item.Image_Url || '';
+            const timestamp = item.timestamp || item.Earned_At || item.Redeemed_At || '';
+            const count = item.count ?? item.Count ?? item.Quantity ?? 1;
+            const source = item.source || (isEarn ? 'ซื้อสินค้าชุมชนครบยอดสะสม' : `ใช้แสตมป์แลกรับ ${stampName}`);
+
+            return {
+              id: item.id || `hist-${idx}`,
+              type: isEarn ? ('earn' as const) : ('redeem' as const),
+              stampName,
+              distName,
+              imageUrl,
+              timestamp,
+              source,
+              count,
+            };
+          });
+          setHistoryList(normalized);
         } else {
           // Fallback construction from client data
           buildLocalHistory();
@@ -407,20 +427,42 @@ export const StampPassportModal: React.FC<StampPassportModalProps> = ({
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-1">
                         <span className="text-xs font-black text-white truncate">
-                          {item.stampName}
+                          {item.stampName || (item.type === 'earn' ? 'แสตมป์ดิจิทัล' : 'ของรางวัล OTOP')}
                         </span>
-                        <span className={`text-[11px] font-black font-mono shrink-0 ${
-                          item.type === 'earn' ? 'text-amber-300' : 'text-rose-400'
+                        <span className={`text-[11px] font-black font-mono shrink-0 px-2 py-0.5 rounded-lg ${
+                          item.type === 'earn'
+                            ? 'bg-amber-400/20 text-amber-300 border border-amber-400/30'
+                            : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
                         }`}>
                           {item.type === 'earn' ? `+${item.count || 1} ดวง` : `-${item.count || 1} ดวง`}
                         </span>
                       </div>
-                      <p className="text-[10px] text-slate-300 line-clamp-1 mt-0.5">
-                        {item.source}
+                      <p className="text-[11px] text-slate-300 line-clamp-1 mt-0.5">
+                        {item.source || (item.type === 'earn' ? 'ซื้อสินค้าชุมชนครบยอดสะสม' : 'แลกรับของรางวัล OTOP')}
                       </p>
-                      <div className="flex items-center justify-between text-[9px] text-slate-400 mt-1">
-                        <span>{item.distName}</span>
-                        <span>{item.timestamp}</span>
+                      <div className="flex items-center justify-between text-[10px] text-slate-400 mt-1">
+                        <span className="flex items-center gap-1 truncate max-w-[60%]">
+                          <span className="text-amber-400/90 text-xs">📍</span>
+                          <span className="truncate">{item.distName || 'สินค้าชุมชน'}</span>
+                        </span>
+                        <span className="shrink-0">
+                          {(() => {
+                            if (!item.timestamp) return '';
+                            try {
+                              const d = new Date(item.timestamp);
+                              if (isNaN(d.getTime())) return item.timestamp;
+                              return d.toLocaleDateString('th-TH', {
+                                day: 'numeric',
+                                month: 'short',
+                                year: '2-digit',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              });
+                            } catch {
+                              return item.timestamp;
+                            }
+                          })()}
+                        </span>
                       </div>
                     </div>
                   </div>

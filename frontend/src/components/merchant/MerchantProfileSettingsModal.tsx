@@ -261,7 +261,7 @@ export const MerchantProfileSettingsModal: React.FC<MerchantProfileSettingsModal
           </div>
 
           {/* GEOLOCATION PIN SECTION */}
-          <div className="p-3 bg-[#f0fdfa] rounded-2xl border border-teal-200 space-y-2">
+          {/* <div className="p-3 bg-[#f0fdfa] rounded-2xl border border-teal-200 space-y-2">
             <div className="flex items-center justify-between">
               <div>
                 <span className="font-bold text-[#042f2e] text-[11px] block">
@@ -284,7 +284,7 @@ export const MerchantProfileSettingsModal: React.FC<MerchantProfileSettingsModal
             <p className="text-[10px] text-slate-500">
               พิกัดนี้จะใช้แสดงในระบบค้นหาร้านค้าและแผนที่โครงการสำหรับประชาชน
             </p>
-          </div>
+          </div> */}
 
           {/* Actions */}
           <div className="flex gap-2 pt-2">

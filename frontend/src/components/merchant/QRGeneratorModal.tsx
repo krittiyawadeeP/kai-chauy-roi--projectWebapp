@@ -2,8 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Icon } from '../common/Icon';
 import { QRCodeDisplay } from '../common/QRCodeDisplay';
-import { ApiError, authStorage } from '../../services/api';
-import { ApiSale, merchantService } from '../../services/merchantService';
+import { authStorage } from '../../services/api';
+import { merchantService } from '../../services/merchantService';
 import type { Mission } from '../../types';
 
 interface QRGeneratorModalProps {
@@ -80,13 +80,9 @@ export const getMissionWindowInfo = (ms?: Mission | null, currentDate: Date = ne
 };
 
 export const QRGeneratorModal: React.FC<QRGeneratorModalProps> = ({ isOpen, onClose }) => {
-  const { currentMerchant, missions, refreshMerchantData, userGrant } = useApp();
+  const { currentMerchant, missions, userGrant } = useApp();
   const [amount, setAmount] = useState<number | ''>(200);
   const [downloadSuccess, setDownloadSuccess] = useState<string>('');
-  const [userId, setUserId] = useState('');
-  const [saleError, setSaleError] = useState('');
-  const [saleResult, setSaleResult] = useState<ApiSale | null>(null);
-  const [savingSale, setSavingSale] = useState(false);
   const [apiMissions, setApiMissions] = useState<Mission[] | null>(null);
   const [now, setNow] = useState<Date>(() => new Date());
   const qrContainerRef = useRef<HTMLDivElement | null>(null);
@@ -94,10 +90,6 @@ export const QRGeneratorModal: React.FC<QRGeneratorModalProps> = ({ isOpen, onCl
   const resetForm = () => {
     setAmount(200);
     setDownloadSuccess('');
-    setUserId('');
-    setSaleError('');
-    setSaleResult(null);
-    setSavingSale(false);
     setNow(new Date());
   };
 
@@ -127,12 +119,8 @@ export const QRGeneratorModal: React.FC<QRGeneratorModalProps> = ({ isOpen, onCl
   const numericAmount = typeof amount === 'number' ? amount : 0;
   const rawGovPays = Math.round(numericAmount * userGrant.govPayRatio * 100) / 100;
   const isCappedByDaily = rawGovPays > DAILY_SUBSIDY_LIMIT;
-  const govPays = saleResult
-    ? Number(saleResult.Gov_Subsidized_Amount)
-    : Math.min(rawGovPays, DAILY_SUBSIDY_LIMIT, userGrant.remainingAmount);
-  const userPays = saleResult
-    ? Number(saleResult.User_Paid_Amount)
-    : (Math.round(numericAmount * 100) - Math.round(govPays * 100)) / 100;
+  const govPays = Math.min(rawGovPays, DAILY_SUBSIDY_LIMIT, userGrant.remainingAmount);
+  const userPays = (Math.round(numericAmount * 100) - Math.round(govPays * 100)) / 100;
 
   const merchantMission = (apiMissions && apiMissions.length > 0 ? apiMissions : missions).find(
     m => m.status === 'active' && Number(m.targetMerchantId) === Number(currentMerchant.mchId)
@@ -148,7 +136,8 @@ export const QRGeneratorModal: React.FC<QRGeneratorModalProps> = ({ isOpen, onCl
     amount: numericAmount,
     userShare: userPays,
     govShare: govPays,
-    missionId: activeMissionInWindow?.missionId || null,
+    mission: activeMissionInWindow?.missionId ?? null,
+    missionId: activeMissionInWindow?.missionId ?? null,
     timestamp: Date.now()
   });
 
@@ -209,23 +198,6 @@ export const QRGeneratorModal: React.FC<QRGeneratorModalProps> = ({ isOpen, onCl
     }
   };
 
-  const handleRecordSale = async () => {
-    setSavingSale(true);
-    setSaleError('');
-    try {
-      const result = await merchantService.recordSale({
-        User_ID: Number(userId),
-        Total_Amount: numericAmount,
-        District_ID: currentMerchant.distId,
-      }) as ApiSale;
-      setSaleResult(result);
-      await refreshMerchantData();
-    } catch (error) {
-      setSaleError(error instanceof ApiError && error.status === 401 ? 'กรุณาเข้าสู่ระบบด้วยบัญชีร้านค้าก่อนบันทึกยอดขาย' : error instanceof Error ? error.message : 'บันทึกยอดขายไม่สำเร็จ');
-    } finally {
-      setSavingSale(false);
-    }
-  };
 
   return (
     <div
@@ -363,7 +335,7 @@ export const QRGeneratorModal: React.FC<QRGeneratorModalProps> = ({ isOpen, onCl
               <span>เงินอุดหนุนจากรัฐ ({Number((userGrant.govPayRatio * 100).toFixed(2))}%):</span>
               <strong className="text-emerald-600">฿ {govPays.toLocaleString()}</strong>
             </div>
-            {isCappedByDaily && !saleResult && (
+            {isCappedByDaily && (
               <div className="pt-1 border-t border-blue-200/50 text-[10px] text-amber-700 flex items-center gap-1 font-medium">
                 <span>⚠️ รัฐช่วยสูงสุดไม่เกิน ฿{DAILY_SUBSIDY_LIMIT}/วัน ส่วนเกินลูกค้าชำระเพิ่ม</span>
               </div>
@@ -371,15 +343,6 @@ export const QRGeneratorModal: React.FC<QRGeneratorModalProps> = ({ isOpen, onCl
             <div className="text-[10px] text-slate-400">
               * ยอดชำระจริงขึ้นอยู่กับสิทธิ์คงเหลือประจำวันของลูกค้า ณ ขณะสแกน
             </div>
-          </div>
-
-          <div className="rounded-xl border border-slate-200 p-3 space-y-2">
-            <label className="block text-xs font-bold text-slate-700" htmlFor="sale-user-id">User_ID ลูกค้าเพื่อบันทึกยอดขาย</label>
-            <input id="sale-user-id" type="number" min="1" value={userId} onChange={e => setUserId(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2" placeholder="ตัวอย่าง 2" />
-            <p className="text-[10px] text-slate-500">User_ID คือเลขประจำตัวผู้ใช้ในฐานข้อมูล ทดสอบด้วยบัญชีลูกค้าที่มีอยู่จริง</p>
-            {saleError && <p role="alert" className="text-xs text-rose-700">{saleError}</p>}
-            {saleResult && <p role="status" className="text-xs text-emerald-700">บันทึกบิล #{saleResult.Tx_ID} แล้ว · ลูกค้าจ่าย ฿{Number(saleResult.User_Paid_Amount).toFixed(2)} · รัฐช่วย ฿{Number(saleResult.Gov_Subsidized_Amount).toFixed(2)}</p>}
-            <button type="button" onClick={handleRecordSale} disabled={savingSale || !Number(userId) || numericAmount <= 0} className="w-full rounded-xl bg-[#115e59] py-2.5 text-xs font-bold text-white disabled:opacity-50 cursor-pointer">{savingSale ? 'กำลังบันทึก…' : 'ยืนยันและบันทึกยอดขาย'}</button>
           </div>
 
           {downloadSuccess && (

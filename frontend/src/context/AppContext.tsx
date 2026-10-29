@@ -13,8 +13,10 @@ import {
   Wallet,
   UserGrant,
   SocialImpactMetrics,
-  AiTargetShop
+  AiTargetShop,
+  CitizenGpsLocation
 } from '../types';
+import { citizenGpsService } from '../services/citizenGpsService';
 import {
   INITIAL_PROVINCES,
   INITIAL_DISTRICTS,
@@ -66,6 +68,12 @@ interface AppContextType {
   updateMerchantLocation: (mchId: number, lat: number, lng: number, address?: string, distId?: number) => Promise<void>;
   refreshMerchantData: () => Promise<void>;
   refreshCitizenData: () => Promise<void>;
+  
+  // Citizen GPS Location Tracking (Every 10 minutes)
+  userGpsLocation: CitizenGpsLocation | null;
+  isGpsTracking: boolean;
+  gpsError: string | null;
+  refreshLocationNow: () => Promise<void>;
 
   // Actions
   registerCitizen: (data: { citizenId: string; name: string; phone: string; provId: number; distId?: number; password?: string }) => User;
@@ -79,6 +87,8 @@ interface AppContextType {
     note?: string;
     pin?: string;
     stampCount?: number;
+    selectedStamps?: Record<number, number>;
+    missionId?: number;
   }) => Promise<{ success: boolean; message: string; earnedStamp?: DistrictStamp; earnedStampCount?: number; tx?: SalesTransaction }>;
   redeemReward: (rewardId: number) => { success: boolean; message: string; redemption?: StampRedemption };
   tradeStamp: (stampId: number, targetName: string) => { success: boolean; message: string };
@@ -316,6 +326,53 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [aiTargetShops, setAiTargetShops] = useState<AiTargetShop[]>([]);
 
+  // Citizen GPS Location State & Periodic Tracking (Every 10 Minutes)
+  const [userGpsLocation, setUserGpsLocation] = useState<CitizenGpsLocation | null>(() => {
+    const cached = localStorage.getItem(`${STORAGE_KEY}_user_gps_location`);
+    if (cached) {
+      try {
+        return JSON.parse(cached);
+      } catch {
+        // ignore
+      }
+    }
+    return null;
+  });
+  const [isGpsTracking, setIsGpsTracking] = useState(false);
+  const [gpsError, setGpsError] = useState<string | null>(null);
+
+  const refreshLocationNow = async () => {
+    setIsGpsTracking(true);
+    setGpsError(null);
+    try {
+      const coords = await citizenGpsService.getDeviceCoordinates();
+      const resolved = await citizenGpsService.resolveLocation(coords.lat, coords.lng, coords.accuracy, merchants);
+      setUserGpsLocation(resolved);
+      localStorage.setItem(`${STORAGE_KEY}_user_gps_location`, JSON.stringify(resolved));
+      void citizenGpsService.syncLocationWithBackend(resolved);
+    } catch (err: any) {
+      console.warn('GPS location tracking notice:', err);
+      setGpsError(err?.message || 'ไม่สามารถดึงตำแหน่ง GPS ได้');
+    } finally {
+      setIsGpsTracking(false);
+    }
+  };
+
+  // Periodic GPS polling every 10 minutes (600,000 ms) for citizen
+  useEffect(() => {
+    if (role !== 'citizen') return;
+
+    // Detect GPS immediately on start
+    void refreshLocationNow();
+
+    const GPS_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
+    const timer = setInterval(() => {
+      void refreshLocationNow();
+    }, GPS_INTERVAL_MS);
+
+    return () => clearInterval(timer);
+  }, [role]);
+
   useEffect(() => {
     let active = true;
     const refreshPolicy = async () => {
@@ -493,6 +550,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [refreshMerchantData]);
 
   useEffect(() => {
+    // Always load public rewards & district stamps from Database
+    api.get<Reward[]>('/rewards').then(res => {
+      if (Array.isArray(res) && res.length > 0) setRewards(res);
+    }).catch(() => {});
+
+    api.get<DistrictStamp[]>('/district-stamps').then(res => {
+      if (Array.isArray(res) && res.length > 0) setDistrictStamps(res);
+    }).catch(() => {});
+
     if (!authStorage.getToken()) return;
     if (authenticatedRole === 'merchant' || role === 'merchant') {
       void refreshMerchantData();
@@ -842,12 +908,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     note,
     pin,
     stampCount,
+    selectedStamps,
+    missionId,
   }: {
     merchantId: number;
     totalAmount: number;
     note?: string;
     pin?: string;
     stampCount?: number;
+    selectedStamps?: Record<number, number>;
+    missionId?: number;
   }) => {
     const targetShop = merchants.find(m => m.mchId === merchantId);
     if (!targetShop) {
@@ -893,7 +963,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           District_ID: targetShop.distId,
           Pin: pin,
           Stamp_Count: stampCount || 0,
+          selectedStamps,
+          Mission_ID: missionId,
         });
+
+        if (missionId && res?.transaction?.txId) {
+          citizenService.completeMission(missionId, { Tx_ID: Number(res.transaction.txId) }).catch(() => {});
+        }
 
         if (res && res.transaction) {
           if (res.wallet) {
@@ -971,6 +1047,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (stampDiscount > 0) {
       setUserStamps(prev => {
+        if (selectedStamps && Object.keys(selectedStamps).length > 0) {
+          return prev.map(s => {
+            const deduct = selectedStamps[s.stampId] || 0;
+            return { ...s, count: Math.max(0, s.count - deduct) };
+          }).filter(s => s.count > 0);
+        }
         let remainingToDeduct = stampDiscount;
         return prev.map(s => {
           if (remainingToDeduct <= 0) return s;
@@ -1002,13 +1084,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Check if there is an active mission for this merchant
     const shopStamp = districtStamps.find(s => s.distId === targetShop.distId);
-    const activeMission = shopStamp && missions.find(
-      ms =>
-        ms.status === 'active' &&
-        (ms.targetMerchantId === merchantId || ms.targetDistId === targetShop.distId) &&
-        totalAmount >= (ms.minSpend ?? 0) &&
-        (ms.maxRecipients === null || ms.currentRecipients < ms.maxRecipients) &&
-        !ms.completedUserIds.includes(currentUser.userId)
+    const activeMission = shopStamp && (
+      (missionId ? missions.find(ms => ms.missionId === missionId) : null) ||
+      missions.find(
+        ms =>
+          ms.status === 'active' &&
+          (ms.targetMerchantId === merchantId || ms.targetDistId === targetShop.distId) &&
+          totalAmount >= (ms.minSpend ?? 0) &&
+          (ms.maxRecipients === null || ms.currentRecipients < ms.maxRecipients) &&
+          !ms.completedUserIds.includes(currentUser.userId)
+      )
     );
 
     if (activeMission) {
@@ -1362,7 +1447,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         withdrawMerchantWallet,
         getMetrics,
         resetAllData,
-        triggerAIReanalysis
+        triggerAIReanalysis,
+        userGpsLocation,
+        isGpsTracking,
+        gpsError,
+        refreshLocationNow
       }}
     >
       {children}
