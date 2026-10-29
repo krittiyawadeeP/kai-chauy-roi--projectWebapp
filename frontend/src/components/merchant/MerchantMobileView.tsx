@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Icon, IconName } from '../common/Icon';
-import { QRGeneratorModal } from './QRGeneratorModal';
+import { QRGeneratorModal, getMissionWindowInfo } from './QRGeneratorModal';
 import { MerchantRegistrationModal } from './MerchantRegistrationModal';
 import { MerchantProfileSettingsModal } from './MerchantProfileSettingsModal';
 import { StoreMapPickerModal } from './StoreMapPickerModal';
@@ -366,11 +366,10 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
         {myActiveMissions.length > 0 ? (
           <div className="space-y-3">
             {myActiveMissions.map(ms => {
-              const progress = ms.maxRecipients == null ? 0 : Math.min(100, Math.round((ms.currentRecipients / Math.max(1, ms.maxRecipients)) * 100));
-              const minuteLabel = (minute: number) => `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`;
-              const timeWindow = ms.dailyStartMinute != null && ms.dailyEndMinute != null
-                ? `${minuteLabel(ms.dailyStartMinute)} - ${minuteLabel(ms.dailyEndMinute)} น. ทุกวัน`
-                : formatMissionTimeWindow(ms.startDateTime, ms.endDateTime, ms.timeWindowLabel);
+              const windowInfo = getMissionWindowInfo(ms);
+              const timeWindowRange = windowInfo?.timeRangeText || formatMissionTimeWindow(ms.startDateTime, ms.endDateTime, ms.timeWindowLabel).replace(/\s*\(กำหนดเวลา.*?\)/, '');
+              const timeWindow = `${timeWindowRange} ทุกวัน`;
+              const isInTimeWindow = Boolean(windowInfo?.isInTimeWindow);
               return (
                 <div
                   key={ms.missionId}
@@ -381,9 +380,15 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
                       <Icon name="sparkle" className="size-3" />
                       <span>{ms.isAiMission ? 'ภารกิจ AI ประจำสัปดาห์ของร้านคุณ (ACTIVE)' : 'ภารกิจของร้านคุณ (ACTIVE)'}</span>
                     </span>
-                    {ms.isAiMission && <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-full">
-                      ● 1 ใน 2 ร้านประจำจังหวัดสัปดาห์นี้
-                    </span>}
+                    <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
+                      isInTimeWindow
+                        ? 'text-emerald-800 bg-emerald-100 border-emerald-200'
+                        : 'text-amber-800 bg-amber-100/90 border-amber-200'
+                    }`}>
+                      {isInTimeWindow
+                        ? `● กำลังอยู่ในช่วงเวลาภารกิจ (${timeWindowRange})`
+                        : `⏰ นอกเวลาภารกิจ (เปิดเวลา ${timeWindowRange})`}
+                    </span>
                   </div>
 
                   <div className="bg-white/95 rounded-2xl p-3.5 border border-amber-200/70 space-y-2">
@@ -396,8 +401,12 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
 
                     <div className="grid grid-cols-1 gap-1.5 pt-2 border-t border-amber-100 text-[11px]">
                       <div className="flex items-center justify-between">
-                        <span className="text-slate-500">⏰ ช่วงเวลาทำภารกิจ (2 ชม./วัน):</span>
+                        <span className="text-slate-500">⏰ ช่วงเวลาที่มีภารกิจ (2 ชม./วัน):</span>
                         <strong className="text-amber-800 font-bold">{timeWindow}</strong>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500">🎟️ จำนวนสิทธิ์เข้าร่วม:</span>
+                        <strong className="text-emerald-700 font-bold">ไม่จำกัดจำนวนสิทธิ์ (จำกัดตามช่วงเวลา)</strong>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-slate-500">👤 สิทธิ์ลูกค้า 1 คน:</span>
@@ -417,26 +426,11 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
                       <div className="flex items-center justify-between text-[11px]">
                         <span className="text-slate-500 font-medium">ผู้เข้าร่วมทำภารกิจสัปดาห์นี้:</span>
                         <strong className="text-amber-900 font-mono">
-                          {ms.maxRecipients == null ? `แจกแสตมป์แล้ว ${ms.currentRecipients} ดวง · ไม่จำกัดผู้เข้าร่วม` : `${ms.currentRecipients} / ${ms.maxRecipients} ครั้ง (คงเหลือ ${Math.max(0, ms.maxRecipients - ms.currentRecipients)} สิทธิ์)`}
+                          แจกแสตมป์แล้ว {ms.currentRecipients} ดวง · ไม่จำกัดจำนวนสิทธิ์
                         </strong>
                       </div>
-                      {ms.maxRecipients != null && <div className="w-full bg-amber-100 rounded-full h-2 overflow-hidden">
-                        <div
-                          className="bg-gradient-to-r from-amber-500 to-teal-600 h-2 rounded-full transition-all"
-                          style={{ width: `${progress}%` }}
-                        />
-                      </div>}
                     </div>
                   </div>
-
-                  <button
-                    type="button"
-                    onClick={() => setQrModalOpen(true)}
-                    className="w-full py-2.5 bg-[#115e59] hover:bg-[#0f766e] text-white rounded-xl text-xs font-bold shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-                  >
-                    <Icon name="qr" className="size-4" />
-                    <span>สร้าง QR รับเงินสำหรับลูกค้าที่มาทำภารกิจ</span>
-                  </button>
                 </div>
               );
             })}
@@ -453,9 +447,6 @@ export const MerchantMobileView: React.FC<MerchantMobileViewProps> = ({
                   ไม่มีภารกิจ Active สัปดาห์นี้
                 </span>
               </div>
-              {/* <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
-                AI จะวิเคราะห์ยอดขายรายสัปดาห์เพื่อเลือกร้านค้ายอดขายชะลอตัว 2 ร้าน/จังหวัด มาจัดภารกิจกำหนดเวลา 2 ชม./วัน (1 คนทำได้ 1 ครั้ง/วัน สูงสุด 7 ครั้ง/สัปดาห์)
-              </p> */}
             </div>
           </div>
         )}

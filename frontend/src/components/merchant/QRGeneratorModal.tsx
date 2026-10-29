@@ -2,8 +2,9 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { Icon } from '../common/Icon';
 import { QRCodeDisplay } from '../common/QRCodeDisplay';
-import { ApiError } from '../../services/api';
+import { ApiError, authStorage } from '../../services/api';
 import { ApiSale, merchantService } from '../../services/merchantService';
+import type { Mission } from '../../types';
 
 interface QRGeneratorModalProps {
   isOpen: boolean;
@@ -11,6 +12,72 @@ interface QRGeneratorModalProps {
 }
 
 const DAILY_SUBSIDY_LIMIT = 200;
+
+export const getMissionWindowInfo = (ms?: Mission | null, currentDate: Date = new Date()) => {
+  if (!ms) return null;
+  const minuteLabel = (minute: number) =>
+    `${String(Math.floor(minute / 60)).padStart(2, '0')}:${String(minute % 60).padStart(2, '0')}`;
+
+  let startMin = ms.dailyStartMinute != null ? Number(ms.dailyStartMinute) : null;
+  let endMin = ms.dailyEndMinute != null ? Number(ms.dailyEndMinute) : null;
+
+  if (startMin == null || endMin == null) {
+    const textToMatch = `${ms.timeWindowLabel || ''} ${ms.description || ''}`;
+    const match = textToMatch.match(/(\d{1,2})[:.](\d{2})\s*[-–]\s*(\d{1,2})[:.](\d{2})/);
+    if (match) {
+      startMin = Number(match[1]) * 60 + Number(match[2]);
+      endMin = Number(match[3]) * 60 + Number(match[4]);
+    }
+  }
+
+  if (startMin == null || endMin == null) {
+    try {
+      const fmt = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Asia/Bangkok',
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23',
+      });
+      const sParts = fmt.format(new Date(ms.startDateTime)).split(':').map(Number);
+      const eParts = fmt.format(new Date(ms.endDateTime)).split(':').map(Number);
+      if (sParts.length === 2 && eParts.length === 2) {
+        const sTotal = sParts[0] * 60 + sParts[1];
+        const eTotal = eParts[0] * 60 + eParts[1];
+        if (sTotal !== eTotal) {
+          startMin = sTotal;
+          endMin = eTotal;
+        }
+      }
+    } catch {
+      // ignore invalid date
+    }
+  }
+
+  const timeRangeText =
+    startMin != null && endMin != null
+      ? `${minuteLabel(startMin)} - ${minuteLabel(endMin)} น.`
+      : (ms.timeWindowLabel || '12:00 - 14:00 น.').replace(/\s*\(กำหนดเวลา.*?\)/, '');
+
+  const currentBangkokMinute = ((currentDate.getUTCHours() + 7) % 24) * 60 + currentDate.getUTCMinutes();
+  const startMs = new Date(ms.startDateTime).getTime();
+  const endMs = new Date(ms.endDateTime).getTime();
+  const inDateRange =
+    (isNaN(startMs) || currentDate.getTime() >= startMs) &&
+    (isNaN(endMs) || currentDate.getTime() <= endMs);
+
+  const isInTimeWindow =
+    inDateRange &&
+    (startMin != null && endMin != null
+      ? currentBangkokMinute >= startMin && currentBangkokMinute < endMin
+      : false);
+
+  return {
+    isInTimeWindow,
+    timeRangeText,
+    startMin,
+    endMin,
+  };
+};
 
 export const QRGeneratorModal: React.FC<QRGeneratorModalProps> = ({ isOpen, onClose }) => {
   const { currentMerchant, missions, refreshMerchantData, userGrant } = useApp();
@@ -20,6 +87,8 @@ export const QRGeneratorModal: React.FC<QRGeneratorModalProps> = ({ isOpen, onCl
   const [saleError, setSaleError] = useState('');
   const [saleResult, setSaleResult] = useState<ApiSale | null>(null);
   const [savingSale, setSavingSale] = useState(false);
+  const [apiMissions, setApiMissions] = useState<Mission[] | null>(null);
+  const [now, setNow] = useState<Date>(() => new Date());
   const qrContainerRef = useRef<HTMLDivElement | null>(null);
 
   const resetForm = () => {
@@ -29,13 +98,24 @@ export const QRGeneratorModal: React.FC<QRGeneratorModalProps> = ({ isOpen, onCl
     setSaleError('');
     setSaleResult(null);
     setSavingSale(false);
+    setNow(new Date());
   };
 
   useEffect(() => {
     if (isOpen) {
       resetForm();
+      if (authStorage.getToken()) {
+        merchantService
+          .getMyMissions()
+          .then(res => {
+            if (Array.isArray(res)) setApiMissions(res);
+          })
+          .catch(() => {});
+      }
+      const timer = setInterval(() => setNow(new Date()), 15000);
+      return () => clearInterval(timer);
     }
-  }, [isOpen]);
+  }, [isOpen, currentMerchant?.mchId]);
 
   const handleClose = () => {
     resetForm();
@@ -54,9 +134,11 @@ export const QRGeneratorModal: React.FC<QRGeneratorModalProps> = ({ isOpen, onCl
     ? Number(saleResult.User_Paid_Amount)
     : (Math.round(numericAmount * 100) - Math.round(govPays * 100)) / 100;
 
-  const activeMission = missions.find(
-    m => m.status === 'active' && m.targetMerchantId === currentMerchant.mchId
+  const merchantMission = (apiMissions && apiMissions.length > 0 ? apiMissions : missions).find(
+    m => m.status === 'active' && Number(m.targetMerchantId) === Number(currentMerchant.mchId)
   );
+  const missionWindow = getMissionWindowInfo(merchantMission, now);
+  const activeMissionInWindow = missionWindow?.isInTimeWindow ? merchantMission : null;
 
   const qrPayload = JSON.stringify({
     app: 'thai-chuay-thai-please',
@@ -66,7 +148,7 @@ export const QRGeneratorModal: React.FC<QRGeneratorModalProps> = ({ isOpen, onCl
     amount: numericAmount,
     userShare: userPays,
     govShare: govPays,
-    missionId: activeMission?.missionId || null,
+    missionId: activeMissionInWindow?.missionId || null,
     timestamp: Date.now()
   });
 
@@ -151,7 +233,7 @@ export const QRGeneratorModal: React.FC<QRGeneratorModalProps> = ({ isOpen, onCl
       onClick={handleClose}
     >
       <div
-        className="w-full max-w-[380px] rounded-[28px] bg-white p-5 shadow-2xl overflow-hidden"
+        className="w-full max-w-[380px] rounded-[28px] bg-white p-5 shadow-2xl overflow-hidden max-h-[92vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between pb-3 border-b border-slate-100">
@@ -179,6 +261,42 @@ export const QRGeneratorModal: React.FC<QRGeneratorModalProps> = ({ isOpen, onCl
             <span className="font-bold text-slate-800">{currentMerchant.shopName}</span>
             <span className="text-[#1769ed] text-[11px]">รับเข้ากระเป๋าร้านค้า</span>
           </div>
+
+          {/* Mission Time Window Status Banner */}
+          {merchantMission && missionWindow && (
+            missionWindow.isInTimeWindow ? (
+              <div className="rounded-xl bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 p-2.5 text-xs space-y-1">
+                <div className="flex items-center justify-between gap-1.5 flex-wrap">
+                  <span className="inline-flex items-center gap-1 font-extrabold text-emerald-800 text-[11px]">
+                    <Icon name="sparkle" className="size-3.5 text-amber-500" />
+                    <span>กำลังอยู่ในช่วงภารกิจ ({missionWindow.timeRangeText})</span>
+                  </span>
+                  <span className="text-[10px] font-bold bg-emerald-600 text-white px-2 py-0.5 rounded-full">
+                    ไม่จำกัดจำนวนสิทธิ์
+                  </span>
+                </div>
+                <p className="text-[11px] font-bold text-slate-800">{merchantMission.missionName}</p>
+                <p className="text-[10px] text-emerald-700">
+                  ✓ QR Code นี้รวมภารกิจของร้านอัตโนมัติ ลูกค้าสแกนจ่ายในช่วงเวลานี้จะได้รับแสตมป์ภารกิจ
+                </p>
+              </div>
+            ) : (
+              <div className="rounded-xl bg-amber-50/80 border border-amber-200/80 p-2.5 text-xs space-y-1">
+                <div className="flex items-center justify-between gap-1.5 flex-wrap">
+                  <span className="inline-flex items-center gap-1 font-bold text-amber-900 text-[11px]">
+                    <span>⏰ อยู่นอกช่วงเวลาภารกิจ</span>
+                  </span>
+                  <span className="text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-full">
+                    เวลาภารกิจ {missionWindow.timeRangeText}
+                  </span>
+                </div>
+                <p className="text-[11px] font-semibold text-slate-700">{merchantMission.missionName}</p>
+                <p className="text-[10px] text-amber-800">
+                  ขณะนี้อยู่นอกเวลาภารกิจ QR Code นี้จึงเป็นการรับเงินปกติ (ไม่แนบภารกิจใน QR)
+                </p>
+              </div>
+            )
+          )}
 
           <div>
             <label className="block text-xs font-semibold text-slate-600 mb-1">
