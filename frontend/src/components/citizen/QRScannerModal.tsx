@@ -21,15 +21,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
   presetMerchantId,
   presetMissionId,
 }) => {
-  const {
-    merchants, executePayment, wallet, userGrant, topupWallet,
-    transactions, currentUser, userStamps, districtStamps,
-    missions, refreshCitizenData,
-  } = useApp();
-
-  useEffect(() => {
-    if (isOpen) void refreshCitizenData();
-  }, [isOpen, refreshCitizenData]);
+  const { merchants, executePayment, wallet, userGrant, topupWallet, transactions, currentUser, userStamps, districtStamps, missions } = useApp();
 
   const [step, setStep] = useState<'scan' | 'confirm' | 'pin' | 'success'>('scan');
   const [selectedMerchant, setSelectedMerchant] = useState<Merchant | null>(null);
