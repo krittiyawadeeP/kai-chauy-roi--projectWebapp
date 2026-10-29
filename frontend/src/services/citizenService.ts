@@ -61,7 +61,18 @@ export const citizenService = {
     return api.post<{ success: boolean; message: string }>('/user/set-pin', { Pin });
   },
 
-  pay: (data: { Merchant_ID: number; Total_Amount: number; District_ID?: number; Pin?: string; Stamp_Count?: number }) => {
+  pay: (data: {
+    Merchant_ID: number;
+    Total_Amount: number;
+    District_ID?: number;
+    Pin?: string;
+    Stamp_Count?: number;
+    Mission_ID?: number;
+    missionId?: number;
+    mission?: number;
+    selectedStamps?: Record<number, number>;
+    Selected_Stamps?: Record<number, number>;
+  }) => {
     return api.post<{
       transaction: any;
       wallet: { walletId: number; userId: number; balance: number; updatedAt: string };

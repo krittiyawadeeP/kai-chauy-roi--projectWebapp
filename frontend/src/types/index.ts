@@ -181,7 +181,7 @@ export interface StampRedemption {
   rewardName: string;
   stampId: number;
   quantity: number;
-  status: 'redeemed' | 'shipped' | 'ready_to_use';
+  status: 'redeemed' | 'shipped' | 'ready_to_use' | 'completed';
   redeemedAt: string;
   redemptionCode: string;
 }
@@ -219,3 +219,17 @@ export interface SocialImpactMetrics {
   stampsRedeemed: number;
   otopRedemptionVolume: number;
 }
+
+export interface CitizenGpsLocation {
+  lat: number;
+  lng: number;
+  accuracy?: number;
+  provinceId: number;
+  provinceName: string;
+  districtId?: number;
+  districtName?: string;
+  address?: string;
+  lastUpdated: string;
+  isMockOrFallback?: boolean;
+}
+

@@ -43,7 +43,10 @@ export interface AuthResponse {
     Role: string;
     Province_ID?: number;
     Dist_ID?: number;
+    hasPin?: boolean;
+    Pin_Hash?: string | null;
   };
+  hasPin?: boolean;
   merchant?: any;
   wallet?: any;
   grant?: any;
