@@ -9,7 +9,7 @@ interface QRCodeDisplayProps {
 
 export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
   value,
-  size = 200,
+  size = 240,
   className = ''
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -21,9 +21,9 @@ export const QRCodeDisplay: React.FC<QRCodeDisplayProps> = ({
         value,
         {
           width: size,
-          margin: 1.5,
+          margin: 3,
           color: {
-            dark: '#0f172a',
+            dark: '#000000',
             light: '#ffffff'
           },
           errorCorrectionLevel: 'M'

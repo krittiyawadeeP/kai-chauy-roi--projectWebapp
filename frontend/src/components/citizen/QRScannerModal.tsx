@@ -21,7 +21,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
   presetMerchantId,
   presetMissionId,
 }) => {
-  const { merchants, executePayment, wallet, userGrant, topupWallet, transactions, currentUser, userStamps, districtStamps, missions } = useApp();
+  const { merchants, executePayment, wallet, userGrant, topupWallet, transactions, currentUser, userStamps, districtStamps, missions, aiTargetShops, setMerchants } = useApp();
 
   const [step, setStep] = useState<'scan' | 'confirm' | 'pin' | 'success'>('scan');
   const [selectedMerchant, setSelectedMerchant] = useState<Merchant | null>(null);
@@ -41,8 +41,83 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const animFrameRef = useRef<number | null>(null);
+  const isScanningFrameRef = useRef<boolean>(false);
+
+  // Universal lookup across merchants, aiTargetShops, and missions
+  const findMerchantAnywhere = (id: number): Merchant | null => {
+    const m = merchants.find(item => item.mchId === id);
+    if (m) return m;
+
+    const ai = aiTargetShops.find(item => item.merchantId === id);
+    if (ai) {
+      return {
+        mchId: ai.merchantId,
+        userId: 0,
+        shopName: ai.merchantName,
+        category: (ai.category as any) || 'ร้านค้าชุมชน',
+        address: `${ai.districtName} ${ai.provinceName}`,
+        lat: null,
+        lng: null,
+        distId: ai.distId || ai.provinceId || currentUser.distId || 1201,
+        provId: ai.provId || ai.provinceId || currentUser.provId || 12,
+        ownerName: 'ผู้ประกอบการ',
+        phone: '',
+        status: 'approved',
+        registeredAt: new Date().toISOString(),
+        imageUrl: ai.imageUrl || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=200&auto=format&fit=crop&q=80',
+        promptpayId: '',
+        dailyAvgSales: 0,
+        currentDailySales: 0,
+        isAiTarget: true,
+      };
+    }
+
+    const ms = missions.find(item => item.targetMerchantId === id);
+    if (ms) {
+      return {
+        mchId: ms.targetMerchantId || id,
+        userId: 0,
+        shopName: ms.targetMerchantName || `ร้านค้าภารกิจ #${ms.missionId}`,
+        category: (ms.category as any) || 'ของใช้ทั่วไป',
+        address: 'ร้านค้าในโครงการ',
+        lat: null,
+        lng: null,
+        distId: ms.targetDistId || currentUser.distId || 1201,
+        provId: ms.targetProvId || currentUser.provId || 12,
+        ownerName: 'ผู้ประกอบการ',
+        phone: '',
+        status: 'approved',
+        registeredAt: new Date().toISOString(),
+        imageUrl: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=200&auto=format&fit=crop&q=80',
+        promptpayId: '',
+        dailyAvgSales: 0,
+        currentDailySales: 0,
+        isAiTarget: Boolean(ms.isAiMission),
+      };
+    }
+
+    return null;
+  };
+
+  const findMissionAnywhere = (mId: number): { missionId: number; missionName: string; targetMerchantId?: number; minSpend?: number | null } | null => {
+    const m = missions.find(item => item.missionId === mId);
+    if (m) return m;
+
+    const ai = aiTargetShops.find(item => item.analysisId === mId || item.missionId === mId);
+    if (ai) {
+      return {
+        missionId: ai.analysisId || ai.missionId || mId,
+        missionName: ai.missionTitle,
+        targetMerchantId: ai.merchantId,
+        minSpend: 0,
+      };
+    }
+
+    return null;
+  };
 
   const stopCamera = () => {
+    isScanningFrameRef.current = false;
     if (animFrameRef.current) {
       cancelAnimationFrame(animFrameRef.current);
       animFrameRef.current = null;
@@ -65,7 +140,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
       setSelectedStamps({});
       setScannedMissionId(presetMissionId ?? null);
       if (presetMerchantId) {
-        const m = merchants.find(item => item.mchId === presetMerchantId);
+        const m = findMerchantAnywhere(presetMerchantId);
         if (m) {
           setSelectedMerchant(m);
           setStep('confirm');
@@ -80,7 +155,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     return () => {
       stopCamera();
     };
-  }, [isOpen, presetMerchantId, presetMissionId, merchants]);
+  }, [isOpen, presetMerchantId, presetMissionId, merchants, aiTargetShops, missions]);
 
   useEffect(() => {
     let active = true;
@@ -144,17 +219,19 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
         ? Number(rawMission)
         : null;
 
-      setScannedMissionId(missionNum);
-
-      const missionObj = missionNum ? missions.find(m => m.missionId === missionNum) : null;
+      const missionObj = missionNum ? findMissionAnywhere(missionNum) : null;
       let parsedMchId = Number(parsed.mchId || parsed.merchantId || parsed.Mch_ID || parsed.shopId || 0);
       if ((!parsedMchId || isNaN(parsedMchId)) && missionObj?.targetMerchantId) {
         parsedMchId = missionObj.targetMerchantId;
       }
 
-      const found = merchants.find(m => m.mchId === parsedMchId);
+      const found = findMerchantAnywhere(parsedMchId);
       if (found) {
         setSelectedMerchant(found);
+        if (!merchants.some(m => m.mchId === found.mchId)) {
+          setMerchants(prev => (prev.some(m => m.mchId === found.mchId) ? prev : [...prev, found]));
+        }
+        setScannedMissionId(missionNum || (missionObj ? missionObj.missionId : null));
         if (typeof parsed.amount === 'number' && parsed.amount > 0) {
           setAmount(parsed.amount);
         } else {
@@ -166,16 +243,31 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
 
       // If merchant is not yet in merchants array, synthesize merchant from mission or QR payload
       if (missionObj || parsed.shopName) {
+        let shopDistId = Number(parsed.distId || parsed.districtId || 0);
+        let shopProvId = Number(parsed.provId || parsed.provinceId || 0);
+        const shopNameText = String(parsed.shopName || '');
+        if (!shopProvId) {
+          if (shopNameText.includes('สตูล')) { shopProvId = 91; shopDistId = 9101; }
+          else if (shopNameText.includes('นครปฐม')) { shopProvId = 73; shopDistId = 7301; }
+          else if (shopNameText.includes('เชียงใหม่')) { shopProvId = 50; shopDistId = 5001; }
+          else if (shopNameText.includes('นนทบุรี')) { shopProvId = 12; shopDistId = 1201; }
+          else if (shopNameText.includes('กรุงเทพ')) { shopProvId = 10; shopDistId = 1001; }
+          else {
+            shopProvId = currentUser.provId || 12;
+            shopDistId = currentUser.distId || 1201;
+          }
+        }
+
         const fallbackMch: Merchant = {
           mchId: parsedMchId || missionNum || 1,
           userId: 0,
-          shopName: missionObj?.targetMerchantName || parsed.shopName || `ร้านค้าภารกิจ #${missionNum}`,
-          category: (missionObj?.category as any) || 'ของใช้ทั่วไป',
+          shopName: missionObj?.missionName ? `ร้านค้า: ${missionObj.missionName}` : (parsed.shopName || `ร้านค้าภารกิจ #${missionNum || 1}`),
+          category: 'ของใช้ทั่วไป',
           address: 'ร้านค้าในโครงการ',
           lat: null,
           lng: null,
-          distId: missionObj?.targetDistId || currentUser.distId || 1,
-          provId: missionObj?.targetProvId || currentUser.provId || 1,
+          distId: shopDistId,
+          provId: shopProvId,
           ownerName: 'ผู้ประกอบการ',
           phone: parsed.phone || '',
           status: 'approved',
@@ -187,6 +279,8 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
           isAiTarget: false,
         };
         setSelectedMerchant(fallbackMch);
+        setMerchants(prev => (prev.some(m => m.mchId === fallbackMch.mchId) ? prev : [...prev, fallbackMch]));
+        setScannedMissionId(missionNum || (missionObj ? missionObj.missionId : null));
         if (typeof parsed.amount === 'number' && parsed.amount > 0) {
           setAmount(parsed.amount);
         } else {
@@ -202,11 +296,14 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     if (missionParamMatch) {
       const mId = Number(missionParamMatch[1]);
       setScannedMissionId(mId);
-      const mObj = missions.find(m => m.missionId === mId);
+      const mObj = findMissionAnywhere(mId);
       if (mObj?.targetMerchantId) {
-        const found = merchants.find(m => m.mchId === mObj.targetMerchantId);
+        const found = findMerchantAnywhere(mObj.targetMerchantId);
         if (found) {
           setSelectedMerchant(found);
+          if (!merchants.some(m => m.mchId === found.mchId)) {
+            setMerchants(prev => (prev.some(m => m.mchId === found.mchId) ? prev : [...prev, found]));
+          }
           setAmount(200);
           setStep('confirm');
           return;
@@ -217,9 +314,12 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     const match = text.match(/(?:mchId|merchantId|shopId)=([0-9]+)/i);
     if (match) {
       const id = Number(match[1]);
-      const found = merchants.find(m => m.mchId === id);
+      const found = findMerchantAnywhere(id);
       if (found) {
         setSelectedMerchant(found);
+        if (!merchants.some(m => m.mchId === found.mchId)) {
+          setMerchants(prev => (prev.some(m => m.mchId === found.mchId) ? prev : [...prev, found]));
+        }
         setAmount(200);
         setStep('confirm');
         return;
@@ -229,9 +329,12 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     // 3. Try direct numeric ID
     if (/^\d+$/.test(text)) {
       const id = Number(text);
-      const found = merchants.find(m => m.mchId === id);
+      const found = findMerchantAnywhere(id);
       if (found) {
         setSelectedMerchant(found);
+        if (!merchants.some(m => m.mchId === found.mchId)) {
+          setMerchants(prev => (prev.some(m => m.mchId === found.mchId) ? prev : [...prev, found]));
+        }
         setAmount(200);
         setStep('confirm');
         return;
@@ -243,12 +346,17 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
       m.shopName.toLowerCase().includes(text.toLowerCase()) ||
       (m.phone && m.phone.replace(/\D/g, '') === text.replace(/\D/g, '')) ||
       (m.promptpayId && m.promptpayId.replace(/\D/g, '') === text.replace(/\D/g, ''))
+    ) || aiTargetShops.find(a =>
+      a.merchantName.toLowerCase().includes(text.toLowerCase())
     );
     if (foundByNameOrPhone) {
-      setSelectedMerchant(foundByNameOrPhone);
-      setAmount(200);
-      setStep('confirm');
-      return;
+      const mch = 'mchId' in foundByNameOrPhone ? foundByNameOrPhone : findMerchantAnywhere(foundByNameOrPhone.merchantId);
+      if (mch) {
+        setSelectedMerchant(mch);
+        setAmount(200);
+        setStep('confirm');
+        return;
+      }
     }
 
     // Fallback: If QR is recognized from our app or valid format, match first merchant
@@ -262,32 +370,118 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     setErrorMsg(`ไม่พบร้านค้าที่ตรงกับ QR Code (${text.slice(0, 30)}...)`);
   };
 
-  const scanVideoFrame = () => {
+  const decodeQRFromCanvasSource = async (
+    source: CanvasImageSource,
+    sourceWidth: number,
+    sourceHeight: number
+  ): Promise<string | null> => {
+    if (!sourceWidth || !sourceHeight) return null;
+
+    // Strategy 1: Native BarcodeDetector API (built into Chromium/Edge/Android)
+    try {
+      const BarcodeDetectorClass = (window as any).BarcodeDetector;
+      if (BarcodeDetectorClass) {
+        const detector = new BarcodeDetectorClass({ formats: ['qr_code'] });
+        const results = await detector.detect(source);
+        if (results && results.length > 0 && results[0].rawValue) {
+          return results[0].rawValue.trim();
+        }
+      }
+    } catch (_) {
+      // Fall through to jsQR multi-scale canvas
+    }
+
+    // Strategy 2: Multi-scale Canvas rendering with jsQR
+    // 160x160 QR codes with dense modules require bilinear upscaling (1.5x / 2x / 2.5x)
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return null;
+
+    const attempts = [
+      { scale: 1.5, pad: 0 },
+      { scale: 2.0, pad: 15 },
+      { scale: 1.0, pad: 0 },
+      { scale: 2.5, pad: 20 },
+      { scale: 3.0, pad: 20 },
+      { scale: 0.75, pad: 0 },
+    ];
+
+    for (const attempt of attempts) {
+      const targetW = Math.round(sourceWidth * attempt.scale);
+      const targetH = Math.round(sourceHeight * attempt.scale);
+      const totalW = targetW + attempt.pad * 2;
+      const totalH = targetH + attempt.pad * 2;
+
+      // Prevent oversized memory usage
+      if (totalW > 1600 || totalH > 1600) continue;
+
+      canvas.width = totalW;
+      canvas.height = totalH;
+
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, totalW, totalH);
+      ctx.drawImage(source, attempt.pad, attempt.pad, targetW, targetH);
+
+      const imageData = ctx.getImageData(0, 0, totalW, totalH);
+      const code = jsQR(imageData.data, imageData.width, imageData.height, {
+        inversionAttempts: 'attemptBoth',
+      });
+      if (code && code.data && code.data.trim()) {
+        return code.data.trim();
+      }
+    }
+
+    // Strategy 3: Central zoom crop (ideal for camera frames where user points phone at QR)
+    if (sourceWidth >= 200 && sourceHeight >= 200) {
+      const cropSize = Math.round(Math.min(sourceWidth, sourceHeight) * 0.65);
+      const cropX = Math.round((sourceWidth - cropSize) / 2);
+      const cropY = Math.round((sourceHeight - cropSize) / 2);
+      const cropTarget = 400;
+
+      canvas.width = cropTarget + 20;
+      canvas.height = cropTarget + 20;
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(source, cropX, cropY, cropSize, cropSize, 10, 10, cropTarget, cropTarget);
+
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height, {
+        inversionAttempts: 'attemptBoth',
+      });
+      if (code && code.data && code.data.trim()) {
+        return code.data.trim();
+      }
+    }
+
+    return null;
+  };
+
+  const scanVideoFrame = async () => {
     if (!videoRef.current || videoRef.current.readyState < 2) {
       animFrameRef.current = requestAnimationFrame(scanVideoFrame);
       return;
     }
 
-    if (!canvasRef.current) {
-      canvasRef.current = document.createElement('canvas');
+    if (isScanningFrameRef.current) {
+      animFrameRef.current = requestAnimationFrame(scanVideoFrame);
+      return;
     }
-    const canvas = canvasRef.current;
-    const video = videoRef.current;
 
-    canvas.width = video.videoWidth || 480;
-    canvas.height = video.videoHeight || 480;
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    if (ctx) {
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const code = jsQR(imageData.data, imageData.width, imageData.height, {
-        inversionAttempts: 'dontInvert',
-      });
-      if (code && code.data) {
+    isScanningFrameRef.current = true;
+    try {
+      const video = videoRef.current;
+      const w = video.videoWidth || 480;
+      const h = video.videoHeight || 480;
+      const detected = await decodeQRFromCanvasSource(video, w, h);
+      if (detected) {
         stopCamera();
-        handleDetectedCode(code.data);
+        handleDetectedCode(detected);
         return;
       }
+    } catch (_) {
+      // Continue next frame on error
+    } finally {
+      isScanningFrameRef.current = false;
     }
 
     animFrameRef.current = requestAnimationFrame(scanVideoFrame);
@@ -323,43 +517,20 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     const reader = new FileReader();
     reader.onload = (event) => {
       const img = new Image();
-      img.onload = () => {
-        const scanAtSize = (w: number, h: number) => {
-          const canvas = document.createElement('canvas');
-          canvas.width = w;
-          canvas.height = h;
-          const ctx = canvas.getContext('2d', { willReadFrequently: true });
-          if (!ctx) return null;
-          ctx.drawImage(img, 0, 0, w, h);
-          const imageData = ctx.getImageData(0, 0, w, h);
-          return jsQR(imageData.data, imageData.width, imageData.height, {
-            inversionAttempts: 'attemptBoth',
-          });
-        };
+      img.onload = async () => {
+        try {
+          const w = img.naturalWidth || img.width;
+          const h = img.naturalHeight || img.height;
+          const detected = await decodeQRFromCanvasSource(img, w, h);
 
-        let w = img.width;
-        let h = img.height;
-        const MAX_DIM = 1000;
-        if (w > MAX_DIM || h > MAX_DIM) {
-          if (w > h) {
-            h = Math.round((h * MAX_DIM) / w);
-            w = MAX_DIM;
+          if (detected) {
+            stopCamera();
+            handleDetectedCode(detected);
           } else {
-            w = Math.round((w * MAX_DIM) / h);
-            h = MAX_DIM;
+            setErrorMsg('ไม่พบ QR Code ในรูปภาพที่เลือก กรุณาอัปโหลดภาพ QR ร้านค้าที่ชัดเจน หรือลองลากไฟล์ภาพมาวาง');
           }
-        }
-
-        let code = scanAtSize(w, h);
-        if (!code && (w !== img.width || h !== img.height)) {
-          code = scanAtSize(img.width, img.height);
-        }
-
-        if (code && code.data) {
-          stopCamera();
-          handleDetectedCode(code.data);
-        } else {
-          setErrorMsg('ไม่พบ QR Code ในรูปภาพที่เลือก กรุณาอัปโหลดภาพ QR ร้านค้าที่ชัดเจน หรือลองลากไฟล์ภาพมาวาง');
+        } catch {
+          setErrorMsg('เกิดข้อผิดพลาดในการประมวลผล QR Code');
         }
       };
       img.onerror = () => {
@@ -460,10 +631,18 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
   const isCappedByDaily = requestedGovShare > remainingDaily;
   const isBalanceEnough = wallet.balance >= netUserPays;
 
-  const effectiveMissionId = scannedMissionId ?? presetMissionId ?? undefined;
-  const activeMission = (scannedMissionId ? missions.find(m => m.missionId === scannedMissionId) : null)
-    || (presetMissionId ? missions.find(m => m.missionId === presetMissionId) : null)
-    || (selectedMerchant ? missions.find(m => m.targetMerchantId === selectedMerchant.mchId) : null);
+  const activeMission = (scannedMissionId ? findMissionAnywhere(scannedMissionId) : null)
+    || (presetMissionId ? findMissionAnywhere(presetMissionId) : null)
+    || (selectedMerchant ? (
+        findMissionAnywhere(
+          missions.find(m => m.targetMerchantId === selectedMerchant.mchId)?.missionId ??
+          aiTargetShops.find(m => m.merchantId === selectedMerchant.mchId)?.analysisId ?? 0
+        )
+      ) : null);
+
+  const effectiveMissionId = scannedMissionId 
+    ?? presetMissionId 
+    ?? (activeMission?.missionId ?? undefined);
 
   const handleConfirmPay = async (pin?: string) => {
     if (!selectedMerchant) return;
@@ -645,19 +824,74 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
                 onChange={handleFileUpload}
               />
 
-              {merchants.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedMerchant(merchants[0]);
-                    setAmount(200);
-                    setStep('confirm');
-                  }}
-                  className="w-full py-2 bg-blue-50/70 hover:bg-blue-100 text-blue-700 rounded-xl text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer border border-blue-200/60"
-                >
-                  <span>⚡ หรือคลิกทดสอบสแกน: {merchants[0].shopName}</span>
-                </button>
-              )}
+              {/* Quick test buttons for active mission stores */}
+              <div className="space-y-1.5 pt-1">
+                {missions.filter(m => m.status === 'active').slice(0, 2).map(ms => {
+                  const mch = findMerchantAnywhere(ms.targetMerchantId || 0);
+                  if (!mch) return null;
+                  return (
+                    <button
+                      key={ms.missionId}
+                      type="button"
+                      onClick={() => {
+                        setSelectedMerchant(mch);
+                        setScannedMissionId(ms.missionId);
+                        setAmount(ms.minSpend && ms.minSpend > 0 ? ms.minSpend : 200);
+                        setStep('confirm');
+                      }}
+                      className="w-full py-2 bg-gradient-to-r from-amber-50 to-orange-50 hover:from-amber-100 hover:to-orange-100 text-amber-900 rounded-xl text-[11px] font-bold transition-all flex items-center justify-between px-3 cursor-pointer border border-amber-300/80 shadow-xs text-left"
+                    >
+                      <span className="flex items-center gap-1.5 truncate">
+                        <span>🎯</span>
+                        <span className="truncate">ทดสอบสแกน: {mch.shopName} (ภารกิจ #{ms.missionId})</span>
+                      </span>
+                      <span className="shrink-0 text-[10px] bg-amber-500 text-white px-2 py-0.5 rounded-full font-black">
+                        อยู่ในช่วงภารกิจ
+                      </span>
+                    </button>
+                  );
+                })}
+
+                {aiTargetShops.slice(0, 1).map(ai => {
+                  const mch = findMerchantAnywhere(ai.merchantId);
+                  if (!mch) return null;
+                  return (
+                    <button
+                      key={ai.analysisId || ai.merchantId}
+                      type="button"
+                      onClick={() => {
+                        setSelectedMerchant(mch);
+                        setScannedMissionId(ai.analysisId || ai.missionId || 999);
+                        setAmount(200);
+                        setStep('confirm');
+                      }}
+                      className="w-full py-2 bg-gradient-to-r from-blue-50 to-indigo-50 hover:from-blue-100 hover:to-indigo-100 text-blue-900 rounded-xl text-[11px] font-bold transition-all flex items-center justify-between px-3 cursor-pointer border border-blue-300/80 shadow-xs text-left"
+                    >
+                      <span className="flex items-center gap-1.5 truncate">
+                        <span>⚡</span>
+                        <span className="truncate">ทดสอบสแกน AI: {ai.merchantName}</span>
+                      </span>
+                      <span className="shrink-0 text-[10px] bg-blue-600 text-white px-2 py-0.5 rounded-full font-black">
+                        AI Target
+                      </span>
+                    </button>
+                  );
+                })}
+
+                {merchants.length > 0 && !missions.some(m => m.targetMerchantId === merchants[0].mchId) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedMerchant(merchants[0]);
+                      setAmount(200);
+                      setStep('confirm');
+                    }}
+                    className="w-full py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 rounded-xl text-[11px] font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer border border-slate-200"
+                  >
+                    <span>⚡ คลิกทดสอบสแกนร้านค้าทั่วไป: {merchants[0].shopName}</span>
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}

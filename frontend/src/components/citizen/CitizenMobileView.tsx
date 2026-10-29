@@ -453,6 +453,19 @@ export const CitizenMobileView: React.FC<CitizenMobileViewProps> = ({
                 </div>
               </div>
 
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedMerchantIdForScan(featuredAiShop?.merchantId || 1);
+                  setSelectedMissionIdForScan(featuredAiShop?.analysisId || featuredAiShop?.missionId || 1);
+                  setScannerOpen(true);
+                }}
+                className="w-full mt-2.5 py-2 px-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 active:scale-98 text-white font-bold text-xs shadow-md shadow-amber-500/20 flex items-center justify-center gap-2 cursor-pointer transition-all"
+              >
+                <Icon name="scan" className="size-4" />
+                <span>สแกน QR จ่ายร้านนี้ (รับแสตมป์ภารกิจ 🎯)</span>
+              </button>
+
             </div>
           </section>
 
@@ -600,6 +613,19 @@ export const CitizenMobileView: React.FC<CitizenMobileViewProps> = ({
                       </div>
                       <p className="text-[11px] text-slate-500">รับแสตมป์ AI ได้สูงสุด {shop.dailyStampLimit ?? 1} ดวงต่อคนต่อวัน รวมทุกร้านที่มีภารกิจ · ช่วงเวลาจากข้อมูลบิล ไม่ใช่เวลาทำการที่ร้านยืนยัน</p>
                     </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedMerchantIdForScan(shop.merchantId);
+                        setSelectedMissionIdForScan(shop.analysisId || shop.missionId);
+                        setScannerOpen(true);
+                      }}
+                      className="w-full py-2 px-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 active:scale-98 text-white font-bold text-xs shadow-md shadow-amber-500/20 flex items-center justify-center gap-2 cursor-pointer transition-all"
+                    >
+                      <Icon name="scan" className="size-4" />
+                      <span>สแกน QR จ่ายร้านนี้ (รับแสตมป์ AI 🎯)</span>
+                    </button>
                   </div>
                 ))}
               </div>
@@ -688,13 +714,28 @@ export const CitizenMobileView: React.FC<CitizenMobileViewProps> = ({
                         {ms.maxRecipients == null ? 'ไม่จำกัด' : `${Math.max(0, ms.maxRecipients - ms.currentRecipients)} / ${ms.maxRecipients} คน`}
                       </strong>
                     </div>
-                    {ms.maxRecipients != null && <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden mt-1">
-                      <div
-                        className="bg-gradient-to-r from-[#1769ed] to-amber-500 h-1.5 rounded-full"
-                        style={{ width: `${progress}%` }}
-                      />
-                    </div>}
+                    {ms.maxRecipients != null && (
+                      <div className="w-full bg-slate-200 rounded-full h-1.5 overflow-hidden mt-1">
+                        <div
+                          className="bg-gradient-to-r from-[#1769ed] to-amber-500 h-1.5 rounded-full"
+                          style={{ width: `${progress}%` }}
+                        />
+                      </div>
+                    )}
                   </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedMerchantIdForScan(ms.targetMerchantId);
+                      setSelectedMissionIdForScan(ms.missionId);
+                      setScannerOpen(true);
+                    }}
+                    className="w-full mt-2.5 py-2 px-3 rounded-xl bg-[#1769ed] hover:bg-blue-700 active:scale-98 text-white font-bold text-xs shadow-md shadow-blue-500/20 flex items-center justify-center gap-2 cursor-pointer transition-all"
+                  >
+                    <Icon name="scan" className="size-4" />
+                    <span>สแกน QR จ่ายร้านนี้ (ร่วมภารกิจ #{ms.missionId})</span>
+                  </button>
                 </div>
               );
             })

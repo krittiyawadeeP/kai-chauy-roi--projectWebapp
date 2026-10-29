@@ -289,7 +289,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [missions, setMissions] = useState<Mission[]>(() => {
     const saved = localStorage.getItem(`${STORAGE_KEY}_missions`);
-    return saved ? JSON.parse(saved) : INITIAL_MISSIONS;
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return parsed.map((m: Mission) => {
+          const init = INITIAL_MISSIONS.find(im => im.missionId === m.missionId);
+          if (init && new Date(m.endDateTime).getTime() < Date.now()) {
+            return { ...m, endDateTime: init.endDateTime, startDateTime: init.startDateTime, status: 'active' };
+          }
+          return m;
+        });
+      } catch {
+        return INITIAL_MISSIONS;
+      }
+    }
+    return INITIAL_MISSIONS;
   });
 
   const [aiAnalysis, setAiAnalysis] = useState<AISalesAnalysis[]>(() => {
@@ -919,7 +933,59 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     selectedStamps?: Record<number, number>;
     missionId?: number;
   }) => {
-    const targetShop = merchants.find(m => m.mchId === merchantId);
+    let targetShop = merchants.find(m => m.mchId === merchantId);
+    if (!targetShop) {
+      const aiShop = aiTargetShops.find(s => s.merchantId === merchantId);
+      if (aiShop) {
+        targetShop = {
+          mchId: aiShop.merchantId,
+          userId: 0,
+          shopName: aiShop.merchantName,
+          category: (aiShop.category as any) || 'ร้านค้าชุมชน',
+          address: `${aiShop.districtName} ${aiShop.provinceName}`,
+          lat: null,
+          lng: null,
+          distId: aiShop.distId || aiShop.provinceId || 1201,
+          provId: aiShop.provId || aiShop.provinceId || 12,
+          ownerName: 'ผู้ประกอบการ',
+          phone: '',
+          status: 'approved',
+          registeredAt: new Date().toISOString(),
+          imageUrl: aiShop.imageUrl || 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=200&auto=format&fit=crop&q=80',
+          promptpayId: '',
+          dailyAvgSales: 0,
+          currentDailySales: 0,
+          isAiTarget: true,
+        };
+        setMerchants(prev => (prev.some(m => m.mchId === targetShop!.mchId) ? prev : [...prev, targetShop!]));
+      }
+    }
+    if (!targetShop) {
+      const mObj = missions.find(m => m.targetMerchantId === merchantId || m.missionId === missionId);
+      if (mObj) {
+        targetShop = {
+          mchId: mObj.targetMerchantId || merchantId,
+          userId: 0,
+          shopName: mObj.targetMerchantName || `ร้านค้าภารกิจ #${mObj.missionId}`,
+          category: (mObj.category as any) || 'ของใช้ทั่วไป',
+          address: 'ร้านค้าในโครงการ',
+          lat: null,
+          lng: null,
+          distId: mObj.targetDistId || 1201,
+          provId: mObj.targetProvId || 12,
+          ownerName: 'ผู้ประกอบการ',
+          phone: '',
+          status: 'approved',
+          registeredAt: new Date().toISOString(),
+          imageUrl: 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=200&auto=format&fit=crop&q=80',
+          promptpayId: '',
+          dailyAvgSales: 0,
+          currentDailySales: 0,
+          isAiTarget: Boolean(mObj.isAiMission),
+        };
+        setMerchants(prev => (prev.some(m => m.mchId === targetShop!.mchId) ? prev : [...prev, targetShop!]));
+      }
+    }
     if (!targetShop) {
       return { success: false, message: 'ไม่พบข้อมูลร้านค้าในระบบ' };
     }
@@ -1083,9 +1149,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let matchingMissionId: number | undefined = undefined;
 
     // Check if there is an active mission for this merchant
-    const shopStamp = districtStamps.find(s => s.distId === targetShop.distId);
-    const activeMission = shopStamp && (
-      (missionId ? missions.find(ms => ms.missionId === missionId) : null) ||
+    const shopStamp = districtStamps.find(s => s.distId === targetShop.distId) 
+      || districtStamps.find(s => s.provId === targetShop.provId)
+      || districtStamps[0];
+
+    // Check general missions and AI target shop missions
+    const aiMissionMatch = aiTargetShops.find(
+      s => s.merchantId === merchantId || (missionId && (s.analysisId === missionId || s.missionId === missionId))
+    );
+
+    const activeMission = (missionId ? missions.find(ms => ms.missionId === missionId) : null) ||
       missions.find(
         ms =>
           ms.status === 'active' &&
@@ -1093,8 +1166,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           totalAmount >= (ms.minSpend ?? 0) &&
           (ms.maxRecipients === null || ms.currentRecipients < ms.maxRecipients) &&
           !ms.completedUserIds.includes(currentUser.userId)
-      )
-    );
+      );
 
     if (activeMission) {
       matchingMissionId = activeMission.missionId;
@@ -1113,6 +1185,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             : m
         )
       );
+    } else if (aiMissionMatch) {
+      matchingMissionId = aiMissionMatch.analysisId || aiMissionMatch.missionId || 999;
+      awardedStamp = shopStamp;
     } else if (totalAmount >= 150) {
       // General rule: Spend >= 150 THB gets a district stamp based on merchant location
       awardedStamp = shopStamp;
