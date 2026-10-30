@@ -45,6 +45,7 @@ interface AppContextType {
   currentUser: User;
   setCurrentUser: (user: User) => void;
   merchants: Merchant[];
+  setMerchants: React.Dispatch<React.SetStateAction<Merchant[]>>;
   currentMerchant: Merchant;
   setCurrentMerchant: (merchant: Merchant) => void;
   transactions: SalesTransaction[];
@@ -1515,6 +1516,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         currentUser,
         setCurrentUser,
         merchants,
+        setMerchants,
         currentMerchant,
         setCurrentMerchant,
         transactions,
