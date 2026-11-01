@@ -67,8 +67,9 @@ export function eligibleMissionSlots(summary: ReturnType<typeof summarizeSales>)
 export async function suggestMission(shopName: string, category: string | null, summary: ReturnType<typeof summarizeSales>, analysisDate?: string): Promise<MissionSuggestion> {
   const eligibleSlots = eligibleMissionSlots(summary);
   if (!eligibleSlots.length) throw new Error('No observed two-hour sales slot fits inside the bill-time range');
+  const minimumRevenue = Math.min(...eligibleSlots.map(slot => slot.averageRevenueOnDaysWithSales));
   const response = await ollamaChat({
-    messages: [{ role: 'user', content: `You advise Thai community shops. Recommend one low-sales 2-hour slot for a single future mission. Choose dayType, startHour and endHour exactly from one supplied eligible slot. ${analysisDate ? 'These bills are from one completed Bangkok day; compare slots only within that day.' : 'These bills cover 14 days.'} Each eligible slot has sales and fits fully between the earliest and latest bill times of day in this analysis period. Those bill times are not official business hours. Do not infer zero sales from missing slots. Do not invent numbers. Write reason, missionName and description in Thai; do not promise a discount, stamp or minimum spend because those are not configured. Return JSON. Data: ${JSON.stringify({ shopName, category, analysisDate, periodDays: analysisDate ? 1 : 14, observedOpeningTime: summary.observedOpeningTime, observedClosingTime: summary.observedClosingTime, slots: eligibleSlots })}` }],
+    messages: [{ role: 'user', content: `You advise Thai community shops. Analyze this shop independently; never use another shop's sales or a fixed default time. You MUST choose the supplied slot with the LOWEST averageRevenueOnDaysWithSales. Compare this metric, not totalRevenue or transactionCount. If multiple slots tie for the minimum, choose any tied slot. State the chosen average and comparison in your Thai reason. Recommend one low-sales 2-hour slot for a single future mission. Choose dayType, startHour and endHour exactly from one supplied eligible slot. ${analysisDate ? 'These bills are from one completed Bangkok day; compare slots only within that day.' : 'These bills cover 14 days.'} Each eligible slot has sales and fits fully between the earliest and latest bill times of day in this analysis period. Those bill times are not official business hours. Do not infer zero sales from missing slots. Do not invent numbers. Write reason, missionName and description in Thai; do not promise a discount, stamp or minimum spend because those are not configured. Return JSON. Data: ${JSON.stringify({ shopName, category, analysisDate, periodDays: analysisDate ? 1 : 14, observedOpeningTime: summary.observedOpeningTime, observedClosingTime: summary.observedClosingTime, slots: eligibleSlots })}` }],
     format: {
       type: 'object',
       properties: {
@@ -87,6 +88,9 @@ export async function suggestMission(shopName: string, category: string | null, 
   const suggestion = JSON.parse(text) as MissionSuggestion;
   if (!eligibleSlots.some(slot => slot.dayType === suggestion.dayType && slot.startHour === suggestion.startHour && slot.endHour === suggestion.endHour)) {
     throw new Error('Ollama suggested a time outside the eligible sales slots');
+  }
+  if (!eligibleSlots.some(slot => slot.dayType === suggestion.dayType && slot.startHour === suggestion.startHour && slot.endHour === suggestion.endHour && slot.averageRevenueOnDaysWithSales === minimumRevenue)) {
+    throw new Error('Ollama did not choose the lowest-average sales slot for this shop');
   }
   if (![suggestion.reason, suggestion.missionName, suggestion.description].every(value => typeof value === 'string' && value.trim().length > 0)) {
     throw new Error('Ollama returned an incomplete suggestion');

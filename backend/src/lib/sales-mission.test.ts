@@ -83,3 +83,19 @@ test('daily mission prompt compares only slots from the selected Bangkok day', a
     globalThis.fetch = originalFetch;
   }
 });
+
+test('daily AI cannot select a higher-average eligible sales slot', async () => {
+  const summary = summarizeSales([8, 10, 12, 16].map(hour => ({
+    Tx_Timestamp: new Date(`2026-10-22T${String(hour).padStart(2, '0')}:00:00+07:00`),
+    Total_Amount: hour === 10 ? 20 : 200,
+  })));
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async () => Response.json({ message: { content: JSON.stringify({ dayType: 'weekday', startHour: 12, endHour: 14, reason: 'Low sales', missionName: 'Mission', description: 'Visit' }) } });
+    await assert.rejects(suggestMission('Shop', null, summary), /lowest-average sales slot/);
+    globalThis.fetch = async () => Response.json({ message: { content: JSON.stringify({ dayType: 'weekday', startHour: 10, endHour: 12, reason: 'Lowest average 20', missionName: 'Mission', description: 'Visit' }) } });
+    assert.equal((await suggestMission('Shop', null, summary)).startHour, 10);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
