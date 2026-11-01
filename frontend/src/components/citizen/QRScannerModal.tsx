@@ -21,7 +21,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
   presetMerchantId,
   presetMissionId,
 }) => {
-  const { merchants, executePayment, wallet, userGrant, topupWallet, transactions, currentUser, userStamps, districtStamps, missions, aiTargetShops, setMerchants } = useApp();
+  const { merchants, executePayment, wallet, userGrant, topupWallet, transactions, currentUser, userStamps, districtStamps, missions, aiTargetShops } = useApp();
 
   const [step, setStep] = useState<'scan' | 'confirm' | 'pin' | 'success'>('scan');
   const [selectedMerchant, setSelectedMerchant] = useState<Merchant | null>(null);
@@ -34,14 +34,21 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
   const [awardedStampCount, setAwardedStampCount] = useState(0);
   const [stampRule, setStampRule] = useState<StampRule | null>(null);
   const [cameraActive, setCameraActive] = useState<boolean>(false);
+  const [isCameraStarting, setIsCameraStarting] = useState<boolean>(false);
+  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
+  const [hasMultipleCameras, setHasMultipleCameras] = useState<boolean>(false);
+  const [scanSuccessFeedback, setScanSuccessFeedback] = useState<boolean>(false);
   const [isPaying, setIsPaying] = useState<boolean>(false);
   const [topupSuccess, setTopupSuccess] = useState<string>('');
   const [isDragging, setIsDragging] = useState<boolean>(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const animFrameRef = useRef<number | null>(null);
   const isScanningFrameRef = useRef<boolean>(false);
+  const lastScanTimeRef = useRef<number>(0);
+  const prevOpenRef = useRef<boolean>(false);
 
   // Universal lookup across merchants, aiTargetShops, and missions
   const findMerchantAnywhere = (id: number): Merchant | null => {
@@ -116,22 +123,246 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     return null;
   };
 
+  const playScanBeep = () => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(987.77, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(1318.51, ctx.currentTime + 0.1);
+      gain.gain.setValueAtTime(0.25, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.12);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.13);
+    } catch {
+      // AudioContext policy
+    }
+  };
+
   const stopCamera = () => {
     isScanningFrameRef.current = false;
     if (animFrameRef.current) {
       cancelAnimationFrame(animFrameRef.current);
       animFrameRef.current = null;
     }
-    if (videoRef.current && videoRef.current.srcObject) {
-      const stream = videoRef.current.srcObject as MediaStream;
-      stream.getTracks().forEach(track => track.stop());
-      videoRef.current.srcObject = null;
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => {
+        try {
+          track.stop();
+        } catch {}
+      });
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      try {
+        videoRef.current.srcObject = null;
+      } catch {}
     }
     setCameraActive(false);
+    setIsCameraStarting(false);
+  };
+
+  const startCamera = async (overrideFacing?: 'environment' | 'user') => {
+    setErrorMsg('');
+    setIsCameraStarting(true);
+    const targetFacing = overrideFacing || facingMode;
+
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setErrorMsg('อุปกรณ์ของคุณไม่รองรับการเปิดกล้องผ่านเบราว์เซอร์');
+        setIsCameraStarting(false);
+        return;
+      }
+
+      // Stop previous stream if any
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => {
+          try { t.stop(); } catch {}
+        });
+        streamRef.current = null;
+      }
+
+      // Check available cameras
+      try {
+        if (navigator.mediaDevices.enumerateDevices) {
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          const videoDevices = devices.filter(d => d.kind === 'videoinput');
+          setHasMultipleCameras(videoDevices.length > 1);
+        }
+      } catch {}
+
+      let stream: MediaStream | null = null;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: targetFacing },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
+        });
+      } catch {
+        // Fallback to basic video constraint (common on PCs/laptops without environment camera)
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: true,
+            audio: false,
+          });
+        } catch (fallbackErr: any) {
+          throw fallbackErr;
+        }
+      }
+
+      if (!stream) {
+        throw new Error('ไม่สามารถเปิดสัญญาณภาพจากกล้องได้');
+      }
+
+      streamRef.current = stream;
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.setAttribute('playsinline', 'true');
+        videoRef.current.muted = true;
+        await videoRef.current.play().catch(() => {});
+      }
+
+      setCameraActive(true);
+      setIsCameraStarting(false);
+      lastScanTimeRef.current = 0;
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      animFrameRef.current = requestAnimationFrame(scanVideoLoop);
+    } catch (err: any) {
+      stopCamera();
+      const isDenied = err?.name === 'NotAllowedError' || err?.name === 'PermissionDeniedError';
+      setErrorMsg(
+        isDenied
+          ? 'กรุณาอนุญาตการเข้าถึงกล้องในเบราว์เซอร์ เพื่อสแกน QR Code'
+          : 'ไม่สามารถเปิดกล้องได้ กรุณาตรวจสอบการอนุญาตใช้งานกล้อง หรือใช้วิธีเลือกภาพ QR แทน'
+      );
+    } finally {
+      setIsCameraStarting(false);
+    }
+  };
+
+  const toggleCamera = () => {
+    const nextFacing = facingMode === 'environment' ? 'user' : 'environment';
+    setFacingMode(nextFacing);
+    if (cameraActive) {
+      startCamera(nextFacing);
+    }
+  };
+
+  const triggerScanSuccess = (rawText: string) => {
+    stopCamera();
+    playScanBeep();
+    if (typeof navigator !== 'undefined' && navigator.vibrate) {
+      try {
+        navigator.vibrate(70);
+      } catch {}
+    }
+    setScanSuccessFeedback(true);
+    setTimeout(() => setScanSuccessFeedback(false), 500);
+    handleDetectedCode(rawText);
+  };
+
+  const scanVideoLoop = async () => {
+    const video = videoRef.current;
+    if (!video || !streamRef.current) return;
+
+    if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+      const now = performance.now();
+      // Fast throttle: check every 90ms for instant real-time scanning
+      if (now - lastScanTimeRef.current >= 90 && !isScanningFrameRef.current) {
+        lastScanTimeRef.current = now;
+        isScanningFrameRef.current = true;
+        try {
+          const detected = await detectQRCodeFromVideo(video);
+          if (detected) {
+            triggerScanSuccess(detected);
+            return;
+          }
+        } catch {
+          // Continue scanning next frame
+        } finally {
+          isScanningFrameRef.current = false;
+        }
+      }
+    }
+
+    animFrameRef.current = requestAnimationFrame(scanVideoLoop);
+  };
+
+  const detectQRCodeFromVideo = async (video: HTMLVideoElement): Promise<string | null> => {
+    const vw = video.videoWidth;
+    const vh = video.videoHeight;
+    if (!vw || !vh) return null;
+
+    // Strategy 1: Native BarcodeDetector (Chrome, Edge, Android)
+    if ('BarcodeDetector' in window) {
+      try {
+        const detector = new (window as any).BarcodeDetector({ formats: ['qr_code'] });
+        const barcodes = await detector.detect(video);
+        if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
+          const raw = barcodes[0].rawValue.trim();
+          if (raw) return raw;
+        }
+      } catch {}
+    }
+
+    // Strategy 2: jsQR with cached offscreen canvas
+    let canvas = canvasRef.current;
+    if (!canvas) {
+      canvas = document.createElement('canvas');
+      canvasRef.current = canvas;
+    }
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return null;
+
+    // Pass A: Full frame scaled (max 640px)
+    const scale = Math.min(1, 640 / Math.max(vw, vh));
+    const targetW = Math.round(vw * scale);
+    const targetH = Math.round(vh * scale);
+
+    canvas.width = targetW;
+    canvas.height = targetH;
+    ctx.drawImage(video, 0, 0, targetW, targetH);
+
+    let imageData = ctx.getImageData(0, 0, targetW, targetH);
+    let code = jsQR(imageData.data, targetW, targetH, {
+      inversionAttempts: 'dontInvert',
+    });
+    if (code && code.data && code.data.trim()) {
+      return code.data.trim();
+    }
+
+    // Pass B: Center Crop (focusing on viewfinder square)
+    const cropSize = Math.round(Math.min(vw, vh) * 0.7);
+    const cropX = Math.round((vw - cropSize) / 2);
+    const cropY = Math.round((vh - cropSize) / 2);
+    const cropTarget = 400;
+
+    canvas.width = cropTarget;
+    canvas.height = cropTarget;
+    ctx.drawImage(video, cropX, cropY, cropSize, cropSize, 0, 0, cropTarget, cropTarget);
+
+    imageData = ctx.getImageData(0, 0, cropTarget, cropTarget);
+    code = jsQR(imageData.data, cropTarget, cropTarget, {
+      inversionAttempts: 'attemptBoth',
+    });
+    if (code && code.data && code.data.trim()) {
+      return code.data.trim();
+    }
+
+    return null;
   };
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && !prevOpenRef.current) {
       setErrorMsg('');
       setTopupSuccess('');
       setIsPaying(false);
@@ -139,23 +370,27 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
       setAwardedStampCount(0);
       setSelectedStamps({});
       setScannedMissionId(presetMissionId ?? null);
+      setScanSuccessFeedback(false);
+
       if (presetMerchantId) {
         const m = findMerchantAnywhere(presetMerchantId);
         if (m) {
           setSelectedMerchant(m);
           setStep('confirm');
+          prevOpenRef.current = true;
           return;
         }
       }
+
       setStep('scan');
       setSelectedMerchant(null);
-    } else {
+      // Auto-start camera when scanner modal opens
+      startCamera();
+    } else if (!isOpen && prevOpenRef.current) {
       stopCamera();
     }
-    return () => {
-      stopCamera();
-    };
-  }, [isOpen, presetMerchantId, presetMissionId, merchants, aiTargetShops, missions]);
+    prevOpenRef.current = isOpen;
+  }, [isOpen, presetMerchantId, presetMissionId]);
 
   useEffect(() => {
     let active = true;
@@ -211,6 +446,10 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     }
 
     if (parsed && typeof parsed === 'object') {
+      if (parsed.type === 'CITIZEN_PAY_TOKEN') {
+        setErrorMsg('QR Code นี้เป็น QR ประจำตัวประชาชน (กรุณาสแกน QR Code รับเงินของร้านค้า)');
+        return;
+      }
       // Mission field in QR:
       // When outside mission: 'mission' is null
       // When inside mission: 'mission' is the mission ID (number)
@@ -228,9 +467,6 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
       const found = findMerchantAnywhere(parsedMchId);
       if (found) {
         setSelectedMerchant(found);
-        if (!merchants.some(m => m.mchId === found.mchId)) {
-          setMerchants(prev => (prev.some(m => m.mchId === found.mchId) ? prev : [...prev, found]));
-        }
         setScannedMissionId(missionNum || (missionObj ? missionObj.missionId : null));
         if (typeof parsed.amount === 'number' && parsed.amount > 0) {
           setAmount(parsed.amount);
@@ -279,7 +515,6 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
           isAiTarget: false,
         };
         setSelectedMerchant(fallbackMch);
-        setMerchants(prev => (prev.some(m => m.mchId === fallbackMch.mchId) ? prev : [...prev, fallbackMch]));
         setScannedMissionId(missionNum || (missionObj ? missionObj.missionId : null));
         if (typeof parsed.amount === 'number' && parsed.amount > 0) {
           setAmount(parsed.amount);
@@ -301,9 +536,6 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
         const found = findMerchantAnywhere(mObj.targetMerchantId);
         if (found) {
           setSelectedMerchant(found);
-          if (!merchants.some(m => m.mchId === found.mchId)) {
-            setMerchants(prev => (prev.some(m => m.mchId === found.mchId) ? prev : [...prev, found]));
-          }
           setAmount(200);
           setStep('confirm');
           return;
@@ -317,9 +549,6 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
       const found = findMerchantAnywhere(id);
       if (found) {
         setSelectedMerchant(found);
-        if (!merchants.some(m => m.mchId === found.mchId)) {
-          setMerchants(prev => (prev.some(m => m.mchId === found.mchId) ? prev : [...prev, found]));
-        }
         setAmount(200);
         setStep('confirm');
         return;
@@ -332,9 +561,6 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
       const found = findMerchantAnywhere(id);
       if (found) {
         setSelectedMerchant(found);
-        if (!merchants.some(m => m.mchId === found.mchId)) {
-          setMerchants(prev => (prev.some(m => m.mchId === found.mchId) ? prev : [...prev, found]));
-        }
         setAmount(200);
         setStep('confirm');
         return;
@@ -456,59 +682,6 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     return null;
   };
 
-  const scanVideoFrame = async () => {
-    if (!videoRef.current || videoRef.current.readyState < 2) {
-      animFrameRef.current = requestAnimationFrame(scanVideoFrame);
-      return;
-    }
-
-    if (isScanningFrameRef.current) {
-      animFrameRef.current = requestAnimationFrame(scanVideoFrame);
-      return;
-    }
-
-    isScanningFrameRef.current = true;
-    try {
-      const video = videoRef.current;
-      const w = video.videoWidth || 480;
-      const h = video.videoHeight || 480;
-      const detected = await decodeQRFromCanvasSource(video, w, h);
-      if (detected) {
-        stopCamera();
-        handleDetectedCode(detected);
-        return;
-      }
-    } catch (_) {
-      // Continue next frame on error
-    } finally {
-      isScanningFrameRef.current = false;
-    }
-
-    animFrameRef.current = requestAnimationFrame(scanVideoFrame);
-  };
-
-  const startCamera = async () => {
-    setErrorMsg('');
-    try {
-      if (!navigator.mediaDevices?.getUserMedia) {
-        setErrorMsg('อุปกรณ์ของคุณไม่รองรับการเปิดกล้องผ่านเบราว์เซอร์');
-        return;
-      }
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 640 } }
-      });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.setAttribute('playsinline', 'true');
-        await videoRef.current.play();
-        setCameraActive(true);
-        animFrameRef.current = requestAnimationFrame(scanVideoFrame);
-      }
-    } catch (err: any) {
-      stopCamera();
-      setErrorMsg('ไม่สามารถเปิดกล้องได้ กรุณาอนุญาตการเข้าถึงกล้อง หรือใช้วิธีอัปโหลดภาพ QR แทน');
-    }
-  };
 
   const processImageFile = (file: File) => {
     if (!file) return;
@@ -736,33 +909,53 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
                 const file = e.dataTransfer.files?.[0];
                 if (file) processImageFile(file);
               }}
-              className={`relative size-64 rounded-[28px] bg-slate-950 overflow-hidden flex items-center justify-center border-2 transition-all mb-3 shadow-xl ${
-                isDragging ? 'border-cyan-400 ring-4 ring-cyan-400/30 scale-102 bg-cyan-950/40' : 'border-[#1769ed]'
+              className={`relative size-64 sm:size-72 rounded-[28px] bg-slate-950 overflow-hidden flex items-center justify-center border-2 transition-all mb-3 shadow-xl ${
+                scanSuccessFeedback
+                  ? 'border-emerald-400 ring-4 ring-emerald-400/40 bg-emerald-950'
+                  : isDragging
+                  ? 'border-cyan-400 ring-4 ring-cyan-400/30 scale-102 bg-cyan-950/40'
+                  : cameraActive
+                  ? 'border-[#1769ed] ring-2 ring-blue-500/20'
+                  : 'border-slate-700'
               }`}
             >
-              {cameraActive ? (
+              {/* VIDEO ELEMENT ALWAYS MOUNTED IN DOM */}
+              <video
+                ref={videoRef}
+                playsInline
+                muted
+                autoPlay
+                className={`w-full h-full object-cover ${cameraActive ? 'block' : 'hidden'}`}
+              />
+
+              {/* Viewfinder Overlay when Camera is Active */}
+              {cameraActive && (
                 <>
-                  <video
-                    ref={videoRef}
-                    playsInline
-                    muted
-                    className="w-full h-full object-cover"
-                  />
                   {/* Laser line scanning effect */}
                   <div className="absolute inset-x-6 h-0.5 bg-gradient-to-r from-transparent via-cyan-400 to-transparent shadow-[0_0_12px_#38bdf8] animate-bounce pointer-events-none" />
-                  {/* Viewfinder corner targets */}
+
+                  {/* Corner Targets */}
                   <div className="absolute inset-6 border border-white/20 rounded-2xl pointer-events-none flex flex-col justify-between p-2">
                     <div className="flex justify-between">
-                      <div className="size-4 border-t-2 border-l-2 border-cyan-400 rounded-tl-sm" />
-                      <div className="size-4 border-t-2 border-r-2 border-cyan-400 rounded-tr-sm" />
+                      <div className="size-5 border-t-2 border-l-2 border-cyan-400 rounded-tl-md" />
+                      <div className="size-5 border-t-2 border-r-2 border-cyan-400 rounded-tr-md" />
                     </div>
                     <div className="flex justify-between">
-                      <div className="size-4 border-b-2 border-l-2 border-cyan-400 rounded-bl-sm" />
-                      <div className="size-4 border-b-2 border-r-2 border-cyan-400 rounded-br-sm" />
+                      <div className="size-5 border-b-2 border-l-2 border-cyan-400 rounded-bl-md" />
+                      <div className="size-5 border-b-2 border-r-2 border-cyan-400 rounded-br-md" />
                     </div>
                   </div>
+
+                  {/* Status Indicator Badge */}
+                  <div className="absolute top-2.5 left-1/2 -translate-x-1/2 bg-black/60 backdrop-blur-md px-3 py-1 rounded-full flex items-center gap-1.5 pointer-events-none border border-white/10 shadow-md">
+                    <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />
+                    <span className="text-[10px] font-bold text-white tracking-wide">กำลังสแกน QR Code...</span>
+                  </div>
                 </>
-              ) : (
+              )}
+
+              {/* Placeholder when Camera is Not Active */}
+              {!cameraActive && (
                 <div className="text-center p-5 flex flex-col items-center">
                   <span className={`grid size-13 place-items-center rounded-2xl mb-2.5 transition-colors ${
                     isDragging ? 'bg-cyan-500 text-white' : 'bg-white/10 text-cyan-400 shadow-inner'
@@ -770,10 +963,16 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
                     <Icon name="scan" className="size-7" />
                   </span>
                   <p className="text-xs font-bold text-white mb-1">
-                    {isDragging ? 'วางรูปภาพที่นี่เลย!' : 'หันกล้อง หรือ วางรูปภาพ QR'}
+                    {isCameraStarting
+                      ? 'กำลังเปิดกล้อง...'
+                      : isDragging
+                      ? 'วางรูปภาพที่นี่เลย!'
+                      : 'หันกล้อง หรือ วางรูปภาพ QR'}
                   </p>
                   <p className="text-[10px] text-slate-400 max-w-[210px] leading-relaxed">
-                    เปิดกล้อง, ลากรูปมาวางที่นี่ หรือกด <kbd className="px-1 py-0.5 rounded bg-white/20 text-white font-mono text-[9px]">Ctrl+V</kbd> แปะรูปได้ทันที
+                    {isCameraStarting
+                      ? 'กรุณารอสักครู่ เบราว์เซอร์กำลังเชื่อมต่อสัญญาณกล้อง'
+                      : 'หันกล้องใส่ QR ร้านค้า หรือกดเลือกภาพ QR จากเครื่อง'}
                   </p>
                 </div>
               )}
@@ -790,22 +989,35 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
             {/* Scanning Controls */}
             <div className="w-full space-y-2">
               {cameraActive ? (
-                <button
-                  type="button"
-                  onClick={stopCamera}
-                  className="w-full py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer border border-rose-200"
-                >
-                  <Icon name="x" className="size-4" />
-                  <span>ปิดกล้อง</span>
-                </button>
+                <div className="flex gap-2">
+                  {hasMultipleCameras && (
+                    <button
+                      type="button"
+                      onClick={toggleCamera}
+                      className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer border border-slate-200"
+                    >
+                      <Icon name="refresh" className="size-4" />
+                      <span>สลับกล้อง ({facingMode === 'environment' ? 'หลัง' : 'หน้า'})</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={stopCamera}
+                    className="flex-1 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer border border-rose-200"
+                  >
+                    <Icon name="x" className="size-4" />
+                    <span>ปิดกล้อง</span>
+                  </button>
+                </div>
               ) : (
                 <button
                   type="button"
-                  onClick={startCamera}
-                  className="w-full py-3 bg-[#1769ed] hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  onClick={() => startCamera()}
+                  disabled={isCameraStarting}
+                  className="w-full py-3 bg-[#1769ed] hover:bg-blue-700 text-white rounded-xl text-xs font-bold shadow-md shadow-blue-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
                 >
                   <Icon name="scan" className="size-4" />
-                  <span>เปิดกล้องถ่ายจริง</span>
+                  <span>{isCameraStarting ? 'กำลังเปิดกล้อง...' : 'เปิดกล้องถ่ายจริง'}</span>
                 </button>
               )}
 
